@@ -40,7 +40,7 @@ const config: ExpoConfig = {
       "expo-calendar",
       {
         calendarPermission:
-          "Anchor lets you add an action through the calendar editor.",
+          "Anchor saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
       },
     ],
   ],

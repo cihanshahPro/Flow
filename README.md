@@ -9,10 +9,10 @@ A small native planning app: capture a thought, choose an action that fits the t
 | Today     | Tasks and an available-time filter                                 |
 | Capture   | Text inbox and deliberate voice recording                          |
 | Storage   | SQLite records and audio files on the device                       |
-| Calendar  | Open a task in the native event editor; the user reviews and saves |
+| Calendar  | Save details and an optional alert to Apple Calendar; repeated saves update the linked event |
 | Purchases | Disabled capability interface; no payment or subscription flow     |
 
-There is no web-account sync, cloud backend, automatic transcription, or in-app purchasing. The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. The native calendar handoff is one-way: later changes in either app do not update the other. It uses Expo's [system calendar editor](https://docs.expo.dev/versions/v54.0.0/sdk/calendar/).
+There is no web-account sync, cloud backend, automatic transcription, or in-app purchasing. The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. On iPhone, Calendar permission and a calendar choice enable direct saves through [Expo Calendar](https://docs.expo.dev/versions/v54.0.0/sdk/calendar/). Saving again updates the linked event; changes do not sync automatically or flow back from Calendar. Android uses the system event editor. See [calendar acceptance checks](docs/CALENDAR.md).
 
 ## Try it on an iPhone
 

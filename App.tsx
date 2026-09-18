@@ -35,7 +35,8 @@ import {
   registerVoiceNote,
   removeTask,
 } from "./src/services/storage";
-import { addTaskToCalendar } from "./src/services/calendar";
+import { addTaskToCalendar, chooseAppleCalendar, resetCalendarLink, type ChooseCalendar } from "./src/services/calendar";
+import { REMINDERS, deviceTimeZone, reminderLabel, extractContactDetails } from "./src/calendar-model";
 import { capabilities } from "./src/services/capabilities";
 
 type Tab = "Today" | "Capture" | "Inbox" | "Settings";
@@ -115,6 +116,8 @@ const blankTask = (): Task => ({
   chaseDate: "",
   notes: "",
   createdAt: new Date().toISOString(),
+  timeZone: deviceTimeZone(),
+  reminderMinutes: 15,
 });
 const errorText = (error: unknown) =>
   error instanceof Error
@@ -178,6 +181,18 @@ function Desk() {
     setMessage("");
     setEditing({ ...task });
     setEstimate(String(task.minutes));
+  }
+  const chooseCalendar: ChooseCalendar = (options, preferredId) => new Promise(resolve => {
+    Alert.alert('Choose a calendar', 'New events go here. You can change this in Settings.', [
+      ...options.map(option => ({ text: option.title + (option.id === preferredId ? ' (default)' : ''), onPress: () => resolve(option.id) })),
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+    ], { cancelable: false });
+  });
+  function resetLink(task: Task) {
+    Alert.alert('Reset calendar link?', 'This does not delete the existing Apple event. Only reset after checking Calendar; saving again can create a duplicate.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Reset link', style: 'destructive', onPress: () => void act(async () => { await resetCalendarLink(task.id); setMessage('Calendar link reset. Existing Apple events were not deleted.'); }) },
+    ]);
   }
   const savedVoice = useCallback(
     async (note: SavedVoiceNote) => {
@@ -421,11 +436,11 @@ function Desk() {
                     disabled={busy}
                     onPress={() =>
                       void act(async () =>
-                        setMessage(await addTaskToCalendar(t)),
+                        setMessage(await addTaskToCalendar(t, chooseCalendar)),
                       )
                     }
                   >
-                    <Text style={s.link}>Add to calendar ↗</Text>
+                    <Text style={s.link}>{Platform.OS === "ios" ? "Save to Apple Calendar" : "Add to calendar ↗"}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -531,7 +546,7 @@ function Desk() {
                   <Pressable
                     accessibilityRole="button"
                     onPress={() =>
-                      edit({ ...blankTask(), title: n.title, notes: n.text })
+                      edit({ ...blankTask(), ...extractContactDetails(n.text), title: n.title, notes: n.text })
                     }
                   >
                     <Text style={s.link}>Create an action →</Text>
@@ -566,18 +581,22 @@ function Desk() {
             <View style={s.card}>
               <Text style={s.sectionTitle}>Calendar</Text>
               <Text style={s.body}>
-                Add an action through your phone's calendar editor. You choose
-                where it goes and confirm saving. Changes are not synchronized
-                back to Anchor.
+                On iPhone, allow Calendar access and choose a calendar once. Save
+                creates or updates the linked event, including contacts, location,
+                meeting link, and alert. Apple delivers alerts according to your
+                Calendar notification and Focus settings. Changes made in Calendar
+                do not sync back here; saving changed details here replaces the
+                linked event's details. Android uses its calendar editor.
               </Text>
+              {Platform.OS === 'ios' && <Button title="Choose Apple calendar" secondary disabled={busy} onPress={() => void act(async () => { const id = await chooseAppleCalendar(chooseCalendar, true); setMessage(id ? 'Calendar chosen for new events.' : 'Calendar selection canceled.'); })} />}
             </View>
             <View style={s.card}>
               <Text style={s.sectionTitle}>Future connections</Text>
               <Text style={s.body}>{capabilities.transcription.reason}</Text>
               <Text style={s.body}>{capabilities.purchases.reason}</Text>
               <Text style={s.small}>
-                No account, subscription, background listening, or automatic
-                reminders are enabled.
+                Cloud accounts, subscriptions, and background listening are not
+                enabled. Calendar alerts are handled by your phone's Calendar app.
               </Text>
             </View>
           </ScrollView>
@@ -676,6 +695,16 @@ function Desk() {
                       }
                       placeholder="HH:mm · 24-hour time"
                     />
+                    <Field label="Time zone" value={editing.timeZone || deviceTimeZone()} onChangeText={timeZone => setEditing({ ...editing, timeZone })} placeholder="America/New_York" />
+                    <Text style={s.label}>Calendar alert</Text>
+                    <View style={s.row}>
+                      {REMINDERS.map(value => <Pressable key={String(value)} accessibilityRole="button" accessibilityState={{selected: (editing.reminderMinutes === undefined ? 15 : editing.reminderMinutes) === value}} disabled={busy} style={[s.chip, (editing.reminderMinutes === undefined ? 15 : editing.reminderMinutes) === value && s.chipSelected]} onPress={() => setEditing({...editing, reminderMinutes: value})}><Text style={[s.chipText, (editing.reminderMinutes === undefined ? 15 : editing.reminderMinutes) === value && s.chipTextSelected]}>{reminderLabel(value)}</Text></Pressable>)}
+                    </View>
+                    <Field label="Contact name (optional)" value={editing.contactName || ''} onChangeText={contactName => setEditing({...editing, contactName})} />
+                    <Field label="Phone (optional)" value={editing.phone || ''} onChangeText={phone => setEditing({...editing, phone})} />
+                    <Field label="Email (optional)" value={editing.email || ''} onChangeText={email => setEditing({...editing, email})} />
+                    <Field label="Location / address (optional)" value={editing.location || ''} onChangeText={location => setEditing({...editing, location})} />
+                    <Field label="Meeting or website link (optional)" value={editing.meetingUrl || ''} onChangeText={meetingUrl => setEditing({...editing, meetingUrl})} placeholder="https://…" />
                     <Field
                       label="Hard deadline (optional)"
                       value={editing.deadline}
@@ -737,6 +766,7 @@ function Desk() {
                         setMessage("");
                       }}
                     />
+                    {Platform.OS === 'ios' && tasks.some(t => t.id === editing.id) && <Button title="Reset calendar link…" secondary disabled={busy} onPress={() => resetLink(editing)} />}
                     {tasks.some((t) => t.id === editing.id) && (
                       <Button
                         title="Delete action"
