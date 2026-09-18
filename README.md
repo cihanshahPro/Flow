@@ -9,10 +9,10 @@ A small native planning app: capture a thought, choose an action that fits the t
 | Today     | Tasks and an available-time filter                                 |
 | Capture   | Text inbox and deliberate voice recording                          |
 | Storage   | SQLite records and audio files on the device                       |
-| Calendar  | Open a task in the native event editor; the user reviews and saves |
+| Calendar  | Save details and an optional alert to Apple Calendar; repeated saves update the linked event |
 | Purchases | Disabled capability interface; no payment or subscription flow     |
 
-There is no web-account sync, cloud backend, automatic transcription, or in-app purchasing. The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. The native calendar handoff is one-way: later changes in either app do not update the other. It uses Expo's [system calendar editor](https://docs.expo.dev/versions/v54.0.0/sdk/calendar/).
+There is no web-account sync, cloud backend, automatic transcription, or in-app purchasing. The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. On iPhone, Calendar permission and a calendar choice enable direct saves through [Expo Calendar](https://docs.expo.dev/versions/v57.0.0/sdk/calendar/). Saving again updates the linked event; changes do not sync automatically or flow back from Calendar. Android uses the system event editor. See [calendar acceptance checks](docs/CALENDAR.md).
 
 ## Try it on an iPhone
 
@@ -25,7 +25,7 @@ npm start
 
 Install Expo Go from the iPhone App Store. Keep the phone and development computer on the same network, then scan the terminal's QR code with the iPhone camera. Leave the development server running. A Mac mini can host that server; the app's saved records still belong to the phone, not the Mac mini.
 
-**The project intentionally uses Expo SDK 54, React Native 0.81.5, and React 19.1.0.** As verified on September 18, 2026, the App Store version of Expo Go supports SDK 54; SDK 55 and newer require another testing route on a physical iPhone. See [Expo's version-mismatch guidance](https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/). Do not upgrade the SDK merely to clear a warning without reviewing this compatibility constraint.
+**The testing app now uses Expo SDK 57, React Native 0.86.3 and React 19.2.3**, matching the current iPhone Expo Go. Sign in to the same Expo account in Expo Go and on the development computer (`npx expo login --browser`). See [Expo’s September 3 update](https://expo.dev/changelog/expo-go-57-login). Older guidance saying the App Store stops at SDK 54 is outdated.
 
 The development bundle needs to load from the server. Once loaded, task, note, and recording data remain local and do not require an application backend. Deleting the app or clearing its storage can remove that data; cloud backup and cross-device recovery are not implemented.
 
@@ -43,6 +43,6 @@ The EAS development, preview, and production profiles are build scaffolding. The
 
 ## Toolchain verification
 
-The checked-in lockfile pins compatible SDK 54 modules, PostCSS 8.5.23, and the Metro 0.83.8 patch family. These build-tool overrides remove the high-severity audit findings observed in the original template and have passed both platform bundle exports. Do not remove them casually. The current audit still reports 13 moderate tooling/transitive findings; review them again before release. This is not an audit-clean or production-approved build.
+The lockfile pins the SDK 57-compatible module family. The obsolete SDK 54 Metro overrides have been removed. Both platform bundle exports and all 21 Expo Doctor checks pass. The dependency audit reports 0 high/critical and 11 moderate findings; review the remaining advisories before a production release.
 
 See [validation notes](docs/VALIDATION.md) for checks actually run and physical-device checks still pending.
