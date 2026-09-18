@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -10,46 +12,56 @@ import {
   Text,
   TextInput,
   View,
-  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { randomUUID } from "expo-crypto";
-import * as Sharing from "expo-sharing";
-import { File, Paths } from "expo-file-system";
+import LegacyApp from "./LegacyApp";
 import VoiceCapture, {
   AudioPlayback,
   type SavedVoiceNote,
 } from "./src/components/VoiceCapture";
 import {
-  TOPICS,
-  localDate,
-  todayTasks,
-  type Task,
-  type Note,
-} from "./src/model";
-import {
   loadWorkspace,
-  saveTask,
   saveNote,
   registerVoiceNote,
-  removeTask,
+  saveTask,
 } from "./src/services/storage";
-import { addTaskToCalendar, chooseAppleCalendar, resetCalendarLink, type ChooseCalendar } from "./src/services/calendar";
-import { REMINDERS, deviceTimeZone, reminderLabel, extractContactDetails } from "./src/calendar-model";
-import { capabilities } from "./src/services/capabilities";
+import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
+import {
+  suggestDraft,
+  refineDraft,
+  exampleDraft,
+  type ThoughtDraft,
+  type DraftStep,
+} from "./src/drafts";
+import { localDate, todayTasks, type Task, type Note } from "./src/model";
+import {
+  addTaskToCalendar,
+  type ChooseCalendar,
+} from "./src/services/calendar";
 
-type Tab = "Today" | "Capture" | "Inbox" | "Settings";
-const BusyContext = React.createContext(false);
-function Button({
-  title,
+type Screen = "Today" | "My mind" | "Library";
+const C = {
+  paper: "#F6F7FA",
+  ink: "#142138",
+  muted: "#697386",
+  line: "#E2E6ED",
+  blue: "#345BEE",
+  lime: "#DFF586",
+  white: "#FFFFFF",
+  soft: "#EDF0FF",
+  red: "#B44343",
+};
+function Tap({
+  label,
   onPress,
-  secondary = false,
+  primary = false,
   disabled = false,
 }: {
-  title: string;
+  label: string;
   onPress: () => void;
-  secondary?: boolean;
+  primary?: boolean;
   disabled?: boolean;
 }) {
   return (
@@ -57,934 +69,1373 @@ function Button({
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
-      style={[
-        s.button,
-        secondary && s.secondary,
-        disabled && { opacity: 0.45 },
+      style={({ pressed }) => [
+        s.tap,
+        primary ? s.primary : s.secondary,
+        (pressed || disabled) && { opacity: 0.55 },
       ]}
     >
-      <Text style={[s.buttonText, secondary && { color: "#123D38" }]}>
-        {title}
-      </Text>
+      <Text style={[s.tapText, primary && { color: C.white }]}>{label}</Text>
     </Pressable>
   );
 }
-function Field({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-}) {
-  const busy = React.useContext(BusyContext);
+function Label({ children }: { children: React.ReactNode }) {
+  return <Text style={s.label}>{children}</Text>;
+}
+function Wave() {
   return (
-    <View style={s.field}>
-      <Text style={s.label}>{label}</Text>
-      <TextInput
-        editable={!busy}
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#768782"
-        multiline={multiline}
-        style={[
-          s.input,
-          multiline && { height: 100, textAlignVertical: "top" },
-        ]}
-        autoCorrect={multiline}
-      />
+    <View accessibilityElementsHidden style={s.wave}>
+      {[12, 26, 18, 36, 48, 30, 20, 40, 28, 16, 34, 22].map((h, i) => (
+        <View
+          key={i}
+          style={{
+            height: h,
+            width: 3,
+            borderRadius: 3,
+            backgroundColor: C.lime,
+            opacity: 0.5 + (i % 3) * 0.2,
+          }}
+        />
+      ))}
     </View>
   );
 }
-const blankTask = (): Task => ({
-  id: randomUUID(),
-  title: "",
-  topic: "Life",
-  minutes: 15,
-  done: false,
-  plannedDate: "",
-  plannedTime: "",
-  deadline: "",
-  waitingOn: "",
-  chaseDate: "",
-  notes: "",
-  createdAt: new Date().toISOString(),
-  timeZone: deviceTimeZone(),
-  reminderMinutes: 15,
-});
-const errorText = (error: unknown) =>
-  error instanceof Error
-    ? error.message
-    : "Something went wrong. Please try again.";
 export default function App() {
   return (
     <SafeAreaProvider>
-      <Desk />
+      <Flow />
     </SafeAreaProvider>
   );
 }
-function Desk() {
-  const [tab, setTab] = useState<Tab>("Today");
-  const [tasks, setTasks] = useState<Task[]>([]),
-    [notes, setNotes] = useState<Note[]>([]);
-  const [ready, setReady] = useState(false),
-    [loadError, setLoadError] = useState("");
-  const [minutes, setMinutes] = useState(30),
-    [all, setAll] = useState(false);
-  const [message, setMessage] = useState(""),
-    [busy, setBusy] = useState(false);
+function Flow() {
+  const [screen, setScreen] = useState<Screen>("Today");
+  const [ready, setReady] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [drafts, setDrafts] = useState<ThoughtDraft[]>([]);
+  const [budget, setBudget] = useState(30);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const [capture, setCapture] = useState("");
-  const [editing, setEditing] = useState<Task | null>(null),
-    [noteEdit, setNoteEdit] = useState<Note | null>(null);
-  const [estimate, setEstimate] = useState("15");
-  const refresh = useCallback(async () => {
-    const data = await loadWorkspace();
-    setTasks(data.tasks);
-    setNotes(data.notes);
-  }, []);
-  const boot = useCallback(async () => {
-    try {
-      setLoadError("");
-      await refresh();
-      setReady(true);
-    } catch (e) {
-      setLoadError(errorText(e));
-    }
-  }, [refresh]);
+  const [composer, setComposer] = useState<"text" | "voice" | null>(null);
+  const [input, setInput] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [refining, setRefining] = useState<string | null>(null);
+  const [note, setNote] = useState<Note | null>(null);
+  const [settings, setSettings] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateInput, setUpdateInput] = useState("");
+  const captureId = useRef("");
+  const [parked, setParked] = useState(false);
+  const [calendarTask, setCalendarTask] = useState<Task | null>(null);
+  const fade = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    void boot();
-  }, [boot]);
-  async function act(operation: () => Promise<void>) {
+    setUpdateOpen(false);
+    setUpdateInput("");
+  }, [selected]);
+  async function refresh() {
+    const [w, d] = await Promise.all([loadWorkspace(), loadDrafts()]);
+    setTasks(w.tasks);
+    setNotes(w.notes);
+    setDrafts(d);
+  }
+  useEffect(() => {
+    refresh()
+      .then(() => {
+        setReady(true);
+        Animated.timing(fade, {
+          toValue: 1,
+          duration: 350,
+          useNativeDriver: true,
+        }).start();
+      })
+      .catch((e) => setError(e.message));
+  }, []);
+  async function run(fn: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
-    setMessage("");
+    setError("");
     try {
-      await operation();
+      await fn();
+      await refresh();
     } catch (e) {
-      setMessage(errorText(e));
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Something went wrong. Your saved thoughts are safe.",
+      );
     } finally {
       lock.current = false;
       setBusy(false);
     }
   }
-  function edit(task: Task) {
-    if (lock.current) return;
-    setMessage("");
-    setEditing({ ...task });
-    setEstimate(String(task.minutes));
+  function capture(mode: "text" | "voice", draftId: string | null = null) {
+    captureId.current = randomUUID();
+    setRefining(draftId);
+    setInput("");
+    setComposer(mode);
+    setNotice("");
   }
-  const chooseCalendar: ChooseCalendar = (options, preferredId) => new Promise(resolve => {
-    Alert.alert('Choose a calendar', 'New events go here. You can change this in Settings.', [
-      ...options.map(option => ({ text: option.title + (option.id === preferredId ? ' (default)' : ''), onPress: () => resolve(option.id) })),
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-    ], { cancelable: false });
-  });
-  function resetLink(task: Task) {
-    Alert.alert('Reset calendar link?', 'This does not delete the existing Apple event. Only reset after checking Calendar; saving again can create a duplicate.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Reset link', style: 'destructive', onPress: () => void act(async () => { await resetCalendarLink(task.id); setMessage('Calendar link reset. Existing Apple events were not deleted.'); }) },
-    ]);
-  }
-  const savedVoice = useCallback(
-    async (note: SavedVoiceNote) => {
-      // Reusing the recording URI makes retry after a refresh failure idempotent.
-      await registerVoiceNote({
-        ...note,
-        id: note.audioUri,
+  async function submit() {
+    await run(async () => {
+      const text = input.trim();
+      if (!text) return;
+      const id = captureId.current || randomUUID();
+      const n: Note = {
+        id,
+        title: text.slice(0, 80),
+        text,
         createdAt: new Date().toISOString(),
-      });
-      await refresh();
-      setMessage("Voice note saved to your inbox.");
-    },
-    [refresh],
-  );
-  const due = tasks
-    .filter((t) => !t.done && t.deadline)
-    .sort((a, b) => a.deadline.localeCompare(b.deadline));
-  const visible = all ? tasks : todayTasks(tasks, minutes);
-  function remove(task: Task) {
-    Alert.alert("Delete this action?", task.title, [
-      { text: "Keep", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () =>
-          void act(async () => {
-            await removeTask(task.id);
-            setEditing(null);
-            await refresh();
-          }),
-      },
-    ]);
-  }
-  async function exportText() {
-    if (!(await Sharing.isAvailableAsync()))
-      throw new Error("Sharing is not available on this device.");
-    const file = new File(Paths.cache, "anchor-text-export.json");
-    file.write(
-      JSON.stringify(
-        {
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          tasks,
-          notes: notes.map(({ audioUri, id, ...n }) => ({
-            ...n,
-            id: audioUri ? undefined : id,
-            hasAudio: !!audioUri,
-          })),
-        },
-        null,
-        2,
-      ),
-    );
-    await Sharing.shareAsync(file.uri, {
-      mimeType: "application/json",
-      dialogTitle: "Export Anchor notes and actions",
+      };
+      await saveNote(n);
+      const prior = drafts.find((d) => d.id === refining);
+      const d = prior ? refineDraft(prior, text) : suggestDraft(id, text);
+      await saveDraft(d);
+      setComposer(null);
+      setInput("");
+      setSelected(d.id);
+      setNotice(
+        prior
+          ? "Update saved to this draft."
+          : "Thought saved. Your draft is ready to shape.",
+      );
     });
   }
+  async function voiceSaved(v: SavedVoiceNote) {
+    await registerVoiceNote({
+      ...v,
+      id: v.audioUri,
+      createdAt: new Date().toISOString(),
+    });
+    await refresh();
+    setNotice(
+      "Recording saved in Library. Automatic transcription is coming next.",
+    );
+  }
+  const current = drafts.find((d) => d.id === selected);
+  const activeDrafts = drafts.filter((d) => d.state === "draft");
+  const day = todayTasks(tasks, budget);
+  const today = localDate();
+  const done = tasks.filter((t) => t.done && t.plannedDate === today).length;
+  const choose: ChooseCalendar = (options, preferred) =>
+    new Promise((resolve) =>
+      Alert.alert(
+        "Choose your calendar",
+        "We’ll remember this for next time.",
+        [
+          ...options.map((c) => ({
+            text: c.title + (c.id === preferred ? " · default" : ""),
+            onPress: () => resolve(c.id),
+          })),
+          { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
+        ],
+        { cancelable: false },
+      ),
+    );
+  async function calendar(t: Task) {
+    if (!t.plannedTime) {
+      setCalendarTask(t);
+      return;
+    }
+    await run(async () => setNotice(await addTaskToCalendar(t, choose)));
+  }
+  async function scheduleTomorrow() {
+    if (!calendarTask) return;
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    const t = {
+      ...calendarTask,
+      plannedDate: localDate(date),
+      plannedTime: "09:00",
+    };
+    await run(async () => {
+      await saveTask(t);
+      const result = await addTaskToCalendar(t, choose);
+      setCalendarTask(null);
+      setNotice(result);
+    });
+  }
+  async function add(d: ThoughtDraft, step: DraftStep) {
+    await run(async () => {
+      await acceptStep(d, step);
+      setNotice("Added to today. One useful step is enough.");
+    });
+  }
+  function small(d: ThoughtDraft, step: DraftStep) {
+    void run(async () => {
+      await saveDraft({
+        ...d,
+        steps: d.steps.map((x) =>
+          x.id === step.id
+            ? {
+                ...x,
+                title:
+                  `Spend 5 minutes on: ${x.title.replace(/^Spend 5 minutes on: /, "")}`.slice(
+                    0,
+                    280,
+                  ),
+                minutes: 5,
+              }
+            : x,
+        ),
+      });
+    });
+  }
+  async function explore() {
+    await run(async () => {
+      const existing = drafts.find((d) => d.example);
+      if (existing) {
+        setSelected(existing.id);
+        return;
+      }
+      const d = exampleDraft(randomUUID());
+      await saveDraft(d);
+      setSelected(d.id);
+    });
+  }
+  function closeCapture() {
+    if (!voiceBusy && !busy) setComposer(null);
+  }
+  if (advanced)
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.paper }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setAdvanced(false);
+            void refresh();
+          }}
+          style={s.back}
+        >
+          <Text style={s.tapText}>‹ Back to Flow</Text>
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <LegacyApp />
+        </View>
+      </SafeAreaView>
+    );
   if (!ready)
     return (
-      <SafeAreaView style={s.shell}>
-        <View style={s.center}>
-          <Text style={s.logo}>⚓ Anchor</Text>
-          {loadError ? (
+      <SafeAreaView style={s.safe}>
+        <View style={s.loading}>
+          <Text style={s.brand}>flow.</Text>
+          {error ? (
             <>
-              <Text style={s.body}>
-                Could not open your saved workspace: {loadError}
-              </Text>
-              <Button title="Retry" onPress={() => void boot()} />
+              <Text style={s.error}>{error}</Text>
+              <Tap
+                label="Try again"
+                onPress={() =>
+                  void run(async () => {
+                    await refresh();
+                    setReady(true);
+                    fade.setValue(1);
+                  })
+                }
+              />
             </>
           ) : (
-            <ActivityIndicator color="#176C5F" />
+            <ActivityIndicator color={C.blue} />
           )}
         </View>
       </SafeAreaView>
     );
   return (
-    <BusyContext.Provider value={busy}>
-      <SafeAreaView style={s.shell} edges={["top", "bottom"]}>
-        <StatusBar style="dark" />
-        <View style={s.header}>
-          <View>
-            <Text style={s.logo}>⚓ Anchor</Text>
-            <Text style={s.small}>One next step.</Text>
-          </View>
-          <View style={s.badge}>
-            <Text style={s.badgeText}>ON THIS DEVICE</Text>
-          </View>
-        </View>
-        {!!message && (
+    <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+      <StatusBar style="dark" />
+      <View style={s.header}>
+        <Text style={s.brand}>
+          flow<Text style={{ color: C.blue }}>.</Text>
+        </Text>
+        <View style={s.row}>
+          <Text style={s.test}>TEST BUILD · 02</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Dismiss message"
-            onPress={() => setMessage("")}
-            style={s.notice}
+            accessibilityLabel="Settings and existing tools"
+            onPress={() => setSettings(true)}
+            style={s.avatar}
           >
-            <Text accessibilityLiveRegion="polite" style={s.noticeText}>
-              {message}
-            </Text>
+            <Text style={{ color: C.ink, fontSize: 21 }}>⋯</Text>
           </Pressable>
-        )}
-        <View style={[s.screen, tab !== "Today" && s.hidden]}>
-          <ScrollView
-            contentContainerStyle={s.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={s.eyebrow}>
-              {new Date().toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "short",
-                day: "numeric",
-              })}
-            </Text>
-            <Text style={s.h1}>Make room for{"\n"}what matters.</Text>
-            <Text style={s.body}>
-              Choose the time you have. Start with one action.
-            </Text>
-            <View style={s.focus}>
-              <Text style={s.sectionTitle}>I have a moment</Text>
-              <View style={s.row}>
-                {[15, 30, 60, 120].map((m) => (
+        </View>
+      </View>
+      <Animated.View style={{ flex: 1, opacity: fade }}>
+        <ScrollView
+          contentContainerStyle={s.page}
+          keyboardShouldPersistTaps="handled"
+        >
+          {!!error && (
+            <Pressable
+              onPress={() => setError("")}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss error"
+            >
+              <Text accessibilityRole="alert" style={s.error}>
+                {error}
+              </Text>
+            </Pressable>
+          )}
+          {!!notice && (
+            <Pressable
+              onPress={() => setNotice("")}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss status"
+            >
+              <Text accessibilityLiveRegion="polite" style={s.notice}>
+                {notice}
+              </Text>
+            </Pressable>
+          )}
+          {screen === "Today" && (
+            <>
+              <View style={s.headingRow}>
+                <View>
+                  <Label>
+                    {new Date().toLocaleDateString(undefined, {
+                      weekday: "long",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </Label>
+                  <Text style={s.headline}>
+                    Make room{"\n"}for what matters.
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Capture a thought"
+                onPress={() => capture("text")}
+                style={({ pressed }) => [s.hero, pressed && { opacity: 0.9 }]}
+              >
+                <View style={s.heroTop}>
+                  <Text style={s.heroKicker}>A PLACE TO UNLOAD</Text>
+                  <Text style={s.heroArrow}>↗</Text>
+                </View>
+                <Text style={s.heroTitle}>What’s on{"\n"}your mind?</Text>
+                <View style={s.heroBottom}>
+                  <Text style={s.heroSub}>
+                    Messy is a perfectly good start.
+                  </Text>
+                  <Wave />
+                </View>
+              </Pressable>
+              <View style={s.captureRow}>
+                <Tap
+                  label="●  Speak a thought"
+                  onPress={() => capture("voice")}
+                  primary
+                />
+                <Tap label="＋  Write it out" onPress={() => capture("text")} />
+              </View>
+              <View style={s.sectionHead}>
+                <Text style={s.sectionTitle}>A little clarity</Text>
+                <Text style={s.meta}>
+                  {activeDrafts.length
+                    ? `${activeDrafts.length} draft${activeDrafts.length === 1 ? "" : "s"}`
+                    : "Start anywhere"}
+                </Text>
+              </View>
+              {activeDrafts.length ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setSelected(activeDrafts[0].id)}
+                  style={s.draftCard}
+                >
+                  <View style={s.rowBetween}>
+                    <Label>
+                      {activeDrafts[0].example
+                        ? "EXAMPLE DRAFT"
+                        : activeDrafts[0].topic.toUpperCase() + " · DRAFT"}
+                    </Label>
+                    <Text style={s.arrow}>↗</Text>
+                  </View>
+                  <Text style={s.cardTitle}>{activeDrafts[0].title}</Text>
+                  <View style={s.miniBranch}>
+                    <View style={s.branchDot} />
+                    <Text style={s.body}>
+                      {activeDrafts[0].steps.find((x) => !x.accepted)?.title ||
+                        "Room to think. No action required."}
+                    </Text>
+                  </View>
+                  <Text style={s.smallLink}>Open & shape this thought</Text>
+                </Pressable>
+              ) : (
+                <View style={s.emptyCard}>
+                  <View style={s.rowBetween}>
+                    <Text style={s.cardTitle}>
+                      A thought can become{"\n"}a direction.
+                    </Text>
+                    <Text style={s.emptySymbol}>⌁</Text>
+                  </View>
+                  <Text style={s.body}>
+                    See how a messy idea turns into a small, visual plan.
+                  </Text>
+                  <Tap
+                    label="Explore an example  ↗"
+                    onPress={() => void explore()}
+                    disabled={busy}
+                  />
+                </View>
+              )}
+              <View style={s.sectionHead}>
+                <Text style={s.sectionTitle}>Within reach today</Text>
+                <Text style={s.meta}>
+                  {done ? `${done} done` : "Keep it light"}
+                </Text>
+              </View>
+              <View style={s.budgets}>
+                {[10, 30, 60].map((m) => (
                   <Pressable
                     key={m}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: minutes === m }}
-                    onPress={() => {
-                      setMinutes(m);
-                      setAll(false);
-                    }}
-                    style={[s.chip, minutes === m && s.chipSelected]}
+                    accessibilityState={{ selected: budget === m }}
+                    onPress={() => setBudget(m)}
+                    style={[s.budget, budget === m && s.budgetActive]}
                   >
                     <Text
-                      style={[s.chipText, minutes === m && s.chipTextSelected]}
+                      style={[s.budgetText, budget === m && { color: C.white }]}
                     >
-                      {m === 120 ? "2 hr" : m + " min"}
+                      {m} min
                     </Text>
                   </Pressable>
                 ))}
               </View>
-              <Text style={s.small}>
-                Each action fits your window; this is not an automatic schedule.
-              </Text>
-            </View>
-            {due.length > 0 && (
-              <View style={s.deadlines}>
-                <Text style={s.sectionTitle}>Hard deadlines</Text>
-                {due.map((t) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={t.id}
-                    onPress={() => edit(t)}
-                    style={{ paddingVertical: 7 }}
-                  >
-                    <Text style={s.label}>
-                      {t.deadline} · {t.title}
-                    </Text>
-                    <Text style={s.small}>
-                      {t.deadline < localDate()
-                        ? "Overdue"
-                        : t.deadline === localDate()
-                          ? "Due today"
-                          : "Keep this date in view"}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            <View style={s.split}>
-              <Text style={s.sectionTitle}>
-                {all ? "All actions" : "Your next actions"}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setAll(!all)}
-              >
-                <Text style={s.link}>{all ? "Show today" : "View all"}</Text>
-              </Pressable>
-            </View>
-            {visible.length === 0 && (
-              <View style={s.card}>
-                <Text style={s.sectionTitle}>
-                  {tasks.length
-                    ? "Nothing fits this window."
-                    : "A little less in your head."}
-                </Text>
-                <Text style={s.body}>
-                  {tasks.length
-                    ? "Try a larger window or view all your actions."
-                    : "Add one small action or capture a thought for later."}
-                </Text>
-              </View>
-            )}
-            {visible.map((t) => (
-              <View key={t.id} style={[s.card, t.done && { opacity: 0.6 }]}>
-                <View style={s.split}>
-                  <Text style={s.topic}>
-                    {t.topic} · {t.minutes} min
-                  </Text>
+              {day.slice(0, 3).map((t) => (
+                <View key={t.id} style={s.task}>
                   <Pressable
                     accessibilityRole="checkbox"
-                    accessibilityLabel={"Complete " + t.title}
                     accessibilityState={{ checked: t.done }}
+                    accessibilityLabel={`Complete ${t.title}`}
                     disabled={busy}
                     onPress={() =>
-                      void act(async () => {
-                        await saveTask({ ...t, done: !t.done });
-                        await refresh();
+                      void run(async () => {
+                        await saveTask({ ...t, done: true });
+                        setNotice("Done. A little more space.");
                       })
                     }
                     style={s.check}
                   >
-                    <Text style={s.checkText}>{t.done ? "✓" : "○"}</Text>
+                    <Text style={{ color: C.blue }}>○</Text>
                   </Pressable>
-                </View>
-                <Pressable accessibilityRole="button" onPress={() => edit(t)}>
-                  <Text style={s.taskTitle}>{t.title}</Text>
-                  {!!t.notes && (
-                    <Text numberOfLines={2} style={s.body}>
-                      {t.notes}
+                  <View style={{ flex: 1, gap: 5 }}>
+                    <Text style={s.taskTitle}>{t.title}</Text>
+                    <Text style={s.meta}>
+                      {t.minutes} min · {t.topic}
                     </Text>
-                  )}
-                </Pressable>
-                {!!t.plannedDate && (
-                  <Text style={s.small}>
-                    Planned {t.plannedDate}
-                    {t.plannedTime ? " at " + t.plannedTime : ""}
-                  </Text>
-                )}
-                {!!t.waitingOn && (
-                  <Text style={s.small}>
-                    Waiting on {t.waitingOn}
-                    {t.chaseDate ? " · follow up " + t.chaseDate : ""}
-                  </Text>
-                )}
-                <View style={s.split}>
-                  <Pressable accessibilityRole="button" onPress={() => edit(t)}>
-                    <Text style={s.link}>Edit action</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busy}
-                    onPress={() =>
-                      void act(async () =>
-                        setMessage(await addTaskToCalendar(t, chooseCalendar)),
-                      )
-                    }
-                  >
-                    <Text style={s.link}>{Platform.OS === "ios" ? "Save to Apple Calendar" : "Add to calendar ↗"}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-            <Button
-              title="＋ Add an action"
-              onPress={() => edit(blankTask())}
-            />
-          </ScrollView>
-        </View>
-        <View style={[s.screen, tab !== "Capture" && s.hidden]}>
-          <ScrollView
-            contentContainerStyle={s.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={s.eyebrow}>CAPTURE FIRST · ORGANIZE LATER</Text>
-            <Text style={s.h1}>Let it out.</Text>
-            <Text style={s.body}>A thought doesn't need a plan yet.</Text>
-            <View style={s.card}>
-              <Field
-                label="What's on your mind?"
-                value={capture}
-                onChangeText={setCapture}
-                placeholder="An idea, a thing to chase, something to remember…"
-                multiline
-              />
-              <Button
-                title="Save thought"
-                disabled={busy || !capture.trim()}
-                onPress={() =>
-                  void act(async () => {
-                    await saveNote({
-                      id: randomUUID(),
-                      title: capture.trim().split("\n")[0].slice(0, 100),
-                      text: capture.trim(),
-                      createdAt: new Date().toISOString(),
-                    });
-                    setCapture("");
-                    await refresh();
-                    setMessage("Thought saved. You can organize it later.");
-                  })
-                }
-              />
-            </View>
-            <VoiceCapture onSaved={savedVoice} />
-          </ScrollView>
-        </View>
-        <View style={[s.screen, tab !== "Inbox" && s.hidden]}>
-          <ScrollView contentContainerStyle={s.content}>
-            <Text style={s.eyebrow}>YOUR THOUGHT INBOX</Text>
-            <Text style={s.h1}>Nothing lost.</Text>
-            <Text style={s.body}>
-              Review a thought and decide on one next step.
-            </Text>
-            {notes.length === 0 && (
-              <View style={s.card}>
-                <Text style={s.sectionTitle}>Room for your ideas.</Text>
-                <Text style={s.body}>
-                  Your saved voice and text notes will appear here.
-                </Text>
-                <Button
-                  title="Capture a thought"
-                  onPress={() => setTab("Capture")}
-                />
-              </View>
-            )}
-            {notes.map((n) => (
-              <View key={n.id} style={s.card}>
-                <Text style={s.small}>
-                  {new Date(n.createdAt).toLocaleString()}
-                </Text>
-                <Text style={s.taskTitle}>{n.title}</Text>
-                {!!n.text && <Text style={s.body}>{n.text}</Text>}
-                {!!n.audioUri && (
-                  <>
-                    <AudioPlayback uri={n.audioUri} />
                     <Pressable
                       accessibilityRole="button"
-                      disabled={busy}
-                      onPress={() =>
-                        void act(async () => {
-                          if (!(await Sharing.isAvailableAsync()))
-                            throw new Error("Sharing is not available.");
-                          await Sharing.shareAsync(n.audioUri!);
-                        })
-                      }
+                      onPress={() => void calendar(t)}
                     >
-                      <Text style={s.link}>Share original audio ↗</Text>
+                      <Text style={s.smallLink}>Add to Calendar ↗</Text>
                     </Pressable>
-                  </>
-                )}
-                <View style={s.split}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busy}
-                    onPress={() => {
-                      setMessage("");
-                      setNoteEdit({ ...n });
-                    }}
-                  >
-                    <Text style={s.link}>Edit note</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() =>
-                      edit({ ...blankTask(), ...extractContactDetails(n.text), title: n.title, notes: n.text })
-                    }
-                  >
-                    <Text style={s.link}>Create an action →</Text>
-                  </Pressable>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-        <View style={[s.screen, tab !== "Settings" && s.hidden]}>
-          <ScrollView contentContainerStyle={s.content}>
-            <Text style={s.eyebrow}>A FOUNDATION TO BUILD ON</Text>
-            <Text style={s.h1}>Your space.</Text>
-            <View style={s.card}>
-              <Text style={s.sectionTitle}>Mobile starter · 0.1.0</Text>
-              <Text style={s.body}>{capabilities.cloudSync.reason}</Text>
-              <Text style={s.body}>
-                Deleting the app removes its local workspace. Export text and
-                share original recordings to keep copies.
-              </Text>
-              <Button
-                title="Export notes & actions"
-                secondary
-                disabled={busy}
-                onPress={() => void act(exportText)}
-              />
-              <Text style={s.small}>
-                The JSON export excludes audio files. Share each recording from
-                your inbox.
-              </Text>
-            </View>
-            <View style={s.card}>
-              <Text style={s.sectionTitle}>Calendar</Text>
-              <Text style={s.body}>
-                On iPhone, allow Calendar access and choose a calendar once. Save
-                creates or updates the linked event, including contacts, location,
-                meeting link, and alert. Apple delivers alerts according to your
-                Calendar notification and Focus settings. Changes made in Calendar
-                do not sync back here; saving changed details here replaces the
-                linked event's details. Android uses its calendar editor.
-              </Text>
-              {Platform.OS === 'ios' && <Button title="Choose Apple calendar" secondary disabled={busy} onPress={() => void act(async () => { const id = await chooseAppleCalendar(chooseCalendar, true); setMessage(id ? 'Calendar chosen for new events.' : 'Calendar selection canceled.'); })} />}
-            </View>
-            <View style={s.card}>
-              <Text style={s.sectionTitle}>Future connections</Text>
-              <Text style={s.body}>{capabilities.transcription.reason}</Text>
-              <Text style={s.body}>{capabilities.purchases.reason}</Text>
-              <Text style={s.small}>
-                Cloud accounts, subscriptions, and background listening are not
-                enabled. Calendar alerts are handled by your phone's Calendar app.
-              </Text>
-            </View>
-          </ScrollView>
-        </View>
-        <View style={s.nav}>
-          {(["Today", "Capture", "Inbox", "Settings"] as Tab[]).map(
-            (name, i) => (
-              <Pressable
-                accessibilityRole="tab"
-                accessibilityState={{ selected: tab === name }}
-                accessibilityLabel={name}
-                key={name}
-                onPress={() => setTab(name)}
-                style={s.navItem}
-              >
-                <Text style={[s.navIcon, tab === name && s.active]}>
-                  {["◉", "＋", "▤", "⚙"][i]}
-                </Text>
-                <Text style={[s.navText, tab === name && s.active]}>
-                  {name}
-                </Text>
-              </Pressable>
-            ),
+              ))}
+              {!day.length && (
+                <View style={s.quiet}>
+                  <Text style={s.body}>
+                    Nothing needs to fill this space.{"\n"}Pick a step from a
+                    draft when you’re ready.
+                  </Text>
+                </View>
+              )}
+              {day.length > 3 && (
+                <Pressable onPress={() => setAdvanced(true)}>
+                  <Text style={s.smallLink}>
+                    See the rest in your task list →
+                  </Text>
+                </Pressable>
+              )}
+            </>
           )}
-        </View>
-        <Modal
-          visible={!!editing}
-          animationType="slide"
-          onRequestClose={() => !busy && setEditing(null)}
-          presentationStyle="pageSheet"
-        >
-          <SafeAreaView style={s.shell}>
-            <KeyboardAvoidingView
-              style={{ flex: 1 }}
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-            >
-              <ScrollView
-                contentContainerStyle={s.content}
-                keyboardShouldPersistTaps="handled"
-              >
-                <Text style={s.h1}>One next step.</Text>
-                {editing && (
-                  <>
-                    <Field
-                      label="Action"
-                      value={editing.title}
-                      onChangeText={(title) =>
-                        setEditing({ ...editing, title })
-                      }
-                      placeholder="Start with a verb"
-                    />
-                    <View style={s.row}>
-                      {TOPICS.map((topic) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityState={{
-                            selected: editing.topic === topic,
-                          }}
-                          key={topic}
-                          disabled={busy}
-                          style={[
-                            s.chip,
-                            editing.topic === topic && s.chipSelected,
-                          ]}
-                          onPress={() => setEditing({ ...editing, topic })}
-                        >
-                          <Text
-                            style={[
-                              s.chipText,
-                              editing.topic === topic && s.chipTextSelected,
-                            ]}
-                          >
-                            {topic}
-                          </Text>
-                        </Pressable>
-                      ))}
+          {screen === "My mind" && (
+            <>
+              <Label>THE BIGGER PICTURE</Label>
+              <Text style={s.headline}>Room to{"\n"}think.</Text>
+              <Text style={s.intro}>
+                Ideas can stay ideas. Open one when it’s ready to become
+                something.
+              </Text>
+              <View style={s.budgets}>
+                {["In motion", "Parked"].map((x, i) => (
+                  <Pressable
+                    key={x}
+                    accessibilityRole="button"
+                    onPress={() => setParked(!!i)}
+                    style={[s.budget, parked === !!i && s.budgetActive]}
+                  >
+                    <Text
+                      style={[
+                        s.budgetText,
+                        parked === !!i && { color: C.white },
+                      ]}
+                    >
+                      {x}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {drafts
+                .filter((d) => (d.state === "parked") === parked)
+                .map((d) => (
+                  <Pressable
+                    key={d.id}
+                    accessibilityRole="button"
+                    onPress={() => setSelected(d.id)}
+                    style={s.draftCard}
+                  >
+                    <View style={s.rowBetween}>
+                      <Label>
+                        {d.example ? "EXAMPLE" : d.topic.toUpperCase()}
+                      </Label>
+                      <Text style={s.arrow}>↗</Text>
                     </View>
-                    <Field
-                      label="Minutes needed"
-                      value={estimate}
-                      onChangeText={setEstimate}
-                    />
-                    <Field
-                      label="Plan to work on (optional)"
-                      value={editing.plannedDate}
-                      onChangeText={(plannedDate) =>
-                        setEditing({ ...editing, plannedDate })
-                      }
-                      placeholder="YYYY-MM-DD"
-                    />
-                    <Field
-                      label="Planned time (optional)"
-                      value={editing.plannedTime}
-                      onChangeText={(plannedTime) =>
-                        setEditing({ ...editing, plannedTime })
-                      }
-                      placeholder="HH:mm · 24-hour time"
-                    />
-                    <Field label="Time zone" value={editing.timeZone || deviceTimeZone()} onChangeText={timeZone => setEditing({ ...editing, timeZone })} placeholder="America/New_York" />
-                    <Text style={s.label}>Calendar alert</Text>
-                    <View style={s.row}>
-                      {REMINDERS.map(value => <Pressable key={String(value)} accessibilityRole="button" accessibilityState={{selected: (editing.reminderMinutes === undefined ? 15 : editing.reminderMinutes) === value}} disabled={busy} style={[s.chip, (editing.reminderMinutes === undefined ? 15 : editing.reminderMinutes) === value && s.chipSelected]} onPress={() => setEditing({...editing, reminderMinutes: value})}><Text style={[s.chipText, (editing.reminderMinutes === undefined ? 15 : editing.reminderMinutes) === value && s.chipTextSelected]}>{reminderLabel(value)}</Text></Pressable>)}
+                    <Text style={s.cardTitle}>{d.title}</Text>
+                    <View style={s.miniBranch}>
+                      <View style={s.branchDot} />
+                      <Text style={s.body}>
+                        {d.steps.filter((x) => x.accepted).length} chosen ·{" "}
+                        {d.steps.filter((x) => !x.accepted).length}{" "}
+                        possibilities
+                      </Text>
                     </View>
-                    <Field label="Contact name (optional)" value={editing.contactName || ''} onChangeText={contactName => setEditing({...editing, contactName})} />
-                    <Field label="Phone (optional)" value={editing.phone || ''} onChangeText={phone => setEditing({...editing, phone})} />
-                    <Field label="Email (optional)" value={editing.email || ''} onChangeText={email => setEditing({...editing, email})} />
-                    <Field label="Location / address (optional)" value={editing.location || ''} onChangeText={location => setEditing({...editing, location})} />
-                    <Field label="Meeting or website link (optional)" value={editing.meetingUrl || ''} onChangeText={meetingUrl => setEditing({...editing, meetingUrl})} placeholder="https://…" />
-                    <Field
-                      label="Hard deadline (optional)"
-                      value={editing.deadline}
-                      onChangeText={(deadline) =>
-                        setEditing({ ...editing, deadline })
-                      }
-                      placeholder="YYYY-MM-DD"
-                    />
-                    <Field
-                      label="Waiting on (optional)"
-                      value={editing.waitingOn}
-                      onChangeText={(waitingOn) =>
-                        setEditing({ ...editing, waitingOn })
-                      }
-                    />
-                    <Field
-                      label="Follow-up date (optional)"
-                      value={editing.chaseDate}
-                      onChangeText={(chaseDate) =>
-                        setEditing({ ...editing, chaseDate })
-                      }
-                      placeholder="YYYY-MM-DD"
-                    />
-                    <Field
-                      label="Context"
-                      value={editing.notes}
-                      onChangeText={(notes) =>
-                        setEditing({ ...editing, notes })
-                      }
-                      multiline
-                    />
-                    {!!message && (
-                      <Text style={s.error} accessibilityLiveRegion="polite">
-                        {message}
+                  </Pressable>
+                ))}
+              {!drafts.filter((d) => (d.state === "parked") === parked)
+                .length && (
+                <View style={s.emptyCard}>
+                  <Text style={s.cardTitle}>
+                    {parked
+                      ? "Quietly kept for later."
+                      : "Your thoughts belong here."}
+                  </Text>
+                  <Text style={s.body}>
+                    {parked
+                      ? "Park a draft to take it off your daily view."
+                      : "Start with a thought. You don’t need a project name or a plan."}
+                  </Text>
+                  <Tap
+                    label={
+                      parked ? "Capture something new" : "Explore an example"
+                    }
+                    onPress={() => (parked ? capture("text") : void explore())}
+                  />
+                </View>
+              )}
+              <View style={s.future}>
+                <Label>ON THE HORIZON</Label>
+                <Text style={s.body}>
+                  Connections between goals. Reusable routines. A wider view
+                  when you want it.
+                </Text>
+                <Text style={s.meta}>
+                  Preview of direction · not connected yet
+                </Text>
+              </View>
+            </>
+          )}
+          {screen === "Library" && (
+            <>
+              <Label>NOTHING LOST</Label>
+              <Text style={s.headline}>Your words.{"\n"}Kept safe.</Text>
+              <Text style={s.intro}>
+                Original thoughts and recordings live here, even as your plans
+                change.
+              </Text>
+              {notes.map((n) => (
+                <Pressable
+                  key={n.id}
+                  accessibilityRole="button"
+                  onPress={() => setNote(n)}
+                  style={s.libraryRow}
+                >
+                  <View style={s.noteIcon}>
+                    <Text style={{ fontSize: 22, color: C.blue }}>
+                      {n.audioUri ? "≋" : "≡"}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, gap: 5 }}>
+                    <Text numberOfLines={2} style={s.taskTitle}>
+                      {n.title}
+                    </Text>
+                    <Text style={s.meta}>
+                      {n.audioUri ? "Voice · " : ""}
+                      {new Date(n.createdAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </Text>
+                    {n.audioUri && !n.text && (
+                      <Text style={s.meta}>
+                        Audio saved · transcription not connected
                       </Text>
                     )}
-                    <Button
-                      title="Save action"
-                      disabled={busy}
-                      onPress={() =>
-                        void act(async () => {
-                          await saveTask({
-                            ...editing,
-                            title: editing.title.trim(),
-                            minutes: Number(estimate),
-                          });
-                          await refresh();
-                          setEditing(null);
-                          setMessage("Action saved.");
-                        })
-                      }
-                    />
-                    <Button
-                      title="Cancel"
-                      secondary
-                      disabled={busy}
-                      onPress={() => {
-                        setEditing(null);
-                        setMessage("");
-                      }}
-                    />
-                    {Platform.OS === 'ios' && tasks.some(t => t.id === editing.id) && <Button title="Reset calendar link…" secondary disabled={busy} onPress={() => resetLink(editing)} />}
-                    {tasks.some((t) => t.id === editing.id) && (
-                      <Button
-                        title="Delete action"
-                        secondary
-                        disabled={busy}
-                        onPress={() => remove(editing)}
-                      />
-                    )}
-                  </>
-                )}
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        </Modal>
-        <Modal
-          visible={!!noteEdit}
-          animationType="slide"
-          onRequestClose={() => !busy && setNoteEdit(null)}
-          presentationStyle="pageSheet"
-        >
-          <SafeAreaView style={s.shell}>
-            <KeyboardAvoidingView
-              style={{ flex: 1 }}
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
+                  </View>
+                  <Text style={s.arrow}>↗</Text>
+                </Pressable>
+              ))}
+              {!notes.length && (
+                <View style={s.emptyCard}>
+                  <Text style={s.cardTitle}>A fresh page.</Text>
+                  <Text style={s.body}>
+                    Speak or write. We’ll keep the original here.
+                  </Text>
+                  <Tap
+                    label="Capture a thought"
+                    onPress={() => capture("text")}
+                    primary
+                  />
+                </View>
+              )}
+            </>
+          )}
+          <Text style={s.footer}>Less to manage. More room to live.</Text>
+        </ScrollView>
+      </Animated.View>
+      <View style={s.nav}>
+        {(["Today", "My mind", "Library"] as Screen[]).map((t, i) => (
+          <Pressable
+            key={t}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: screen === t }}
+            onPress={() => setScreen(t)}
+            style={s.navItem}
+          >
+            <Text style={[s.navIcon, screen === t && { color: C.blue }]}>
+              {["◉", "⌘", "▤"][i]}
+            </Text>
+            <Text
+              style={[
+                s.navText,
+                screen === t && { color: C.ink, fontWeight: "700" },
+              ]}
             >
-              <ScrollView
-                contentContainerStyle={s.content}
-                keyboardShouldPersistTaps="handled"
-              >
-                <Text style={s.h1}>Keep the context.</Text>
-                {noteEdit && (
-                  <>
-                    <Field
-                      label="Title"
-                      value={noteEdit.title}
-                      onChangeText={(title) =>
-                        setNoteEdit({ ...noteEdit, title })
-                      }
+              {t}
+            </Text>
+          </Pressable>
+        ))}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Capture a thought"
+          onPress={() => capture("text")}
+          style={s.navCapture}
+        >
+          <Text style={{ fontSize: 28, color: C.white }}>＋</Text>
+        </Pressable>
+      </View>
+      <Modal
+        visible={composer !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeCapture}
+      >
+        <SafeAreaView style={s.sheet}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={{ flex: 1 }}
+          >
+            <View style={s.sheetHead}>
+              <Label>{refining ? "CONTINUE THIS THOUGHT" : "LET IT OUT"}</Label>
+              <Tap
+                label="Close"
+                onPress={closeCapture}
+                disabled={voiceBusy || busy}
+              />
+            </View>
+            <ScrollView
+              contentContainerStyle={s.sheetBody}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={s.sheetTitle}>
+                {composer === "voice"
+                  ? "Say it your way."
+                  : "No need to\norganize it first."}
+              </Text>
+              {composer === "voice" ? (
+                <>
+                  <VoiceCapture
+                    compact
+                    autoStart
+                    onActivityChange={setVoiceBusy}
+                    onSaved={voiceSaved}
+                  />
+                  <Text style={s.body}>
+                    Audio saves automatically when you stop. In this preview,
+                    speech-to-text is not connected yet.
+                  </Text>
+                  {!voiceBusy && (
+                    <Tap
+                      label="Write or use keyboard dictation instead"
+                      onPress={() => setComposer("text")}
                     />
-                    <Field
-                      label="Text or transcript"
-                      value={noteEdit.text}
-                      onChangeText={(text) =>
-                        setNoteEdit({ ...noteEdit, text })
-                      }
-                      multiline
-                    />
-                    {!!message && <Text style={s.error}>{message}</Text>}
-                    <Button
-                      title="Save note"
-                      disabled={busy}
-                      onPress={() =>
-                        void act(async () => {
-                          await saveNote(noteEdit);
-                          await refresh();
-                          setNoteEdit(null);
-                        })
-                      }
-                    />
-                    <Button
-                      title="Cancel"
-                      secondary
-                      disabled={busy}
-                      onPress={() => setNoteEdit(null)}
-                    />
-                  </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    autoFocus
+                    multiline
+                    maxLength={20000}
+                    value={input}
+                    onChangeText={setInput}
+                    editable={!busy}
+                    placeholder={
+                      refining
+                        ? "What changed? What else is on your mind?"
+                        : "An idea, a loose end, something you want to do…"
+                    }
+                    placeholderTextColor="#8D95A4"
+                    accessibilityLabel="Your thought"
+                    style={s.thoughtInput}
+                  />
+                  <View style={s.hintRow}>
+                    <Text style={s.meta}>Your words are enough.</Text>
+                    <Text style={s.meta}>{input.length}/20,000</Text>
+                  </View>
+                  <Tap
+                    label={
+                      busy
+                        ? "Saving…"
+                        : refining
+                          ? "Add to this draft  ↗"
+                          : "Shape this thought  ↗"
+                    }
+                    primary
+                    disabled={busy || !input.trim()}
+                    onPress={() => void submit()}
+                  />
+                  <Text style={s.previewHint}>
+                    Testing preview: simple local rules create draft
+                    suggestions. AI understanding is not connected yet.
+                  </Text>
+                  <Tap
+                    label="Speak instead"
+                    onPress={() => setComposer("voice")}
+                    disabled={busy}
+                  />
+                </>
+              )}
+              {!!error && <Text style={s.error}>{error}</Text>}
+              {!!notice && <Text style={s.notice}>{notice}</Text>}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+      <Modal
+        visible={!!current}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelected(null)}
+      >
+        <SafeAreaView style={s.sheet}>
+          <View style={s.sheetHead}>
+            <Label>
+              {current?.example ? "EXAMPLE · TRY THE FLOW" : "A WORKING DRAFT"}
+            </Label>
+            <Tap
+              label="Done"
+              onPress={() => setSelected(null)}
+              disabled={busy}
+            />
+          </View>
+          {current && (
+            <ScrollView contentContainerStyle={s.sheetBody}>
+              <Text style={s.sheetTitle}>{current.title}</Text>
+              <Text style={s.intro}>
+                A direction, not a commitment. Choose only what helps.
+              </Text>
+              <View style={s.treeRoot}>
+                <View style={s.rootDot} />
+                <Text style={s.treeRootText}>
+                  {current.topic} /{" "}
+                  {current.state === "parked" ? "For later" : "Taking shape"}
+                </Text>
+              </View>
+              <View style={s.treeStem}>
+                {current.steps.map((step, i) => (
+                  <View key={step.id} style={s.treeNode}>
+                    <View style={s.treeConnector} />
+                    <View style={s.treeNodeHead}>
+                      <Text style={s.stepNumber}>
+                        {String(i + 1).padStart(2, "0")}
+                      </Text>
+                      <Text style={s.meta}>
+                        {step.accepted
+                          ? "CHOSEN"
+                          : `${step.minutes} MIN · ESTIMATE`}
+                      </Text>
+                    </View>
+                    <Text style={s.cardTitle}>{step.title}</Text>
+                    {step.accepted ? (
+                      <Text style={s.accepted}>✓ In your plan</Text>
+                    ) : (
+                      <View style={s.stepActions}>
+                        <Tap
+                          label="Add to today"
+                          primary
+                          disabled={busy}
+                          onPress={() => void add(current, step)}
+                        />
+                        <Tap
+                          label="Make it smaller"
+                          disabled={busy}
+                          onPress={() => small(current, step)}
+                        />
+                      </View>
+                    )}
+                  </View>
+                ))}
+                {!current.steps.length && (
+                  <View style={s.treeNode}>
+                    <Text style={s.cardTitle}>This can just be a thought.</Text>
+                    <Text style={s.body}>
+                      Nothing has been turned into a task. Add a next step if
+                      one comes to mind.
+                    </Text>
+                  </View>
                 )}
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        </Modal>
-      </SafeAreaView>
-    </BusyContext.Provider>
+              </View>
+              {updateOpen ? (
+                <View style={{ gap: 12 }}>
+                  <TextInput
+                    multiline
+                    value={updateInput}
+                    onChangeText={setUpdateInput}
+                    maxLength={20000}
+                    placeholder="What changed? Tell it naturally…"
+                    placeholderTextColor={C.muted}
+                    accessibilityLabel="Update this thought"
+                    style={[s.thoughtInput, { minHeight: 100, fontSize: 18 }]}
+                  />
+                  <Tap
+                    label="Keep this update"
+                    primary
+                    disabled={busy || !updateInput.trim()}
+                    onPress={() =>
+                      void run(async () => {
+                        await saveDraft(refineDraft(current, updateInput));
+                        setUpdateInput("");
+                        setUpdateOpen(false);
+                        setNotice("Update kept with your original thought.");
+                      })
+                    }
+                  />
+                </View>
+              ) : (
+                <Tap
+                  label="＋  Add an update"
+                  onPress={() => {
+                    setUpdateInput("");
+                    setUpdateOpen(true);
+                  }}
+                />
+              )}
+              <Tap
+                label={
+                  current.state === "parked"
+                    ? "Bring back into view"
+                    : "Keep this for later"
+                }
+                onPress={() =>
+                  void run(async () => {
+                    await saveDraft({
+                      ...current,
+                      state: current.state === "parked" ? "draft" : "parked",
+                    });
+                    setSelected(null);
+                    setNotice(
+                      current.state === "parked"
+                        ? "Back in My mind."
+                        : "Parked. Saved, without asking for your attention.",
+                    );
+                  })
+                }
+                disabled={busy}
+              />
+              <View style={s.source}>
+                <Label>IN YOUR WORDS</Label>
+                <Text style={s.sourceText}>{current.source}</Text>
+                {current.updates.map((u, i) => (
+                  <Text key={i} style={s.sourceText}>
+                    ↳ {u}
+                  </Text>
+                ))}
+              </View>
+              <Text style={s.previewHint}>
+                {current.example
+                  ? "This is a sample, not a plan inferred from your personal data."
+                  : "Draft suggestions use local rules in this preview. Review before adding."}
+              </Text>
+              {!!error && <Text style={s.error}>{error}</Text>}
+              {!!notice && <Text style={s.notice}>{notice}</Text>}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+      <Modal
+        visible={!!note}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setNote(null)}
+      >
+        <SafeAreaView style={s.sheet}>
+          <View style={s.sheetHead}>
+            <Label>ORIGINAL THOUGHT</Label>
+            <Tap label="Done" onPress={() => setNote(null)} />
+          </View>
+          {note && (
+            <ScrollView contentContainerStyle={s.sheetBody}>
+              <Text style={s.sheetTitle}>{note.title}</Text>
+              {note.audioUri && <AudioPlayback uri={note.audioUri} />}
+              <Text style={s.sourceText}>
+                {note.text ||
+                  "Your audio is saved. Automatic transcription is not connected in this preview."}
+              </Text>
+              {!!note.text && (
+                <Tap
+                  label="Open as a visual draft"
+                  primary
+                  onPress={() =>
+                    void run(async () => {
+                      let d = drafts.find((x) => x.id === note.id);
+                      if (!d) {
+                        d = suggestDraft(note.id, note.text);
+                        await saveDraft(d);
+                      }
+                      setNote(null);
+                      setSelected(d.id);
+                    })
+                  }
+                  disabled={busy}
+                />
+              )}
+              <Text style={s.meta}>Saved on this device</Text>
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+      <Modal
+        visible={settings}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSettings(false)}
+      >
+        <SafeAreaView style={s.sheet}>
+          <View style={s.sheetHead}>
+            <Label>BEHIND THE SIMPLICITY</Label>
+            <Tap label="Done" onPress={() => setSettings(false)} />
+          </View>
+          <ScrollView contentContainerStyle={s.sheetBody}>
+            <Text style={s.sheetTitle}>A quieter kind{"\n"}of assistant.</Text>
+            <Text style={s.body}>
+              This is an early testing build. Your existing notes, recordings,
+              tasks and calendar tools are preserved.
+            </Text>
+            <Tap
+              label="Open all task & calendar controls"
+              onPress={() => {
+                setSettings(false);
+                setAdvanced(true);
+              }}
+            />
+            <View style={s.source}>
+              <Label>WORKING NOW</Label>
+              <Text style={s.body}>
+                Text capture · visual drafts · one-tap actions · local storage ·
+                voice recording · Apple Calendar handoff
+              </Text>
+            </View>
+            <View style={s.source}>
+              <Label>NEXT TO CONNECT</Label>
+              <Text style={s.body}>
+                Automatic transcription · AI understanding · smart follow-ups ·
+                connections across goals · reusable routines
+              </Text>
+            </View>
+            <Text style={s.previewHint}>
+              No paid AI service or cloud sync is connected. Website data and
+              this app remain separate. Test build only.
+            </Text>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+      <Modal
+        transparent
+        visible={!!calendarTask}
+        animationType="fade"
+        onRequestClose={() => setCalendarTask(null)}
+      >
+        <View style={s.scrim}>
+          <View style={s.dialog}>
+            <Label>MAKE A LITTLE SPACE</Label>
+            <Text style={s.cardTitle}>{calendarTask?.title}</Text>
+            <Text style={s.body}>
+              This action needs a time before it can go into Calendar.
+              Suggested: tomorrow at 9:00 AM, with a 15-minute alert.
+            </Text>
+            <Tap
+              label="Use tomorrow at 9:00"
+              primary
+              onPress={() => void scheduleTomorrow()}
+              disabled={busy}
+            />
+            <Tap
+              label="Choose another time"
+              onPress={() => {
+                setCalendarTask(null);
+                setAdvanced(true);
+              }}
+              disabled={busy}
+            />
+            <Tap
+              label="Not now"
+              onPress={() => setCalendarTask(null)}
+              disabled={busy}
+            />
+            {!!error && <Text style={s.error}>{error}</Text>}
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 const s = StyleSheet.create({
-  shell: { flex: 1, backgroundColor: "#F6F8F5" },
-  screen: { flex: 1 },
-  hidden: { display: "none" },
-  center: { flex: 1, justifyContent: "center", padding: 30, gap: 25 },
+  safe: { flex: 1, backgroundColor: C.paper },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 24 },
   header: {
-    paddingHorizontal: 23,
-    paddingVertical: 16,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderColor: "#DFE7E1",
   },
-  logo: {
-    fontSize: 25,
-    fontWeight: "800",
-    letterSpacing: -1,
-    color: "#143D36",
-  },
-  small: { fontSize: 12, lineHeight: 18, color: "#63796F" },
-  badge: { backgroundColor: "#E2EEE5", padding: 8, borderRadius: 20 },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#3D6957",
-    letterSpacing: 1,
-  },
-  content: { padding: 22, paddingBottom: 35, gap: 18 },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.8,
-    color: "#668272",
-    textTransform: "uppercase",
-  },
-  h1: {
-    fontSize: 35,
-    fontWeight: "700",
-    letterSpacing: -1.5,
-    color: "#153E36",
-    lineHeight: 40,
-  },
-  body: { fontSize: 15, lineHeight: 23, color: "#61746A" },
-  focus: { backgroundColor: "#E5F0DA", borderRadius: 22, padding: 20, gap: 14 },
-  row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: {
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    backgroundColor: "#EFF3EB",
-    borderWidth: 1,
-    borderColor: "#CDDCCB",
-  },
-  chipSelected: { backgroundColor: "#204D41", borderColor: "#204D41" },
-  chipText: { color: "#345948", fontSize: 13, fontWeight: "700" },
-  chipTextSelected: { color: "#fff" },
-  card: {
-    padding: 20,
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E0E8DF",
-    gap: 14,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: "700", color: "#24473B" },
-  split: {
+  brand: { fontSize: 34, fontWeight: "800", letterSpacing: -2, color: C.ink },
+  row: { flexDirection: "row", alignItems: "center", gap: 10 },
+  rowBetween: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
   },
-  link: {
-    fontSize: 13,
-    color: "#287363",
-    fontWeight: "700",
-    paddingVertical: 8,
+  test: { fontSize: 10, fontWeight: "700", letterSpacing: 1.5, color: C.muted },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: C.white,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.line,
   },
-  topic: {
+  page: { padding: 24, paddingTop: 18, gap: 16, paddingBottom: 20 },
+  label: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#738576",
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 1.6,
+    color: C.muted,
   },
-  taskTitle: {
-    fontSize: 20,
-    lineHeight: 27,
+  headline: {
+    fontSize: 42,
+    lineHeight: 46,
+    letterSpacing: -1.8,
+    fontWeight: "700",
+    color: C.ink,
+    marginTop: 12,
+  },
+  headingRow: { marginBottom: 10 },
+  hero: {
+    backgroundColor: C.ink,
+    borderRadius: 28,
+    padding: 24,
+    gap: 16,
+    overflow: "hidden",
+  },
+  heroTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  heroKicker: {
+    fontSize: 10,
+    letterSpacing: 1.7,
+    fontWeight: "700",
+    color: "#C5CEDF",
+  },
+  heroArrow: { fontSize: 27, color: C.lime },
+  heroTitle: {
+    fontSize: 35,
+    lineHeight: 40,
+    letterSpacing: -1,
+    fontWeight: "500",
+    color: C.white,
+  },
+  heroBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  heroSub: { fontSize: 14, lineHeight: 21, color: "#B8C3D8", flex: 1 },
+  wave: { height: 50, flexDirection: "row", alignItems: "center", gap: 4 },
+  captureRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  tap: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  primary: { backgroundColor: C.blue },
+  secondary: { backgroundColor: C.soft },
+  tapText: { fontSize: 14, fontWeight: "600", color: C.blue },
+  sectionHead: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  sectionTitle: {
+    fontSize: 21,
     fontWeight: "600",
-    color: "#29493B",
+    letterSpacing: -0.5,
+    color: C.ink,
+  },
+  meta: { fontSize: 12, lineHeight: 18, color: C.muted },
+  draftCard: {
+    backgroundColor: C.white,
+    borderRadius: 23,
+    padding: 21,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  cardTitle: {
+    fontSize: 21,
+    lineHeight: 28,
+    fontWeight: "600",
+    letterSpacing: -0.4,
+    color: C.ink,
+  },
+  arrow: { fontSize: 24, color: C.blue },
+  miniBranch: {
+    borderLeftWidth: 1,
+    borderLeftColor: C.line,
+    marginLeft: 5,
+    paddingLeft: 17,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  branchDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: C.blue,
+    marginTop: 7,
+  },
+  body: { fontSize: 15, lineHeight: 23, color: C.muted, flexShrink: 1 },
+  smallLink: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: C.blue,
+    paddingVertical: 6,
+  },
+  emptyCard: {
+    padding: 22,
+    borderRadius: 23,
+    backgroundColor: C.white,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  emptySymbol: { fontSize: 50, color: C.blue },
+  budgets: { flexDirection: "row", gap: 8, marginBottom: 2 },
+  budget: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 22,
+    backgroundColor: "#E9ECF2",
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  budgetActive: { backgroundColor: C.ink },
+  budgetText: { fontSize: 13, fontWeight: "600", color: C.muted },
+  task: {
+    flexDirection: "row",
+    gap: 14,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
   },
   check: {
-    padding: 5,
-    minWidth: 40,
-    minHeight: 40,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#C6CFE0",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.white,
+  },
+  taskTitle: { fontSize: 16, lineHeight: 23, color: C.ink, fontWeight: "500" },
+  quiet: { padding: 18, borderRadius: 18, backgroundColor: "#EBEEF4" },
+  intro: { fontSize: 16, lineHeight: 25, color: C.muted, marginBottom: 8 },
+  future: { paddingTop: 30, gap: 12 },
+  libraryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
+  },
+  noteIcon: {
+    width: 46,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: C.soft,
     alignItems: "center",
     justifyContent: "center",
   },
-  checkText: { fontSize: 27, color: "#368570" },
-  button: {
-    backgroundColor: "#1F6555",
-    borderRadius: 15,
-    padding: 16,
-    alignItems: "center",
-    minHeight: 50,
-  },
-  buttonText: { fontSize: 15, fontWeight: "700", color: "#fff" },
-  secondary: { backgroundColor: "#E7EDE5" },
-  field: { gap: 7 },
-  label: { fontSize: 13, fontWeight: "600", color: "#365446" },
-  input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#CDDBCF",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: "#203F32",
-    minHeight: 48,
+  footer: {
+    textAlign: "center",
+    fontSize: 12,
+    color: "#8790A0",
+    marginTop: 22,
+    marginBottom: 10,
   },
   nav: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 6,
     borderTopWidth: 1,
-    borderColor: "#DDE5DA",
-    backgroundColor: "#FAFCF8",
-    paddingTop: 8,
-    paddingBottom: 5,
+    borderTopColor: C.line,
+    backgroundColor: C.paper,
   },
-  navItem: { flex: 1, alignItems: "center", gap: 3, padding: 7, minHeight: 56 },
-  navText: { fontSize: 10, fontWeight: "600", color: "#7D8A7C" },
-  navIcon: { fontSize: 23, color: "#8C978A" },
-  active: { color: "#216D56" },
-  notice: {
-    backgroundColor: "#E0EDDA",
-    paddingHorizontal: 22,
-    paddingVertical: 13,
-  },
-  noticeText: { fontSize: 13, lineHeight: 19, color: "#295443" },
-  error: { fontSize: 14, color: "#AA403B" },
-  deadlines: {
-    backgroundColor: "#FBF0DE",
-    padding: 18,
+  navItem: { alignItems: "center", gap: 4, padding: 8, minWidth: 72 },
+  navIcon: { fontSize: 22, color: "#9BA5B4" },
+  navText: { fontSize: 11, color: C.muted },
+  navCapture: {
+    width: 48,
+    height: 48,
     borderRadius: 18,
-    gap: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.blue,
   },
+  sheet: { flex: 1, backgroundColor: C.paper },
+  sheetHead: {
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  sheetBody: { padding: 24, paddingTop: 10, paddingBottom: 45, gap: 20 },
+  sheetTitle: {
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -1.2,
+    fontWeight: "600",
+    color: C.ink,
+  },
+  thoughtInput: {
+    minHeight: 210,
+    fontSize: 22,
+    lineHeight: 33,
+    color: C.ink,
+    textAlignVertical: "top",
+    paddingVertical: 12,
+  },
+  hintRow: { flexDirection: "row", justifyContent: "space-between" },
+  previewHint: { fontSize: 12, lineHeight: 19, color: C.muted },
+  treeRoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    paddingVertical: 12,
+  },
+  rootDot: {
+    height: 15,
+    width: 15,
+    borderRadius: 8,
+    borderWidth: 4,
+    borderColor: C.blue,
+    backgroundColor: C.white,
+  },
+  treeRootText: { fontSize: 14, fontWeight: "600", color: C.ink },
+  treeStem: {
+    marginLeft: 7,
+    borderLeftWidth: 1,
+    borderColor: "#C8D0E0",
+    paddingLeft: 22,
+    gap: 20,
+  },
+  treeNode: {
+    backgroundColor: C.white,
+    padding: 20,
+    borderRadius: 20,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  treeConnector: {
+    position: "absolute",
+    top: 28,
+    left: -23,
+    width: 22,
+    height: 1,
+    backgroundColor: "#C8D0E0",
+  },
+  treeNodeHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  stepNumber: { fontSize: 15, color: C.blue, fontWeight: "600" },
+  stepActions: { gap: 8 },
+  accepted: { fontSize: 14, color: "#456822", fontWeight: "600" },
+  source: {
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+    gap: 12,
+  },
+  sourceText: { fontSize: 17, lineHeight: 28, color: C.ink },
+  error: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: C.red,
+    padding: 14,
+    backgroundColor: "#FCEDED",
+    borderRadius: 14,
+  },
+  notice: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#35542B",
+    padding: 14,
+    backgroundColor: "#EAF3DE",
+    borderRadius: 14,
+  },
+  back: { padding: 14 },
+  scrim: {
+    flex: 1,
+    backgroundColor: "#14213899",
+    justifyContent: "center",
+    padding: 24,
+  },
+  dialog: { padding: 24, borderRadius: 26, backgroundColor: C.paper, gap: 16 },
 });

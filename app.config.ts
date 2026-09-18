@@ -1,7 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 
 const config: ExpoConfig = {
-  name: "Anchor",
+  name: "Flow",
   slug: "anchor-mobile",
   version: "0.1.0",
   orientation: "portrait",
@@ -30,7 +30,7 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission:
-          "Anchor records a voice note only when you tap Record.",
+          "Flow records a voice note only when you tap Record.",
         enableBackgroundRecording: false,
       },
     ],
@@ -39,7 +39,7 @@ const config: ExpoConfig = {
       "expo-calendar",
       {
         calendarPermission:
-          "Anchor saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
+          "Flow saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
       },
     ],
   ],
