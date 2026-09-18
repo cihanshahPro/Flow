@@ -32,7 +32,12 @@ export type SavedVoiceNote = {
   audioUri: string;
   durationMs: number;
 };
-type Props = { onSaved: (note: SavedVoiceNote) => Promise<void> };
+type Props = {
+  onSaved: (note: SavedVoiceNote) => Promise<void>;
+  compact?: boolean;
+  autoStart?: boolean;
+  onActivityChange?: (active: boolean) => void;
+};
 type Phase =
   | "recovering"
   | "recovery-error"
@@ -157,7 +162,12 @@ function writePendingJournal(item: PendingRecording) {
 }
 
 /** Foreground recording. The original audio is saved before note metadata is committed. */
-export default function VoiceCapture({ onSaved }: Props) {
+export default function VoiceCapture({
+  onSaved,
+  compact = false,
+  autoStart = false,
+  onActivityChange,
+}: Props) {
   const [phase, setPhase] = useState<Phase>("recovering");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
@@ -543,25 +553,46 @@ export default function VoiceCapture({ onSaved }: Props) {
     }
   }, [recorderState.mediaServicesDidReset, recorderState.url]);
 
+  const didAutoStart = useRef(false);
+  useEffect(() => {
+    onActivityChange?.(
+      ["recording", "preparing", "saving", "recovering"].includes(phase),
+    );
+    if (autoStart && phase === "idle" && !didAutoStart.current) {
+      didAutoStart.current = true;
+      void start();
+    }
+  }, [phase, autoStart, onActivityChange]);
   const working =
     phase === "recovering" || phase === "preparing" || phase === "saving";
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        compact && {
+          backgroundColor: "#FFFFFF",
+          borderColor: "#E2E6ED",
+          borderRadius: 24,
+        },
+      ]}
+    >
       <Text style={styles.eyebrow}>VOICE INBOX</Text>
       <Text style={styles.heading}>Get it off your mind.</Text>
       <Text style={styles.body}>
-        Record now. Listen and organize later. Audio stays on this device.
+        No title needed. Your recording saves when you stop.
       </Text>
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        editable={phase === "idle"}
-        placeholder="Give this thought a name (optional)"
-        placeholderTextColor="#6D8781"
-        accessibilityLabel="Voice note title"
-        style={styles.input}
-        maxLength={120}
-      />
+      {!compact && (
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          editable={phase === "idle"}
+          placeholder="Give this thought a name (optional)"
+          placeholderTextColor="#6D8781"
+          accessibilityLabel="Voice note title"
+          style={styles.input}
+          maxLength={120}
+        />
+      )}
       <View style={styles.statusRow}>
         <View style={[styles.dot, phase === "recording" && styles.liveDot]} />
         <Text accessibilityLiveRegion="polite" style={styles.status}>
@@ -603,6 +634,7 @@ export default function VoiceCapture({ onSaved }: Props) {
         }
         style={({ pressed }) => [
           styles.button,
+          compact && { backgroundColor: "#345BEE" },
           phase === "recording" && styles.stopButton,
           (working || pressed) && styles.dim,
         ]}
