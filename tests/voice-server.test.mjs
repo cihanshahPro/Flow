@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createVoiceServer } from "../scripts/voice-server.mjs";
 const token = "test-only-authorization-token-123456789";
-async function server(t, transcribe) {
-  const s = createVoiceServer({ token, transcribe, log: () => {} });
+async function server(t, transcribe, shape) {
+  const s = createVoiceServer({ token, transcribe, shape, log: () => {} });
   await new Promise((r) => s.listen(0, "127.0.0.1", r));
   t.after(() => {
     s.closeAllConnections();
@@ -61,4 +61,37 @@ test("concurrent recording gets a retryable response rather than parallel CPU wo
   assert.equal((await send(url)).status, 503);
   release("Call Alex.");
   assert.equal((await first).status, 200);
+});
+
+test("text and audio share one route, and organizer failure keeps the transcript", async (t) => {
+  let calls = 0,
+    fail = false;
+  const url = await server(
+    t,
+    async () => {
+      calls++;
+      return "Call Alex.";
+    },
+    async (text) => {
+      if (fail) throw Error("unavailable");
+      return { title: text, summary: text, choices: [] };
+    },
+  );
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text: "Email Alex." }),
+  });
+  const result = await response.json();
+  assert.equal(calls, 0);
+  assert.equal(result.shape.title, "Email Alex.");
+  assert.equal(result.organizer, "apple-local");
+  fail = true;
+  const audio = await (await send(url)).json();
+  assert.equal(audio.text, "Call Alex.");
+  assert.equal(audio.organizer, "unavailable");
+  assert.equal(calls, 1);
 });

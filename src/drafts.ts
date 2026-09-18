@@ -7,6 +7,12 @@ export type DraftStep = {
   title: string;
   minutes: number;
   accepted?: boolean;
+  deferred?: boolean;
+  label?: string;
+  smallAction?: string;
+  reason?: string;
+  evidence?: string;
+  chosenTitle?: string;
 };
 export type ThoughtDraft = {
   id: string;
@@ -18,6 +24,8 @@ export type ThoughtDraft = {
   state: "draft" | "parked";
   createdAt: string;
   example?: boolean;
+  summary?: string;
+  organizer?: "apple-local";
 };
 const actionStart =
   /^(?:i (?:need|want|have) to |(?:we|i) should |let'?s |please )?(?:call|email|ask|send|finish|start|build|make|choose|pick|book|find|write|prepare|follow up|check|review|talk|contact|collect|buy|research|schedule|create|apply|visit|read|plan|update|design|test|record)\b/i;
@@ -61,7 +69,13 @@ export function suggestDraft(
     steps: actions.map((title, i) => ({
       id: String(i),
       title: title.replace(/^i (?:need|want|have) to /i, "").slice(0, 280),
-      minutes: Math.max(1, Math.min(480, Number(title.match(/\b(\d{1,3})\s*(?:minutes?|mins?)\b/i)?.[1] ?? 15))),
+      minutes: Math.max(
+        1,
+        Math.min(
+          480,
+          Number(title.match(/\b(\d{1,3})\s*(?:minutes?|mins?)\b/i)?.[1] ?? 15),
+        ),
+      ),
     })),
     state: "draft",
     createdAt: now.toISOString(),
@@ -129,5 +143,77 @@ export function exampleDraft(id: string): ThoughtDraft {
       },
       { id: "intro", title: "Ask Alex about an introduction", minutes: 10 },
     ],
+  };
+}
+
+/** Validate model output before it becomes an actionable draft. Source remains intact. */
+export function shapedDraft(
+  id: string,
+  source: string,
+  value: unknown,
+): ThoughtDraft {
+  const base = suggestDraft(id, source);
+  if (!value || typeof value !== "object")
+    throw new Error("The organizer returned an unreadable draft.");
+  const plan = value as Record<string, unknown>;
+  const bounded = (v: unknown, max: number) =>
+    typeof v === "string" && v.trim().length > 0 && v.trim().length <= max
+      ? v.trim()
+      : "";
+  const title = bounded(plan.title, 120),
+    summary = bounded(plan.summary, 600);
+  if (
+    !title ||
+    !summary ||
+    !Array.isArray(plan.choices) ||
+    plan.choices.length > 3
+  )
+    throw new Error("The organizer returned an incomplete draft.");
+  const seen = new Set<string>();
+  const steps: DraftStep[] = [];
+  for (const [i, raw] of plan.choices.entries()) {
+    if (!raw || typeof raw !== "object") continue;
+    const label = bounded(raw.label, 80),
+      action = bounded(raw.action, 280),
+      smallAction = bounded(raw.smallAction, 180),
+      reason = bounded(raw.reason, 300);
+    const evidence = bounded(raw.evidence, 800).replace(/^["“]|["”]$/g, "");
+    const normalized = (s: string) => s.replace(/\s+/g, " ").trim();
+    if (
+      !label ||
+      !action ||
+      !smallAction ||
+      !reason ||
+      !evidence ||
+      !normalized(source).includes(normalized(evidence)) ||
+      seen.has(action.toLowerCase())
+    )
+      continue;
+    seen.add(action.toLowerCase());
+    steps.push({
+      id: `ai-${i}`,
+      title: action,
+      minutes: 15,
+      label,
+      smallAction,
+      reason,
+      evidence,
+    });
+  }
+  if (plan.choices.length && !steps.length)
+    throw new Error(
+      "The suggested actions could not be matched to your words.",
+    );
+  // An extractive preview cannot turn a time budget into a promised deadline.
+  const normalized = (s: string) => s.replace(/\s+/g, " ").trim();
+  const faithfulSummary = normalized(source).includes(normalized(summary))
+    ? summary
+    : source.slice(0, 300) + (source.length > 300 ? "…" : "");
+  return {
+    ...base,
+    title,
+    summary: faithfulSummary,
+    steps,
+    organizer: "apple-local",
   };
 }

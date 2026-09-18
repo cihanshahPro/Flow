@@ -2,7 +2,7 @@ import http from "node:http";
 import { timingSafeEqual, randomUUID } from "node:crypto";
 import { mkdtemp, writeFile, readFile, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 const execute = promisify(execFile);
@@ -62,13 +62,68 @@ export async function transcribeAudio(bytes, config) {
     await rm(folder, { recursive: true, force: true });
   }
 }
-export function createVoiceServer({ token, transcribe, log = console.log }) {
+export function shapeText(text, binary) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(binary, [], { stdio: ["pipe", "pipe", "pipe"] });
+    let output = "",
+      settled = false;
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve(result);
+    };
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(new Error("Organizer timed out"));
+    }, 160000);
+    child.stdout.on("data", (data) => {
+      output += data;
+      if (output.length > 100000) {
+        child.kill("SIGKILL");
+        finish(new Error("Organizer response too large"));
+      }
+    });
+    child.stderr.resume();
+    child.on("error", (error) => finish(error));
+    child.stdin.on("error", (error) => finish(error));
+    child.on("close", (code) => {
+      try {
+        if (code !== 0) throw Error("Organizer unavailable");
+        finish(null, JSON.parse(output));
+      } catch (error) {
+        finish(error);
+      }
+    });
+    child.stdin.end(text);
+  });
+}
+export function createVoiceServer({
+  token,
+  transcribe,
+  shape,
+  webOrigin,
+  log = console.log,
+}) {
   if (!token || token.length < 32)
     throw Error(
       "A private testing token of at least 32 characters is required.",
     );
   let busy = false;
   const server = http.createServer(async (req, res) => {
+    if (webOrigin && req.headers.origin === webOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", webOrigin);
+      res.setHeader("Vary", "Origin");
+      if (req.method === "OPTIONS" && req.url === "/process") {
+        res.writeHead(204, {
+          "Access-Control-Allow-Methods": "POST",
+          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+        });
+        res.end();
+        return;
+      }
+    }
     const reply = (status, payload) => {
       res.writeHead(status, {
         "Content-Type": "application/json",
@@ -125,10 +180,32 @@ export function createVoiceServer({ token, transcribe, log = console.log }) {
         reply(400, { error: "The recording is empty." });
         return;
       }
-      log(JSON.stringify({ id, stage: "transcribing", bytes }));
-      const text = (await transcribe(Buffer.concat(chunks)))
-        .replace(/\[(?:BLANK_AUDIO|silence|music)\]/gi, "")
-        .trim();
+      const isText =
+        req.headers["content-type"]?.startsWith("application/json");
+      let text;
+      if (isText) {
+        let input;
+        try {
+          input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        } catch {
+          reply(400, { error: "The thought could not be read." });
+          return;
+        }
+        if (
+          typeof input.text !== "string" ||
+          !input.text.trim() ||
+          input.text.length > 20000
+        ) {
+          reply(400, { error: "Use a thought of 1–20,000 characters." });
+          return;
+        }
+        text = input.text.trim();
+      } else {
+        log(JSON.stringify({ id, stage: "transcribing", bytes }));
+        text = (await transcribe(Buffer.concat(chunks)))
+          .replace(/\[(?:BLANK_AUDIO|silence|music)\]/gi, "")
+          .trim();
+      }
       if (!text) {
         reply(422, {
           error:
@@ -143,7 +220,21 @@ export function createVoiceServer({ token, transcribe, log = console.log }) {
         });
         return;
       }
-      reply(200, { text, engine: "whisper.cpp/base" });
+      let organization;
+      if (shape) {
+        try {
+          log(JSON.stringify({ id, stage: "organizing" }));
+          organization = await shape(text);
+        } catch {
+          log(JSON.stringify({ id, stage: "organizer-unavailable" }));
+        }
+      }
+      reply(200, {
+        text,
+        shape: organization,
+        engine: isText ? "apple-foundation-models" : "whisper.cpp/base",
+        organizer: organization ? "apple-local" : "unavailable",
+      });
       log(
         JSON.stringify({
           id,
@@ -186,7 +277,11 @@ if (
     throw Error("Set FLOW_WHISPER_MODEL and FLOW_PROCESSING_TMP.");
   const server = createVoiceServer({
     token: process.env.FLOW_PROCESSOR_TOKEN,
+    webOrigin: process.env.FLOW_PROCESSOR_WEB_ORIGIN,
     transcribe: (bytes) => transcribeAudio(bytes, config),
+    shape: process.env.FLOW_SHAPER_BIN
+      ? (text) => shapeText(text, process.env.FLOW_SHAPER_BIN)
+      : undefined,
   });
   server.listen(
     Number(process.env.FLOW_PROCESSOR_PORT || 8084),

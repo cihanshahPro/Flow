@@ -53,7 +53,9 @@ export async function acceptStep(draft: ThoughtDraft, step: DraftStep) {
       JSON.stringify({
         ...latest,
         steps: latest.steps.map((s) =>
-          s.id === step.id ? { ...s, accepted: true } : s,
+          s.id === step.id
+            ? { ...s, accepted: true, deferred: false, chosenTitle: step.title }
+            : s,
         ),
       }),
       draft.id,
