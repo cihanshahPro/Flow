@@ -39,3 +39,46 @@ test("empty and oversized input is rejected", () => {
   assert.throws(() => suggestDraft("1", ""));
   assert.throws(() => suggestDraft("1", "x".repeat(20001)));
 });
+
+test("AI draft keeps the full source and rejects invented evidence", async () => {
+  const { shapedDraft } = await import("../src/drafts.ts");
+  const source = "I need to call Alex. I am not ready to hire anyone.";
+  const choice = {
+    label: "Contact Alex",
+    action: "Call Alex",
+    smallAction: "Open Alex’s contact",
+    reason: "A small first step.",
+    evidence: "call Alex",
+  };
+  const draft = shapedDraft("a", source, {
+    title: "Reach out",
+    summary: "Contact Alex without hiring anyone.",
+    choices: [
+      choice,
+      { ...choice, action: "Hire staff", evidence: "hire staff" },
+    ],
+  });
+  assert.equal(draft.steps.length, 1);
+  assert.equal(draft.source, source);
+  assert.equal(draft.organizer, "apple-local");
+  assert.equal(draft.summary, source);
+  assert.throws(() =>
+    shapedDraft("a", source, {
+      title: "a",
+      summary: "b",
+      choices: [{ ...choice, evidence: "not in source" }],
+    }),
+  );
+  assert.equal(
+    shapedDraft("a", source, { title: "a", summary: "b", choices: [] }).steps
+      .length,
+    0,
+  );
+  assert.throws(() =>
+    shapedDraft("a", source, {
+      title: "a",
+      summary: "b",
+      choices: Array(4).fill(choice),
+    }),
+  );
+});

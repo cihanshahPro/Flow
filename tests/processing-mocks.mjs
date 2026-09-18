@@ -2,6 +2,8 @@ export const harness = {
   notes: [],
   drafts: [],
   fetches: 0,
+  requests: [],
+  shape: undefined,
   failDraft: false,
   offline: false,
   writes: [],
@@ -9,6 +11,8 @@ export const harness = {
     this.notes = [];
     this.drafts = [];
     this.fetches = 0;
+    this.requests = [];
+    this.shape = undefined;
     this.failDraft = false;
     this.offline = false;
     this.writes = [];
@@ -21,13 +25,15 @@ export class File {
     this.uri = uri;
   }
 }
-export async function fetch() {
+export async function fetch(url, options) {
+  harness.requests.push(options);
   harness.fetches++;
   if (harness.offline) throw Error("network failed");
   return {
     ok: true,
     json: async () => ({
       text: "Call Alex about the website. Then email the designer.",
+      shape: harness.shape,
     }),
   };
 }

@@ -29,7 +29,18 @@ test("draft-write retry reuses the persisted transcript instead of retranscribin
   assert.ok(harness.notes[0].text);
   harness.failDraft = false;
   await processVoiceNote(note);
-  assert.equal(harness.fetches, 1);
+  assert.equal(
+    harness.requests.filter(
+      (r) => r.headers["Content-Type"] === "application/octet-stream",
+    ).length,
+    1,
+  );
+  assert.equal(
+    harness.requests.filter(
+      (r) => r.headers["Content-Type"] === "application/json",
+    ).length,
+    1,
+  );
 });
 test("unreachable processor does not change or erase the original recording", async () => {
   harness.reset();
