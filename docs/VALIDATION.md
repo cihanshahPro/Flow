@@ -3,10 +3,10 @@
 Completed on Node 22.22.1 / macOS:
 
 - TypeScript strict typecheck passed.
-- All 10 domain and release-configuration tests passed.
+- All 22 domain, calendar and release-configuration tests passed. Calendar cases cover complete payloads, alert choices, zones/DST, duplicate saves, concurrency and uncertain-write recovery.
 - Expo Doctor passed all 18 checks on the source project.
 - Both iOS and Android release JavaScript/Hermes bundles exported successfully.
-- Expo native prebuild generated both platform projects successfully, without installing native build dependencies.
+- The starter previously passed native prebuild for both platforms. This calendar revision also passed Expo config introspection and confirmed the full Calendar access usage description.
 - Source review covered task persistence, date/time handling, native calendar result semantics, audio retry identity, and recovery of recordings with missing/corrupt metadata. Targeted recovery helper checks passed.
 - The package audit reports 0 high/critical and 13 moderate findings, all flowing from the older `uuid` dependency in the Xcode build-tool chain. The starter does not call that dependency directly. Review and resolve the remaining advisory before production release; do not claim the dependency audit is clean.
 

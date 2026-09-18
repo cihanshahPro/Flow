@@ -2,7 +2,7 @@
 
 ## Scope and boundary
 
-This is the native starting point for Anchor, not a completed port of its web workspace. The immediate loop is Today → capture → inbox → next action, with native audio and a user-reviewed calendar handoff. SQLite stores records; `expo-audio` records audio and `expo-file-system` retains the files on the device.
+This is the native starting point for Anchor, not a completed port of its web workspace. The immediate loop is Today → capture → inbox → next action, with native audio and direct, permission-based Apple Calendar saves. SQLite stores records; `expo-audio` records audio and `expo-file-system` retains the files on the device.
 
 The existing web implementation's authentication, cloud records/audio, browser transcription, full topic/follow-up experience, and calendar export do not transfer automatically. There is no shared account or synchronization contract. Keep this package generic: do not copy private seeds, credentials, or the private web URL into a portfolio or friend build.
 
@@ -34,8 +34,8 @@ Run these on a real iPhone; automated checks or a JavaScript bundle alone do not
 - [ ] Deny microphone permission and confirm a useful recovery message and usable text capture. Then enable permission and record, stop, save, and play a short clip.
 - [ ] Close and reopen after saving audio; replay the same clip. Test an interruption/phone lock during recording and verify the app's result matches its message. Do not assume background recording support.
 - [ ] After loading the development bundle, disconnect networking and repeat text/task/audio saves. Reconnect before reloading from the development server.
-- [ ] Give a task a date and time; open the calendar editor and verify title, local date/time, and duration. Cancel once and confirm no event was created; repeat and explicitly save once.
-- [ ] Edit the exported event in Calendar and the original task in Anchor. Confirm there is no implied synchronization. Repeated exports can create separate calendar events.
+- [ ] Complete the device acceptance checks in [CALENDAR.md](CALENDAR.md), including permission denial, cancel, details, alerts, and duplicate prevention.
+- [ ] Confirm that saving edited task details updates its linked event, and that external Calendar changes are not imported into Anchor.
 - [ ] Check narrow-screen layout, keyboard dismissal, long notes, blank input validation, and visible failure messages. Use generic test content.
 - [ ] Confirm purchases remain unavailable and no screen claims an active subscription or successful charge.
 
