@@ -29,3 +29,9 @@ SDK 57 upgrade: Expo 57.0.24, React Native 0.86.3, React 19.2.3, TypeScript 6.0.
 Fixed a silent permission-sheet cancellation: recording now waits for foreground restoration, waits for its capture sheet to show, and reports timeout/cancellation explicitly. A successful save exposes playback immediately and an Open saved note in Library action. Tabs clear transient status and reset their scroll position; My mind and Library have explicit section labels.
 
 Validation: 35 automated tests, including component-level recording start/stop, permission dismissal, denial/retry, failed metadata recovery, delayed sheet presentation and background interruption. Native audio/file modules are mocked in these component tests: they verify application control flow, not physical microphone hardware. Browser UI checks cover all three tabs, opening originals and their drafts, making a step smaller and accepting it without a duplicate Add control. iPhone microphone/permission playback still needs a physical-device check; no iOS simulator is installed on the available Macs. Production remains unchanged.
+
+## Voice processing — test build 04
+
+43 automated tests and strict typecheck passed. Removed the model/calendar runtime import cycle. The save path now copies audio and registers its stable URI without creating/checking a second journal after success; legacy recovery remains. Registration no longer includes a UI refresh that could misreport a successful save as failure. New recordings automatically enter transcription and open their draft; old recordings can be processed from Library.
+
+Real local processor validation: generated M4A speech → authenticated HTTP request → ffmpeg → whisper.cpp base → expected transcript → two draft steps, approximately 1.3 seconds. Native microphone acquisition is still a separate physical-device test. See VOICE_PROCESSING.md for LAN testing scope and release limits.
