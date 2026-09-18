@@ -25,6 +25,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import { File, Paths } from "expo-file-system";
+import { waitForRecordingForeground } from "../recording-lifecycle";
 
 export type SavedVoiceNote = {
   title: string;
@@ -37,6 +38,7 @@ type Props = {
   compact?: boolean;
   autoStart?: boolean;
   onActivityChange?: (active: boolean) => void;
+  onOpenSaved?: (note: SavedVoiceNote) => void;
 };
 type Phase =
   | "recovering"
@@ -167,12 +169,14 @@ export default function VoiceCapture({
   compact = false,
   autoStart = false,
   onActivityChange,
+  onOpenSaved,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("recovering");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [needsSettings, setNeedsSettings] = useState(false);
+  const [saved, setSaved] = useState<SavedVoiceNote | null>(null);
   const mounted = useRef(true);
   const phaseRef = useRef<Phase>("recovering");
   const preparationCancelled = useRef(false);
@@ -344,7 +348,8 @@ export default function VoiceCapture({
       updatePhase("idle");
       if (mounted.current) {
         setTitle("");
-        setNotice("Voice note saved. You can listen or organize it later.");
+        setSaved(item.note);
+        setNotice("Recording saved on this device.");
       }
     } catch (failure) {
       updatePhase(item.copied ? "recovery-error" : "retry");
@@ -451,6 +456,7 @@ export default function VoiceCapture({
     setError("");
     setNotice("");
     setNeedsSettings(false);
+    setSaved(null);
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
@@ -464,40 +470,25 @@ export default function VoiceCapture({
         updatePhase("idle");
         return;
       }
-      if (
-        !mounted.current ||
-        preparationCancelled.current ||
-        AppState.currentState !== "active"
-      ) {
-        await cancelPreparation();
-        updatePhase("idle");
-        return;
-      }
+      await waitForRecordingForeground(
+        AppState,
+        () => !mounted.current || preparationCancelled.current,
+      );
       await setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
         shouldPlayInBackground: false,
         allowsBackgroundRecording: false,
       });
-      if (
-        !mounted.current ||
-        preparationCancelled.current ||
-        AppState.currentState !== "active"
-      ) {
-        await cancelPreparation();
-        updatePhase("idle");
-        return;
-      }
+      await waitForRecordingForeground(
+        AppState,
+        () => !mounted.current || preparationCancelled.current,
+      );
       await recorder.prepareToRecordAsync();
-      if (
-        !mounted.current ||
-        preparationCancelled.current ||
-        AppState.currentState !== "active"
-      ) {
-        await cancelPreparation();
-        updatePhase("idle");
-        return;
-      }
+      await waitForRecordingForeground(
+        AppState,
+        () => !mounted.current || preparationCancelled.current,
+      );
       durationRef.current = 0;
       startedAt.current = Date.now();
       recorder.record({ forDuration: MAX_SECONDS });
@@ -670,6 +661,16 @@ export default function VoiceCapture({
         >
           <Text style={styles.link}>Open microphone settings</Text>
         </Pressable>
+      )}
+      {saved && phase === "idle" && (
+        <View>
+          <AudioPlayback uri={saved.audioUri} />
+          {onOpenSaved && (
+            <Pressable accessibilityRole="button" onPress={() => onOpenSaved(saved)}>
+              <Text style={styles.link}>Open saved note in Library</Text>
+            </Pressable>
+          )}
+        </View>
       )}
       {!!notice && (
         <Text accessibilityLiveRegion="polite" style={styles.notice}>
