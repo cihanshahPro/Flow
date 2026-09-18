@@ -129,6 +129,17 @@ function Flow() {
   const [updateOpen, setUpdateOpen] = useState(false);
   const [updateInput, setUpdateInput] = useState("");
   const captureId = useRef("");
+  const pendingDraft = useRef<string | null>(null);
+  function finishSheetTransition() {
+    if (pendingDraft.current) {
+      setSelected(pendingDraft.current);
+      pendingDraft.current = null;
+    }
+  }
+  function revealDraftAfterSheet(id: string) {
+    if (Platform.OS === "ios") pendingDraft.current = id;
+    else setSelected(id);
+  }
   const [parked, setParked] = useState(false);
   const [calendarTask, setCalendarTask] = useState<Task | null>(null);
   const fade = useRef(new Animated.Value(0)).current;
@@ -195,9 +206,9 @@ function Flow() {
       const prior = drafts.find((d) => d.id === refining);
       const d = prior ? refineDraft(prior, text) : suggestDraft(id, text);
       await saveDraft(d);
+      revealDraftAfterSheet(d.id);
       setComposer(null);
       setInput("");
-      setSelected(d.id);
       setNotice(
         prior
           ? "Update saved to this draft."
@@ -732,6 +743,7 @@ function Flow() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={closeCapture}
+        onDismiss={finishSheetTransition}
       >
         <SafeAreaView style={s.sheet}>
           <KeyboardAvoidingView
@@ -981,6 +993,7 @@ function Flow() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setNote(null)}
+        onDismiss={finishSheetTransition}
       >
         <SafeAreaView style={s.sheet}>
           <View style={s.sheetHead}>
@@ -1006,8 +1019,8 @@ function Flow() {
                         d = suggestDraft(note.id, note.text);
                         await saveDraft(d);
                       }
+                      revealDraftAfterSheet(d.id);
                       setNote(null);
-                      setSelected(d.id);
                     })
                   }
                   disabled={busy}
