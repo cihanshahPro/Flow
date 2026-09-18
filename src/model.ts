@@ -80,7 +80,6 @@ export function validateTask(task: Task): void {
   if (task.notes.length > 20000 || task.waitingOn.length > 300)
     throw new Error("This note or contact is too long.");
 }
-export { eventDraft as calendarDraft } from './calendar-model.ts';
 export function todayTasks(
   tasks: Task[],
   minutes: number,
