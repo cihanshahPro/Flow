@@ -1,8 +1,8 @@
+import { eventDraft as calendarDraft } from '../src/calendar-model.ts';
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
   validDate,
-  calendarDraft,
   todayTasks,
   validateTask,
 } from "../src/model.ts";
