@@ -126,11 +126,17 @@ function Flow() {
   const [settings, setSettings] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [captureVisible, setCaptureVisible] = useState(false);
+  const pendingNote = useRef<Note | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [updateInput, setUpdateInput] = useState("");
   const captureId = useRef("");
   const pendingDraft = useRef<string | null>(null);
   function finishSheetTransition() {
+    if (pendingNote.current) {
+      setNote(pendingNote.current);
+      pendingNote.current = null;
+    }
     if (pendingDraft.current) {
       setSelected(pendingDraft.current);
       pendingDraft.current = null;
@@ -143,6 +149,13 @@ function Flow() {
   const [parked, setParked] = useState(false);
   const [calendarTask, setCalendarTask] = useState<Task | null>(null);
   const fade = useRef(new Animated.Value(0)).current;
+  const contentScroll = useRef<ScrollView>(null);
+  function navigate(next: Screen) {
+    setScreen(next);
+    setNotice("");
+    setError("");
+    contentScroll.current?.scrollTo({ y: 0, animated: false });
+  }
   useEffect(() => {
     setUpdateOpen(false);
     setUpdateInput("");
@@ -188,6 +201,7 @@ function Flow() {
     captureId.current = randomUUID();
     setRefining(draftId);
     setInput("");
+    setCaptureVisible(false);
     setComposer(mode);
     setNotice("");
   }
@@ -224,7 +238,7 @@ function Flow() {
     });
     await refresh();
     setNotice(
-      "Recording saved in Library. Automatic transcription is coming next.",
+      "Your recordings are available in Library.",
     );
   }
   const current = drafts.find((d) => d.id === selected);
@@ -285,7 +299,7 @@ function Flow() {
             ? {
                 ...x,
                 title:
-                  `Spend 5 minutes on: ${x.title.replace(/^Spend 5 minutes on: /, "")}`.slice(
+                  `Spend 5 minutes on: ${x.title.replace(/^Spend 5 minutes on: /, "").replace(/\s+for \d+\s*(?:minutes?|mins?)\b/gi, "")}`.slice(
                     0,
                     280,
                   ),
@@ -362,7 +376,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 02</Text>
+          <Text style={s.test}>TEST BUILD · 03</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
@@ -375,6 +389,7 @@ function Flow() {
       </View>
       <Animated.View style={{ flex: 1, opacity: fade }}>
         <ScrollView
+          ref={contentScroll}
           contentContainerStyle={s.page}
           keyboardShouldPersistTaps="handled"
         >
@@ -565,7 +580,7 @@ function Flow() {
           )}
           {screen === "My mind" && (
             <>
-              <Label>THE BIGGER PICTURE</Label>
+              <Label>MY MIND · THE BIGGER PICTURE</Label>
               <Text style={s.headline}>Room to{"\n"}think.</Text>
               <Text style={s.intro}>
                 Ideas can stay ideas. Open one when it’s ready to become
@@ -651,7 +666,7 @@ function Flow() {
           )}
           {screen === "Library" && (
             <>
-              <Label>NOTHING LOST</Label>
+              <Label>LIBRARY · ORIGINALS</Label>
               <Text style={s.headline}>Your words.{"\n"}Kept safe.</Text>
               <Text style={s.intro}>
                 Original thoughts and recordings live here, even as your plans
@@ -713,7 +728,7 @@ function Flow() {
             key={t}
             accessibilityRole="tab"
             accessibilityState={{ selected: screen === t }}
-            onPress={() => setScreen(t)}
+            onPress={() => navigate(t)}
             style={s.navItem}
           >
             <Text style={[s.navIcon, screen === t && { color: C.blue }]}>
@@ -743,6 +758,7 @@ function Flow() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={closeCapture}
+        onShow={() => setCaptureVisible(true)}
         onDismiss={finishSheetTransition}
       >
         <SafeAreaView style={s.sheet}>
@@ -771,9 +787,17 @@ function Flow() {
                 <>
                   <VoiceCapture
                     compact
-                    autoStart
+                    autoStart={captureVisible}
                     onActivityChange={setVoiceBusy}
                     onSaved={voiceSaved}
+                    onOpenSaved={(saved) => {
+                      const entry = notes.find((n) => n.audioUri === saved.audioUri);
+                      if (!entry) return;
+                      setScreen("Library");
+                      if (Platform.OS === "ios") pendingNote.current = entry;
+                      else setNote(entry);
+                      setComposer(null);
+                    }}
                   />
                   <Text style={s.body}>
                     Audio saves automatically when you stop. In this preview,
