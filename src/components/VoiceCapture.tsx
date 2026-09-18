@@ -39,6 +39,7 @@ type Props = {
   autoStart?: boolean;
   onActivityChange?: (active: boolean) => void;
   onOpenSaved?: (note: SavedVoiceNote) => void;
+  onComplete?: (note: SavedVoiceNote) => void;
 };
 type Phase =
   | "recovering"
@@ -135,34 +136,6 @@ function scanVoiceRecordings(): SavedVoiceNote[] {
     }));
 }
 
-function writePendingJournal(item: PendingRecording) {
-  const journal = new File(Paths.document, JOURNAL_FILENAME);
-  if (journal.exists) {
-    if (readPendingJournal(journal).note.audioUri !== item.note.audioUri)
-      throw new Error("Another recording is awaiting recovery.");
-    return;
-  }
-  const temporary = new File(Paths.document, JOURNAL_TEMP_FILENAME);
-  if (temporary.exists) {
-    if (readPendingJournal(temporary).note.audioUri !== item.note.audioUri)
-      throw new Error("Another recording has an unfinished recovery file.");
-  } else {
-    temporary.create();
-    temporary.write(
-      JSON.stringify({ version: 1, filename: item.filename, note: item.note }),
-    );
-  }
-  if (readPendingJournal(temporary).note.audioUri !== item.note.audioUri)
-    throw new Error("Could not verify the recovery copy.");
-  // Rename within the same document directory only after a complete, verified write.
-  // An interrupted temporary write is reconciled by the document scan on recovery.
-  if (journal.exists)
-    throw new Error("The recovery file changed. Please retry recovery.");
-  temporary.move(journal);
-  if (readPendingJournal(journal).note.audioUri !== item.note.audioUri)
-    throw new Error("Could not verify the saved recovery file.");
-}
-
 /** Foreground recording. The original audio is saved before note metadata is committed. */
 export default function VoiceCapture({
   onSaved,
@@ -170,6 +143,7 @@ export default function VoiceCapture({
   autoStart = false,
   onActivityChange,
   onOpenSaved,
+  onComplete,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("recovering");
   const [title, setTitle] = useState("");
@@ -181,6 +155,8 @@ export default function VoiceCapture({
   const phaseRef = useRef<Phase>("recovering");
   const preparationCancelled = useRef(false);
   const saveRef = useRef(onSaved);
+  const completeRef = useRef(onComplete);
+  completeRef.current = onComplete;
   const titleRef = useRef(title);
   const pending = useRef<PendingRecording | null>(null);
   const startedAt = useRef(0);
@@ -288,6 +264,10 @@ export default function VoiceCapture({
       updatePhase("idle");
       if (mounted.current) {
         setTitle("");
+        if (current?.copied) {
+          setSaved(current.note);
+          completeRef.current?.(current.note);
+        }
         const damaged = journals.some((entry) => !entry.valid);
         if (damaged)
           setNotice(
@@ -333,25 +313,20 @@ export default function VoiceCapture({
         item.note.audioUri = destination.uri;
         item.copied = true;
       }
-      writePendingJournal(item);
       await saveRef.current(item.note);
-      const journal = new File(Paths.document, JOURNAL_FILENAME);
-      // The callback uses audioUri as its id, so replay after a crash is idempotent.
-      if (
-        !journal.exists ||
-        readPendingJournal(journal).note.audioUri !== item.note.audioUri
-      ) {
-        throw new Error("The note was added, but its recovery file changed.");
-      }
-      journal.delete();
       pending.current = null;
       updatePhase("idle");
       if (mounted.current) {
         setTitle("");
         setSaved(item.note);
         setNotice("Recording saved on this device.");
+        completeRef.current?.(item.note);
       }
     } catch (failure) {
+      console.warn(
+        "[Flow voice] save or registration failed",
+        message(failure),
+      );
       updatePhase(item.copied ? "recovery-error" : "retry");
       if (mounted.current)
         setError(
@@ -643,7 +618,7 @@ export default function VoiceCapture({
         </Text>
       </Pressable>
       <Text style={styles.hint}>
-        Up to 10 minutes. Keep this app open. No automatic transcription yet.
+        Up to 10 minutes. Keep this app open while recording.
       </Text>
       {!!error && (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -666,7 +641,10 @@ export default function VoiceCapture({
         <View>
           <AudioPlayback uri={saved.audioUri} />
           {onOpenSaved && (
-            <Pressable accessibilityRole="button" onPress={() => onOpenSaved(saved)}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onOpenSaved(saved)}
+            >
               <Text style={styles.link}>Open saved note in Library</Text>
             </Pressable>
           )}
