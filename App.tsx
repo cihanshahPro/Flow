@@ -27,6 +27,7 @@ import {
   registerVoiceNote,
   saveTask,
 } from "./src/services/storage";
+import { processVoiceNote } from "./src/services/processing";
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import {
   suggestDraft,
@@ -126,17 +127,16 @@ function Flow() {
   const [settings, setSettings] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceResult, setVoiceResult] = useState<Note | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [processingError, setProcessingError] = useState("");
+  const processingLock = useRef(false);
   const [captureVisible, setCaptureVisible] = useState(false);
-  const pendingNote = useRef<Note | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [updateInput, setUpdateInput] = useState("");
   const captureId = useRef("");
   const pendingDraft = useRef<string | null>(null);
   function finishSheetTransition() {
-    if (pendingNote.current) {
-      setNote(pendingNote.current);
-      pendingNote.current = null;
-    }
     if (pendingDraft.current) {
       setSelected(pendingDraft.current);
       pendingDraft.current = null;
@@ -198,6 +198,8 @@ function Flow() {
     }
   }
   function capture(mode: "text" | "voice", draftId: string | null = null) {
+    setVoiceResult(null);
+    setProcessingError("");
     captureId.current = randomUUID();
     setRefining(draftId);
     setInput("");
@@ -231,15 +233,46 @@ function Flow() {
     });
   }
   async function voiceSaved(v: SavedVoiceNote) {
+    // Registration alone decides whether recording saved successfully.
     await registerVoiceNote({
       ...v,
       id: v.audioUri,
       createdAt: new Date().toISOString(),
     });
-    await refresh();
-    setNotice(
-      "Your recordings are available in Library.",
-    );
+  }
+  async function processRecording(entry: Note, origin: "capture" | "library") {
+    if (processingLock.current) return;
+    processingLock.current = true;
+    setProcessing(true);
+    setProcessingError("");
+    try {
+      const draft = await processVoiceNote(entry);
+      await refresh();
+      revealDraftAfterSheet(draft.id);
+      if (origin === "capture") setComposer(null);
+      else setNote(null);
+      setNotice("Transcribed and shaped. Choose only what helps.");
+    } catch (failure) {
+      setProcessingError(
+        failure instanceof Error
+          ? failure.message
+          : "Processing paused. Your recording is saved.",
+      );
+      await refresh().catch(() => {});
+    } finally {
+      processingLock.current = false;
+      setProcessing(false);
+    }
+  }
+  function recordingCompleted(saved: SavedVoiceNote) {
+    const entry: Note = {
+      ...saved,
+      id: saved.audioUri,
+      createdAt: new Date().toISOString(),
+    };
+    setVoiceBusy(false);
+    setVoiceResult(entry);
+    void processRecording(entry, "capture");
   }
   const current = drafts.find((d) => d.id === selected);
   const activeDrafts = drafts.filter((d) => d.state === "draft");
@@ -323,7 +356,7 @@ function Flow() {
     });
   }
   function closeCapture() {
-    if (!voiceBusy && !busy) setComposer(null);
+    if (!voiceBusy && !busy && !processing) setComposer(null);
   }
   if (advanced)
     return (
@@ -376,7 +409,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 03</Text>
+          <Text style={s.test}>TEST BUILD · 04</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
@@ -676,7 +709,10 @@ function Flow() {
                 <Pressable
                   key={n.id}
                   accessibilityRole="button"
-                  onPress={() => setNote(n)}
+                  onPress={() => {
+                    setProcessingError("");
+                    setNote(n);
+                  }}
                   style={s.libraryRow}
                 >
                   <View style={s.noteIcon}>
@@ -696,9 +732,7 @@ function Flow() {
                       })}
                     </Text>
                     {n.audioUri && !n.text && (
-                      <Text style={s.meta}>
-                        Audio saved · transcription not connected
-                      </Text>
+                      <Text style={s.meta}>Audio saved · tap to process</Text>
                     )}
                   </View>
                   <Text style={s.arrow}>↗</Text>
@@ -771,7 +805,7 @@ function Flow() {
               <Tap
                 label="Close"
                 onPress={closeCapture}
-                disabled={voiceBusy || busy}
+                disabled={voiceBusy || busy || processing}
               />
             </View>
             <ScrollView
@@ -785,25 +819,48 @@ function Flow() {
               </Text>
               {composer === "voice" ? (
                 <>
-                  <VoiceCapture
-                    compact
-                    autoStart={captureVisible}
-                    onActivityChange={setVoiceBusy}
-                    onSaved={voiceSaved}
-                    onOpenSaved={(saved) => {
-                      const entry = notes.find((n) => n.audioUri === saved.audioUri);
-                      if (!entry) return;
-                      setScreen("Library");
-                      if (Platform.OS === "ios") pendingNote.current = entry;
-                      else setNote(entry);
-                      setComposer(null);
-                    }}
-                  />
+                  {voiceResult ? (
+                    <View style={s.emptyCard}>
+                      <Text style={s.cardTitle}>
+                        {processing
+                          ? "Turning your words into a draft…"
+                          : "Recording saved."}
+                      </Text>
+                      {processing ? (
+                        <ActivityIndicator color={C.blue} />
+                      ) : (
+                        <AudioPlayback uri={voiceResult.audioUri!} />
+                      )}
+                      <Text style={s.body}>
+                        {processing
+                          ? "Transcribing on your Mac mini. Your original audio is already safe on this phone."
+                          : processingError}
+                      </Text>
+                      {!processing && (
+                        <Tap
+                          label="Retry processing"
+                          primary
+                          onPress={() =>
+                            void processRecording(voiceResult, "capture")
+                          }
+                        />
+                      )}
+                    </View>
+                  ) : (
+                    <VoiceCapture
+                      compact
+                      autoStart={captureVisible}
+                      onActivityChange={setVoiceBusy}
+                      onSaved={voiceSaved}
+                      onComplete={recordingCompleted}
+                    />
+                  )}
                   <Text style={s.body}>
-                    Audio saves automatically when you stop. In this preview,
-                    speech-to-text is not connected yet.
+                    Stop once. We save the audio, transcribe it on your Mac
+                    mini, and open a draft here. Keep both devices on the same
+                    Wi-Fi.
                   </Text>
-                  {!voiceBusy && (
+                  {!voiceBusy && !voiceResult && (
                     <Tap
                       label="Write or use keyboard dictation instead"
                       onPress={() => setComposer("text")}
@@ -1016,22 +1073,41 @@ function Flow() {
         visible={!!note}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setNote(null)}
+        onRequestClose={() => {
+          if (!processing) setNote(null);
+        }}
         onDismiss={finishSheetTransition}
       >
         <SafeAreaView style={s.sheet}>
           <View style={s.sheetHead}>
             <Label>ORIGINAL THOUGHT</Label>
-            <Tap label="Done" onPress={() => setNote(null)} />
+            <Tap
+              label="Done"
+              onPress={() => setNote(null)}
+              disabled={processing}
+            />
           </View>
           {note && (
             <ScrollView contentContainerStyle={s.sheetBody}>
               <Text style={s.sheetTitle}>{note.title}</Text>
               {note.audioUri && <AudioPlayback uri={note.audioUri} />}
               <Text style={s.sourceText}>
-                {note.text ||
-                  "Your audio is saved. Automatic transcription is not connected in this preview."}
+                {note.text || "Your original audio is saved on this device."}
               </Text>
+              {!!note.audioUri && !note.text && (
+                <View>
+                  {processing && <ActivityIndicator color={C.blue} />}
+                  <Tap
+                    label={processing ? "Transcribing…" : "Transcribe & shape"}
+                    primary
+                    disabled={processing}
+                    onPress={() => void processRecording(note, "library")}
+                  />
+                  {!!processingError && (
+                    <Text style={s.error}>{processingError}</Text>
+                  )}
+                </View>
+              )}
               {!!note.text && (
                 <Tap
                   label="Open as a visual draft"
@@ -1083,14 +1159,14 @@ function Flow() {
               <Label>WORKING NOW</Label>
               <Text style={s.body}>
                 Text capture · visual drafts · one-tap actions · local storage ·
-                voice recording · Apple Calendar handoff
+                voice recording · local transcription · Apple Calendar handoff
               </Text>
             </View>
             <View style={s.source}>
               <Label>NEXT TO CONNECT</Label>
               <Text style={s.body}>
-                Automatic transcription · AI understanding · smart follow-ups ·
-                connections across goals · reusable routines
+                Deeper AI understanding · smart follow-ups · connections across
+                goals · reusable routines
               </Text>
             </View>
             <Text style={s.previewHint}>

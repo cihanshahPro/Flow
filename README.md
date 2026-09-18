@@ -6,7 +6,7 @@ A small native planning app: capture a thought, choose an action that fits the t
 
 Speak or write from Today. Text becomes a small, editable visual draft; choose one suggestion for Today, add an update, or park the thought. My mind separates active drafts from parked possibilities; Library retains original notes and recordings. Existing detailed task/calendar controls remain under Settings. No existing data is reset.
 
-This build uses bounded local rules, not an AI service. Automatic audio transcription, semantic thought organization, goal connections and reusable routines are explicitly unfinished. The optional example is labeled as an example. Suggestions do not become tasks until selected.
+This build uses bounded local rules, not an AI service. Audio transcription runs through the paired Mac mini using whisper.cpp. Semantic thought organization, goal connections and reusable routines are still unfinished. The optional example is labeled as an example. Suggestions do not become tasks until selected.
 
 ## What this version covers
 
@@ -18,7 +18,7 @@ This build uses bounded local rules, not an AI service. Automatic audio transcri
 | Calendar  | Save details and an optional alert to Apple Calendar; repeated saves update the linked event |
 | Purchases | Disabled capability interface; no payment or subscription flow     |
 
-There is no web-account sync, cloud backend, automatic transcription, or in-app purchasing. The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. On iPhone, Calendar permission and a calendar choice enable direct saves through [Expo Calendar](https://docs.expo.dev/versions/v57.0.0/sdk/calendar/). Saving again updates the linked event; changes do not sync automatically or flow back from Calendar. Android uses the system event editor. See [calendar acceptance checks](docs/CALENDAR.md).
+There is no web-account sync, hosted cloud backend, or in-app purchasing. The testing voice processor is local to the paired Mac mini; see [processor setup](docs/VOICE_PROCESSING.md). The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. On iPhone, Calendar permission and a calendar choice enable direct saves through [Expo Calendar](https://docs.expo.dev/versions/v57.0.0/sdk/calendar/). Saving again updates the linked event; changes do not sync automatically or flow back from Calendar. Android uses the system event editor. See [calendar acceptance checks](docs/CALENDAR.md).
 
 ## Try it on an iPhone
 
