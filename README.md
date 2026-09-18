@@ -4,9 +4,11 @@ A small native planning app: capture a thought, choose an action that fits the t
 
 ## Capture-first testing experience
 
-Speak or write from Today. Text becomes a small, editable visual draft; choose one suggestion for Today, add an update, or park the thought. My mind separates active drafts from parked possibilities; Library retains original notes and recordings. Existing detailed task/calendar controls remain under Settings. No existing data is reset.
+Speak or write from Today. Voice or text becomes a small visual tree. Explore one direction at a time, choose a step, start smaller, or keep it for later. No form filling is required to review a draft. My mind separates active drafts from parked possibilities; Library retains original notes and recordings. Existing detailed task/calendar controls remain under Settings. No existing data is reset.
 
-This build uses bounded local rules, not an AI service. Audio transcription runs through the paired Mac mini using whisper.cpp. Semantic thought organization, goal connections and reusable routines are still unfinished. The optional example is labeled as an example. Suggestions do not become tasks until selected.
+Test build 05 runs audio transcription through the paired Mac mini using whisper.cpp, then uses Apple Foundation Models on that Mac for draft suggestions. Short previews must match the original words; ungrounded action evidence is rejected. Bounded local rules remain a labeled fallback when AI is unavailable. Goal connections across notes and reusable routines remain unfinished. The optional example is labeled as an example. Suggestions do not become tasks until selected.
+
+See [decision drafts and AI connection research](docs/DECISION_DRAFTS.md).
 
 ## What this version covers
 

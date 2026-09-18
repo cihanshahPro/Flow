@@ -27,7 +27,12 @@ import {
   registerVoiceNote,
   saveTask,
 } from "./src/services/storage";
-import { processVoiceNote } from "./src/services/processing";
+import DraftReview from "./src/components/DraftReview";
+import {
+  processVoiceNote,
+  createThoughtDraft,
+  organizeThought,
+} from "./src/services/processing";
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import {
   suggestDraft,
@@ -132,8 +137,7 @@ function Flow() {
   const [processingError, setProcessingError] = useState("");
   const processingLock = useRef(false);
   const [captureVisible, setCaptureVisible] = useState(false);
-  const [updateOpen, setUpdateOpen] = useState(false);
-  const [updateInput, setUpdateInput] = useState("");
+  const [organizing, setOrganizing] = useState(false);
   const captureId = useRef("");
   const pendingDraft = useRef<string | null>(null);
   function finishSheetTransition() {
@@ -156,10 +160,6 @@ function Flow() {
     setError("");
     contentScroll.current?.scrollTo({ y: 0, animated: false });
   }
-  useEffect(() => {
-    setUpdateOpen(false);
-    setUpdateInput("");
-  }, [selected]);
   async function refresh() {
     const [w, d] = await Promise.all([loadWorkspace(), loadDrafts()]);
     setTasks(w.tasks);
@@ -220,7 +220,9 @@ function Flow() {
       };
       await saveNote(n);
       const prior = drafts.find((d) => d.id === refining);
-      const d = prior ? refineDraft(prior, text) : suggestDraft(id, text);
+      const d = prior
+        ? refineDraft(prior, text)
+        : await createThoughtDraft(id, text);
       await saveDraft(d);
       revealDraftAfterSheet(d.id);
       setComposer(null);
@@ -323,24 +325,75 @@ function Flow() {
       setNotice("Added to today. One useful step is enough.");
     });
   }
-  function small(d: ThoughtDraft, step: DraftStep) {
+  async function organizeCurrent(draft: ThoughtDraft) {
+    setOrganizing(true);
+    await run(async () => {
+      const shaped = await organizeThought(
+        draft.id,
+        [draft.source, ...draft.updates].join("\n\n"),
+      );
+      const preserved = draft.steps.filter(
+        (step) => step.accepted || step.deferred,
+      );
+      await saveDraft({
+        ...shaped,
+        source: draft.source,
+        updates: draft.updates,
+        state: draft.state,
+        createdAt: draft.createdAt,
+        example: draft.example,
+        steps: [
+          ...preserved,
+          ...shaped.steps
+            .filter(
+              (step) =>
+                !preserved.some(
+                  (old) => old.title.toLowerCase() === step.title.toLowerCase(),
+                ),
+            )
+            .slice(0, Math.max(0, 3 - preserved.length))
+            .map((step, i) => ({ ...step, id: `ai-${Date.now()}-${i}` })),
+        ],
+      });
+      setNotice(
+        "Sorted into a few possibilities. Nothing added to your day yet.",
+      );
+    });
+    setOrganizing(false);
+  }
+  function chooseDraftStep(
+    draft: ThoughtDraft,
+    step: DraftStep,
+    smaller: boolean,
+  ) {
+    void add(
+      draft,
+      smaller
+        ? {
+            ...step,
+            title: step.smallAction ?? `Spend five minutes on: ${step.title}`,
+            minutes: 5,
+          }
+        : step,
+    );
+  }
+  function deferDraftStep(
+    draft: ThoughtDraft,
+    step: DraftStep,
+    deferred: boolean,
+  ) {
     void run(async () => {
       await saveDraft({
-        ...d,
-        steps: d.steps.map((x) =>
-          x.id === step.id
-            ? {
-                ...x,
-                title:
-                  `Spend 5 minutes on: ${x.title.replace(/^Spend 5 minutes on: /, "").replace(/\s+for \d+\s*(?:minutes?|mins?)\b/gi, "")}`.slice(
-                    0,
-                    280,
-                  ),
-                minutes: 5,
-              }
-            : x,
+        ...draft,
+        steps: draft.steps.map((x) =>
+          x.id === step.id ? { ...x, deferred } : x,
         ),
       });
+      setNotice(
+        deferred
+          ? "Kept for later. Nothing added to Today."
+          : "This option is back.",
+      );
     });
   }
   async function explore() {
@@ -409,7 +462,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 04</Text>
+          <Text style={s.test}>TEST BUILD · 05</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
@@ -516,8 +569,9 @@ function Flow() {
                   <View style={s.miniBranch}>
                     <View style={s.branchDot} />
                     <Text style={s.body}>
-                      {activeDrafts[0].steps.find((x) => !x.accepted)?.title ||
-                        "Room to think. No action required."}
+                      {activeDrafts[0].steps.find(
+                        (x) => !x.accepted && !x.deferred,
+                      )?.title || "Room to think. No action required."}
                     </Text>
                   </View>
                   <Text style={s.smallLink}>Open & shape this thought</Text>
@@ -892,7 +946,7 @@ function Flow() {
                   <Tap
                     label={
                       busy
-                        ? "Saving…"
+                        ? "Making sense of it…"
                         : refining
                           ? "Add to this draft  ↗"
                           : "Shape this thought  ↗"
@@ -902,8 +956,8 @@ function Flow() {
                     onPress={() => void submit()}
                   />
                   <Text style={s.previewHint}>
-                    Testing preview: simple local rules create draft
-                    suggestions. AI understanding is not connected yet.
+                    Flow can organize this privately on your Mac mini. Your
+                    original words are always kept.
                   </Text>
                   <Tap
                     label="Speak instead"
@@ -936,136 +990,32 @@ function Flow() {
             />
           </View>
           {current && (
-            <ScrollView contentContainerStyle={s.sheetBody}>
-              <Text style={s.sheetTitle}>{current.title}</Text>
-              <Text style={s.intro}>
-                A direction, not a commitment. Choose only what helps.
-              </Text>
-              <View style={s.treeRoot}>
-                <View style={s.rootDot} />
-                <Text style={s.treeRootText}>
-                  {current.topic} /{" "}
-                  {current.state === "parked" ? "For later" : "Taking shape"}
-                </Text>
-              </View>
-              <View style={s.treeStem}>
-                {current.steps.map((step, i) => (
-                  <View key={step.id} style={s.treeNode}>
-                    <View style={s.treeConnector} />
-                    <View style={s.treeNodeHead}>
-                      <Text style={s.stepNumber}>
-                        {String(i + 1).padStart(2, "0")}
-                      </Text>
-                      <Text style={s.meta}>
-                        {step.accepted
-                          ? "CHOSEN"
-                          : `${step.minutes} MIN · ESTIMATE`}
-                      </Text>
-                    </View>
-                    <Text style={s.cardTitle}>{step.title}</Text>
-                    {step.accepted ? (
-                      <Text style={s.accepted}>✓ In your plan</Text>
-                    ) : (
-                      <View style={s.stepActions}>
-                        <Tap
-                          label="Add to today"
-                          primary
-                          disabled={busy}
-                          onPress={() => void add(current, step)}
-                        />
-                        <Tap
-                          label="Make it smaller"
-                          disabled={busy}
-                          onPress={() => small(current, step)}
-                        />
-                      </View>
-                    )}
-                  </View>
-                ))}
-                {!current.steps.length && (
-                  <View style={s.treeNode}>
-                    <Text style={s.cardTitle}>This can just be a thought.</Text>
-                    <Text style={s.body}>
-                      Nothing has been turned into a task. Add a next step if
-                      one comes to mind.
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {updateOpen ? (
-                <View style={{ gap: 12 }}>
-                  <TextInput
-                    multiline
-                    value={updateInput}
-                    onChangeText={setUpdateInput}
-                    maxLength={20000}
-                    placeholder="What changed? Tell it naturally…"
-                    placeholderTextColor={C.muted}
-                    accessibilityLabel="Update this thought"
-                    style={[s.thoughtInput, { minHeight: 100, fontSize: 18 }]}
-                  />
-                  <Tap
-                    label="Keep this update"
-                    primary
-                    disabled={busy || !updateInput.trim()}
-                    onPress={() =>
-                      void run(async () => {
-                        await saveDraft(refineDraft(current, updateInput));
-                        setUpdateInput("");
-                        setUpdateOpen(false);
-                        setNotice("Update kept with your original thought.");
-                      })
-                    }
-                  />
-                </View>
-              ) : (
-                <Tap
-                  label="＋  Add an update"
-                  onPress={() => {
-                    setUpdateInput("");
-                    setUpdateOpen(true);
-                  }}
-                />
-              )}
-              <Tap
-                label={
-                  current.state === "parked"
-                    ? "Bring back into view"
-                    : "Keep this for later"
-                }
-                onPress={() =>
-                  void run(async () => {
-                    await saveDraft({
-                      ...current,
-                      state: current.state === "parked" ? "draft" : "parked",
-                    });
-                    setSelected(null);
-                    setNotice(
-                      current.state === "parked"
-                        ? "Back in My mind."
-                        : "Parked. Saved, without asking for your attention.",
-                    );
-                  })
-                }
-                disabled={busy}
-              />
-              <View style={s.source}>
-                <Label>IN YOUR WORDS</Label>
-                <Text style={s.sourceText}>{current.source}</Text>
-                {current.updates.map((u, i) => (
-                  <Text key={i} style={s.sourceText}>
-                    ↳ {u}
-                  </Text>
-                ))}
-              </View>
-              <Text style={s.previewHint}>
-                {current.example
-                  ? "This is a sample, not a plan inferred from your personal data."
-                  : "Draft suggestions use local rules in this preview. Review before adding."}
-              </Text>
-              {!!error && <Text style={s.error}>{error}</Text>}
-              {!!notice && <Text style={s.notice}>{notice}</Text>}
-            </ScrollView>
+            <DraftReview
+              key={current.id}
+              draft={current}
+              busy={busy}
+              organizing={organizing}
+              onChoose={(step, smaller) =>
+                chooseDraftStep(current, step, smaller)
+              }
+              onDefer={(step, deferred) =>
+                deferDraftStep(current, step, deferred)
+              }
+              onOrganize={() => void organizeCurrent(current)}
+              onClose={() => setSelected(null)}
+              onPark={() =>
+                void run(async () => {
+                  await saveDraft({
+                    ...current,
+                    state: current.state === "parked" ? "draft" : "parked",
+                  });
+                  setSelected(null);
+                  setNotice("Thought kept. You can return whenever you want.");
+                })
+              }
+              error={error}
+              notice={notice}
+            />
           )}
         </SafeAreaView>
       </Modal>
@@ -1159,13 +1109,14 @@ function Flow() {
               <Label>WORKING NOW</Label>
               <Text style={s.body}>
                 Text capture · visual drafts · one-tap actions · local storage ·
-                voice recording · local transcription · Apple Calendar handoff
+                voice recording · local transcription · local AI drafts · Apple
+                Calendar handoff
               </Text>
             </View>
             <View style={s.source}>
               <Label>NEXT TO CONNECT</Label>
               <Text style={s.body}>
-                Deeper AI understanding · smart follow-ups · connections across
+                Connected AI accounts · smart follow-ups · connections across
                 goals · reusable routines
               </Text>
             </View>
