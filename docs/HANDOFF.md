@@ -44,3 +44,7 @@ Run these on a real iPhone; automated checks or a JavaScript bundle alone do not
 The capability interface is intentionally disabled. To enable purchases, choose a supported billing library/provider and use a development build; [Expo Go cannot host the required custom native purchase code](https://docs.expo.dev/guides/in-app-purchases/).
 
 The implementation still needs store products, purchase/entitlement validation on a trusted server or provider, receipt/transaction handling, subscription webhooks, restore purchases, and subscription management. Test purchase cancellation, pending transactions, expiry, refunds/revocation, and reinstall/restore in the store sandbox before exposing a paywall. Never unlock paid access solely from a client flag.
+
+## Current testing runtime
+
+Use SDK 57-compatible Expo Go and the same Expo login on the test server and iPhone. The September 2026 App Store update supersedes earlier SDK 54 guidance. Standalone native builds must be rebuilt for SDK 57. Source is held in testing until device acceptance; no store submission is implied.
