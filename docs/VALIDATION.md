@@ -15,3 +15,11 @@ Not verified: a signed native binary, physical-device microphone/playback/calend
 The physical-device checklist in HANDOFF.md is required before distributing a release.
 
 SDK 57 upgrade: Expo 57.0.24, React Native 0.86.3, React 19.2.3, TypeScript 6.0.3. Removed SDK 54 Metro overrides and obsolete newArchEnabled config. Strict typecheck, 22 tests, 21 Expo Doctor checks, both platform exports and audit were rerun successfully on the upgraded source. iPhone opening remains subject to matching Expo login and physical-device acceptance.
+
+## Capture-first testing revision
+
+- Strict typecheck and all 27 tests passed, including bounded draft suggestions, original-input retention and stable task identities.
+- All 21 Expo Doctor checks passed; iOS, Android and web bundle exports passed.
+- Browser QA at a 390 × 844 viewport exercised example drafts, selecting an action, adding a contextual update, parking, and text capture. This is React Native Web QA, not a physical iPhone test.
+- New draft storage is additive to the existing database. Native exclusive transactions protect task acceptance; web QA uses the supported web transaction API.
+- AI and transcription are not connected. Production/main are excluded from this change.

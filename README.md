@@ -1,6 +1,12 @@
-# Anchor mobile
+# Flow — mobile testing build
 
 A small native planning app: capture a thought, choose an action that fits the time available, and keep the next date visible. This is a mobile starter for further development, separate from the existing Anchor web app.
+
+## Capture-first testing experience
+
+Speak or write from Today. Text becomes a small, editable visual draft; choose one suggestion for Today, add an update, or park the thought. My mind separates active drafts from parked possibilities; Library retains original notes and recordings. Existing detailed task/calendar controls remain under Settings. No existing data is reset.
+
+This build uses bounded local rules, not an AI service. Automatic audio transcription, semantic thought organization, goal connections and reusable routines are explicitly unfinished. The optional example is labeled as an example. Suggestions do not become tasks until selected.
 
 ## What this version covers
 
