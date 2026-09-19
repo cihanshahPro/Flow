@@ -30,6 +30,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-asset",
+    "./plugins/with-ios-scene",
     [
       "expo-audio",
       {
