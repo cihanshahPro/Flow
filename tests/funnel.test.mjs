@@ -50,8 +50,9 @@ test("new people get value first: one welcome screen, then the first thought —
   await rerender();
   assert.equal(step, "first");
   assert.match(textOf(view), /What's on your mind right now\?/);
-  assert.deepEqual(labels(view), ["Record", "or write it down"]);
-  await press(view, "Record");
+  assert.deepEqual(labels(view), ["Talk it out", "Type it"], "two equal ways in");
+  assert.match(textOf(view), /Your voice stays on your iPhone\./);
+  await press(view, "Talk it out");
   assert.equal(finished.length, 1);
   assert.equal(finished[0].funnelVersion, FUNNEL_VERSION);
   assert.equal(finished[0].answers.length, 0, "the test is not taken yet");
