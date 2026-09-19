@@ -1,4 +1,4 @@
-import type { Task, Topic } from "./model.ts";
+import type { DirectionContext, Task, Topic } from "./model.ts";
 import { localDate } from "./model.ts";
 import { extractContactDetails, deviceTimeZone } from "./calendar-model.ts";
 
@@ -26,6 +26,7 @@ export type ThoughtDraft = {
   example?: boolean;
   summary?: string;
   organizer?: "apple-local";
+  direction?: DirectionContext;
 };
 const actionStart =
   /^(?:i (?:need|want|have) to |(?:we|i) should |let'?s |please )?(?:call|email|ask|send|finish|start|build|make|choose|pick|book|find|write|prepare|follow up|check|review|talk|contact|collect|buy|research|schedule|create|apply|visit|read|plan|update|design|test|record)\b/i;
@@ -121,6 +122,7 @@ export function taskForStep(
     createdAt: new Date().toISOString(),
     timeZone: deviceTimeZone(),
     reminderMinutes: 15,
+    ...(draft.direction ? { direction: draft.direction } : {}),
     ...extractContactDetails(draft.source),
   };
 }
