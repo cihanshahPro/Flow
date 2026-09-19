@@ -153,7 +153,7 @@ export const Animated = {
   sequence: () => animation(),
   loop: () => animation(),
 };
-export const Easing = { in: (f) => f, quad: (x) => x };
+export const Easing = { in: (f) => f, inOut: (f) => f, quad: (x) => x };
 export const Dimensions = { get: () => ({ width: 390, height: 844 }) };
 export const Alert = { alert() {} };
 // expo-notifications is never exercised in tests; the planner is pure.
