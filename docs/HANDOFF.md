@@ -1,4 +1,35 @@
-# Anchor mobile — developer handoff
+# Flow mobile — developer handoff
+
+## Start here (current testing build)
+
+Repository: https://github.com/cihanshahPro/Flow
+
+The handoff branch is `codex/final-thread-flow`. It contains the recording-first thread flow and is the branch to review before any release work. The protected baseline is `testing`; production/main is outside this handoff.
+
+Clone and create a personal working branch from the handoff branch:
+
+```bash
+git clone https://github.com/cihanshahPro/Flow.git
+cd Flow
+git fetch origin codex/final-thread-flow
+git switch -c handoff/<your-name> --track origin/codex/final-thread-flow
+npm ci
+npm run verify
+```
+
+Work only on `handoff/<your-name>`. Push it and open a pull request into `codex/final-thread-flow`; do not push directly to `testing` or `main`. The owner can review and merge that PR after the testing build is checked. After merge, the owner promotes the reviewed commit to `testing` and runs the device checks below. Keep release/App Store work in a separate PR from product changes.
+
+The current user path is intentionally narrow: profile fingerprint → record a full dump → Flow transcribes and forms a thread → Flow asks one focused missing question → record the answer → only a ready thread can become goals. Do not reintroduce task lists, “mark done” steps, or open-ended classification during the dump/understanding stages. Read [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md) before changing routing or capture behavior.
+
+Useful commands:
+
+```bash
+npm run verify
+npx expo start --go --lan --port 8082
+npx expo export --platform all --output-dir /tmp/flow-export
+```
+
+The test Expo server is on the Mac mini at `10.0.0.152:8082`; use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only. Do not submit a build or merge into `main` as part of routine feature work.
 
 ## Scope and boundary
 
