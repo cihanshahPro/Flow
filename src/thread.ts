@@ -542,6 +542,39 @@ export function evaluateThread(
   return { ...withMessages(thread, added), lastEvaluatedAt: at };
 }
 
+/** The person finished a move from the Next card. Flow celebrates once and offers the next move if there is one. */
+export function noteMoveDone(
+  thread: ThoughtDraft,
+  task: Task,
+  options: { mode?: Mode; now?: Date } = {},
+): ThoughtDraft {
+  const mode = options.mode ?? DEFAULT_MODE;
+  const at = (options.now ?? new Date()).toISOString();
+  const id = `${thread.id}:done:${task.id}`;
+  if ((thread.messages ?? []).some((m) => m.id === id)) return thread;
+  let next: ThoughtDraft = {
+    ...thread,
+    messages: (thread.messages ?? []).map((m) =>
+      m.kind === "checkin" && m.taskId === task.id && !m.answered ? { ...m, answered: "yes" } : m,
+    ),
+  };
+  const added: ThreadMessage[] = [
+    { id, createdAt: at, from: "flow", kind: "hype", text: voice.done(mode, task.id) },
+  ];
+  const step = isReady(next.threadPoints) && !pendingMessage(next) ? offerableSteps(next)[0] : undefined;
+  if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at));
+  return withMessages(next, added);
+}
+
+/** A level changed because of something in this thread. Flow says so here, once per level. */
+export function noteLevelUp(thread: ThoughtDraft, level: string, mode: Mode, now = new Date()): ThoughtDraft {
+  const id = `${thread.id}:level:${level.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  if ((thread.messages ?? []).some((m) => m.id === id)) return thread;
+  return withMessages(thread, [
+    { id, createdAt: now.toISOString(), from: "flow", kind: "hype", text: voice.levelUp(mode, level) },
+  ]);
+}
+
 /** People Flow has heard about across threads, for the Me screen. */
 export function peopleMentioned(threads: ThoughtDraft[]): string[] {
   const names = new Map<string, number>();
