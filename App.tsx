@@ -19,7 +19,7 @@ import { randomUUID } from "expo-crypto";
 import VoiceCapture, { AudioPlayback, type SavedVoiceNote } from "./src/components/VoiceCapture";
 import Home from "./src/components/Home";
 import ThreadChat from "./src/components/ThreadChat";
-import Quiz from "./src/components/Quiz";
+import Funnel, { type FunnelStep } from "./src/components/Funnel";
 import Me from "./src/components/Me";
 import { C } from "./src/components/theme";
 import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/services/storage";
@@ -29,17 +29,16 @@ import { syncProgress } from "./src/services/progress";
 import { processCapturedNote } from "./src/services/processing";
 import { syncReminders } from "./src/services/reminders";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
-import { newProfile, FUNNEL_VERSION, ITEMS, type Profile } from "./src/personality";
+import { newProfile, FUNNEL_VERSION, type Profile } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask } from "./src/task-flow";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, evaluateThread, noteLevelUp, noteMoveDone, threadTasks } from "./src/thread";
+import { answerChip, evaluateThread, noteLevelUp, noteMoveDone, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
 import type { ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
 type Screen = "home" | "thread" | "me";
-type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback" };
-const QUIZ_STAGES = ["intro", "assessment", "results", "areas"] as const;
+type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback"; prompt?: string };
 const EVALUATE_EVERY_MS = 15 * 60 * 1000;
 
 export default function App() {
@@ -48,6 +47,11 @@ export default function App() {
       <Flow />
     </SafeAreaProvider>
   );
+}
+
+function pendingQuestion(thread: ThoughtDraft): string | undefined {
+  const open = [...(thread.messages ?? [])].reverse().find((m) => m.from === "flow" && !m.answered && m.kind === "question");
+  return open ? `Flow asked: ${open.text}` : undefined;
 }
 
 function Flow() {
@@ -59,7 +63,8 @@ function Flow() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [screen, setScreen] = useState<Screen>("home");
   const [openId, setOpenId] = useState<string | null>(null);
-  const [quiz, setQuiz] = useState(false);
+  const [funnel, setFunnel] = useState(false);
+  const [funnelStep, setFunnelStep] = useState<FunnelStep>("intro");
   const [capture, setCapture] = useState<Capture | null>(null);
   const [captureVisible, setCaptureVisible] = useState(false);
   const [input, setInput] = useState("");
@@ -117,8 +122,9 @@ function Flow() {
     Promise.all([refresh(), loadProfile()])
       .then(async ([data, p]) => {
         setProfile(p);
-        // Every device goes through the build-12 funnel once, whatever an older build saved.
-        setQuiz(p.funnelVersion !== FUNNEL_VERSION);
+        // Every device goes through the build-12 funnel once, from the top, whatever an older build saved.
+        setFunnel(p.funnelVersion !== FUNNEL_VERSION);
+        setFunnelStep("intro");
         await evaluateAll(data);
         setReady(true);
       })
@@ -189,14 +195,19 @@ function Flow() {
     setOpenId(null);
   }
 
-  function startCapture(mode: "voice" | "text", threadId: string | null, kind: "thought" | "feedback" = "thought") {
+  function startCapture(
+    mode: "voice" | "text",
+    threadId: string | null,
+    kind: "thought" | "feedback" = "thought",
+    prompt?: string,
+  ) {
     captureId.current = randomUUID();
     setInput("");
     setVoiceResult(null);
     setProcessingError("");
     setCaptureVisible(false);
     setNotice("");
-    setCapture({ mode, threadId, kind });
+    setCapture({ mode, threadId, kind, prompt });
   }
   function closeCapture() {
     if (!voiceBusy && !busy && !processing) setCapture(null);
@@ -282,14 +293,18 @@ function Flow() {
     if (!current) return;
     void run(async () => {
       const before = level.level?.number ?? 0;
-      const { thread, effects } = answerChip(current, messageId, chipId, { mode });
+      const { thread, effects } = answerChip(current, messageId, chipId, { mode, plate: profile.plate });
       await saveDraft(thread);
       for (const effect of effects) {
         if (effect.type === "accept") {
           const step = thread.steps.find((s) => s.id === effect.stepId);
           if (step) {
             await acceptStep(thread, step);
-            await updateProfile({ ...profile, activeTaskId: `flow:${thread.id}:${step.id}` });
+            // The move is an if-then plan: it lands on the day the person said they have time.
+            const id = `flow:${thread.id}:${step.id}`;
+            const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
+            if (saved) await saveTask({ ...saved, plannedDate: plannedDateFor(profile.plate?.timeWindow) });
+            await updateProfile({ ...profile, activeTaskId: id });
           }
         } else if (effect.type === "complete") {
           const task = tasks.find((t) => t.id === effect.taskId);
@@ -307,7 +322,7 @@ function Flow() {
       const before = level.level?.number ?? 0;
       await saveTask(completeTask(nextTask));
       const thread = nextThread ? (await loadDrafts()).find((t) => t.id === nextThread.id) : undefined;
-      if (thread) await saveDraft(noteMoveDone(thread, nextTask, { mode }));
+      if (thread) await saveDraft(noteMoveDone(thread, nextTask, { mode, plate: profile.plate }));
       if (profile.activeTaskId === nextTask.id) await updateProfile({ ...profile, activeTaskId: undefined });
       await refresh();
       await announceLevel(thread?.id, before);
@@ -334,129 +349,19 @@ function Flow() {
     });
   }
 
-  if (!ready)
-    return (
-      <SafeAreaView style={s.safe}>
-        <View style={s.loading}>
-          <Text style={s.brand}>flow.</Text>
-          {error ? <Text style={s.error}>{error}</Text> : <ActivityIndicator color={C.blue} />}
-        </View>
-      </SafeAreaView>
-    );
-
-  if (quiz) {
-    const answered = profile.answers.filter((a) => Number.isInteger(a) && a >= 1 && a <= 5).length;
-    const fromOlderBuild = profile.funnelVersion !== FUNNEL_VERSION && !["assessment", "results", "areas"].includes(profile.stage);
-    // An older build's profile starts at the intro; if its quiz is already complete, the reveal comes right after.
-    const stage = fromOlderBuild
-      ? "intro"
-      : (QUIZ_STAGES as readonly string[]).includes(profile.stage)
-        ? profile.stage
-        : answered === ITEMS.length
-          ? "results"
-          : "intro";
-    return (
-      <SafeAreaView style={s.safe}>
-        <StatusBar style="dark" />
-        <Quiz
-          profile={{ ...profile, stage: stage as Profile["stage"] }}
-          busy={busy}
-          error={error}
-          onSave={(p) => run(() => updateProfile(p))}
-          onFinish={(p) =>
-            run(async () => {
-              await updateProfile(p);
-              setProgress(await syncProgress().catch(() => progress));
-              setQuiz(false);
-              setScreen("home");
-            })
-          }
-        />
-      </SafeAreaView>
-    );
-  }
-
   const captureTitle =
     capture?.kind === "feedback"
       ? "Tell Flow something"
       : capture?.threadId
         ? current?.title ?? "Add to this thread"
-        : "What's on your mind?";
+        : capture?.prompt
+          ? "Flow is listening"
+          : "What's on your mind?";
   const captureHint =
     capture?.kind === "feedback"
       ? "About Flow itself. It stays here and never becomes a thread."
-      : capture?.threadId
-        ? "Just answer or add. Flow keeps the thread."
-        : "Say everything about one thing. Don't organise it.";
-
-  return (
-    <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
-      {screen === "home" && (
-        <Home
-          threads={threads}
-          tasks={tasks}
-          nextTask={nextTask}
-          nextThread={nextThread}
-          levelLabel={level.level ? level.level.title : type ? type.name : "Me"}
-          busy={busy}
-          notice={notice}
-          error={error}
-          onRecord={() => startCapture("voice", null)}
-          onWrite={() => startCapture("text", null)}
-          onOpenThread={openThread}
-          onDoneNext={doneNext}
-          onCalendarNext={calendarNext}
-          onOpenMe={() => {
-            setScreen("me");
-            setNotice("");
-          }}
-          onDismissNotice={() => {
-            setNotice("");
-            setError("");
-          }}
-        />
-      )}
-      {screen === "thread" && current && (
-        <ThreadChat
-          thread={current}
-          tasks={tasks}
-          notes={notes}
-          mode={mode}
-          busy={busy}
-          processing={processing && !capture}
-          error={error || processingError}
-          onRecord={() => startCapture("voice", current.id)}
-          onWrite={() => startCapture("text", current.id)}
-          onChip={chip}
-          onClose={closeThread}
-        />
-      )}
-      {screen === "thread" && !current && (
-        <View style={s.loading}>
-          <Text style={s.body}>That thread is no longer here.</Text>
-          <Pressable accessibilityRole="button" onPress={closeThread}>
-            <Text style={s.link}>Back to home</Text>
-          </Pressable>
-        </View>
-      )}
-      {screen === "me" && (
-        <Me
-          profile={profile}
-          progress={progress}
-          threads={threads}
-          notes={notes}
-          busy={busy}
-          onBack={() => setScreen("home")}
-          onRetake={() =>
-            void run(async () => {
-              await updateProfile({ ...profile, answers: [], stage: "assessment", completed: false });
-              setQuiz(true);
-            })
-          }
-          onFeedback={(m) => startCapture(m, null, "feedback")}
-        />
-      )}
+      : capture?.prompt ?? (capture?.threadId ? "Just answer or add. Flow keeps the thread." : "Say everything about one thing. Don't organise it.");
+  const captureSheet = (
       <Modal
         visible={capture !== null}
         animationType="slide"
@@ -538,6 +443,119 @@ function Flow() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+  );
+
+  if (!ready)
+    return (
+      <SafeAreaView style={s.safe}>
+        <View style={s.loading}>
+          <Text style={s.brand}>flow.</Text>
+          {error ? <Text style={s.error}>{error}</Text> : <ActivityIndicator color={C.blue} />}
+        </View>
+      </SafeAreaView>
+    );
+
+  if (funnel) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <StatusBar style="dark" />
+        <Funnel
+          profile={profile}
+          step={funnelStep}
+          onStep={setFunnelStep}
+          busy={busy}
+          error={error}
+          onSave={(p) => run(() => updateProfile(p))}
+          onFinish={(p) =>
+            run(async () => {
+              await updateProfile(p);
+              setProgress(await syncProgress().catch(() => progress));
+              setFunnel(false);
+              setScreen("home");
+            })
+          }
+          onRecordFirst={(prompt) => startCapture("voice", null, "thought", prompt)}
+          onWriteFirst={(prompt) => startCapture("text", null, "thought", prompt)}
+        />
+        {captureSheet}
+      </SafeAreaView>
+    );
+  }
+
+  const suggestion = suggestPrompt(profile.plate, threads);
+
+  return (
+    <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+      <StatusBar style="dark" />
+      {screen === "home" && (
+        <Home
+          threads={threads}
+          tasks={tasks}
+          nextTask={nextTask}
+          nextThread={nextThread}
+          levelLabel={level.level ? level.level.title : type ? type.name : "Me"}
+          suggestion={suggestion}
+          busy={busy}
+          notice={notice}
+          error={error}
+          onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}
+          onWrite={() => startCapture("text", null, "thought", suggestion.prompt)}
+          onRecordOther={() => startCapture("voice", null, "thought", "Something else that's on your mind. Say where it stands, what you'd want out of it, who's involved, what's in the way.")}
+          onOpenThread={openThread}
+          onDoneNext={doneNext}
+          onCalendarNext={calendarNext}
+          onOpenMe={() => {
+            setScreen("me");
+            setNotice("");
+          }}
+          onDismissNotice={() => {
+            setNotice("");
+            setError("");
+          }}
+        />
+      )}
+      {screen === "thread" && current && (
+        <ThreadChat
+          thread={current}
+          tasks={tasks}
+          notes={notes}
+          mode={mode}
+          busy={busy}
+          processing={processing && !capture}
+          error={error || processingError}
+          onRecord={() => startCapture("voice", current.id, "thought", pendingQuestion(current))}
+          onWrite={() => startCapture("text", current.id, "thought", pendingQuestion(current))}
+          onChip={chip}
+          onClose={closeThread}
+        />
+      )}
+      {screen === "thread" && !current && (
+        <View style={s.loading}>
+          <Text style={s.body}>That thread is no longer here.</Text>
+          <Pressable accessibilityRole="button" onPress={closeThread}>
+            <Text style={s.link}>Back to home</Text>
+          </Pressable>
+        </View>
+      )}
+      {screen === "me" && (
+        <Me
+          profile={profile}
+          progress={progress}
+          threads={threads}
+          notes={notes}
+          busy={busy}
+          onBack={() => setScreen("home")}
+          onRetake={() =>
+            void run(async () => {
+              await updateProfile({ ...profile, answers: [], funnelVersion: undefined });
+              setFunnelStep("intro");
+              setFunnel(true);
+            })
+          }
+          onFeedback={(m) => startCapture(m, null, "feedback")}
+        />
+      )}
+      {captureSheet}
     </SafeAreaView>
   );
 }

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Task } from "../model.ts";
 import { attentionLabel, clarity, pendingMessage, stageFor } from "../thread.ts";
+import { BUILD_TAG } from "./Funnel.tsx";
 import { C } from "./theme.ts";
 
 /**
@@ -14,11 +15,13 @@ export default function Home({
   nextTask,
   nextThread,
   levelLabel,
+  suggestion,
   busy = false,
   notice = "",
   error = "",
   onRecord,
   onWrite,
+  onRecordOther,
   onOpenThread,
   onDoneNext,
   onCalendarNext,
@@ -30,11 +33,14 @@ export default function Home({
   nextTask?: Task;
   nextThread?: ThoughtDraft;
   levelLabel: string;
+  /** What Flow suggests recording next, from the person's own profile. */
+  suggestion: { title: string; prompt: string };
   busy?: boolean;
   notice?: string;
   error?: string;
   onRecord: () => void;
   onWrite: () => void;
+  onRecordOther: () => void;
   onOpenThread: (id: string) => void;
   onDoneNext: () => void;
   onCalendarNext: () => void;
@@ -52,18 +58,20 @@ export default function Home({
     if (sa !== sb) return sa - sb;
     return lastAt(b).localeCompare(lastAt(a));
   });
-  const empty = sorted.length === 0;
   return (
     <View style={s.root}>
       <View style={s.header}>
-        <Text style={s.brand}>
-          flow<Text style={{ color: C.blue }}>.</Text>
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+          <Text style={s.brand}>
+            flow<Text style={{ color: C.blue }}>.</Text>
+          </Text>
+          <Text style={s.tag}>{BUILD_TAG}</Text>
+        </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Me" onPress={onOpenMe} style={s.pill}>
           <Text style={s.pillText}>{levelLabel}</Text>
         </Pressable>
       </View>
-      <ScrollView contentContainerStyle={[s.page, empty && s.pageEmpty]} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
         {!!error && (
           <Pressable onPress={onDismissNotice} accessibilityRole="button" accessibilityLabel="Dismiss error">
             <Text accessibilityRole="alert" style={s.error}>
@@ -101,28 +109,31 @@ export default function Home({
             </Pressable>
           </View>
         )}
-        {empty ? (
-          <View style={s.emptyBlock}>
-            <Text style={s.headline}>What's on your mind?</Text>
-            <Text style={s.body}>Record everything about one thing. Don't organise it — Flow will.</Text>
+        <View style={s.suggest}>
+          <Text style={s.kickerBlue}>FLOW SUGGESTS</Text>
+          <Text style={s.headline}>{suggestion.title}</Text>
+          <Text style={s.body}>{suggestion.prompt}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Record"
+            onPress={onRecord}
+            disabled={busy}
+            style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}
+          >
+            <Text style={s.recordIcon}>●</Text>
+            <Text style={s.recordText}>Record</Text>
+          </Pressable>
+          <View style={s.altRow}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Write instead" onPress={onWrite} disabled={busy} hitSlop={8}>
+              <Text style={s.link}>write it down</Text>
+            </Pressable>
+            <Text style={s.dotSep}>·</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Something else" onPress={onRecordOther} disabled={busy} hitSlop={8}>
+              <Text style={s.link}>something else</Text>
+            </Pressable>
           </View>
-        ) : (
-          <Text style={s.headline}>What's on your mind?</Text>
-        )}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Record"
-          onPress={onRecord}
-          disabled={busy}
-          style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}
-        >
-          <Text style={s.recordIcon}>●</Text>
-          <Text style={s.recordText}>Record</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Write instead" onPress={onWrite} disabled={busy} hitSlop={8}>
-          <Text style={s.linkCenter}>or write it down</Text>
-        </Pressable>
-        {!empty && (
+        </View>
+        {sorted.length > 0 && (
           <View style={s.threads}>
             <Text style={s.kicker}>YOUR THREADS</Text>
             {sorted.map((t) => {
@@ -162,12 +173,15 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.paper },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
+  tag: { fontSize: 10, letterSpacing: 1.3, fontWeight: "700", color: C.faint },
+  suggest: { padding: 18, borderRadius: 22, backgroundColor: C.white, gap: 10 },
+  kickerBlue: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.blue },
+  altRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 },
+  dotSep: { color: C.faint },
   pill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: C.white, borderWidth: 1, borderColor: C.line, minHeight: 36, justifyContent: "center" },
   pillText: { fontSize: 13, fontWeight: "700", color: C.ink },
   page: { paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
-  pageEmpty: { flexGrow: 1, justifyContent: "center" },
-  emptyBlock: { gap: 8, marginBottom: 8 },
-  headline: { fontSize: 30, lineHeight: 36, fontWeight: "700", color: C.ink, marginTop: 8 },
+  headline: { fontSize: 26, lineHeight: 32, fontWeight: "700", color: C.ink },
   body: { fontSize: 16, lineHeight: 23, color: C.muted },
   kicker: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.muted },
   record: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: C.blue, borderRadius: 22, paddingVertical: 24 },

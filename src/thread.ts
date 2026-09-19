@@ -3,11 +3,13 @@ import type {
   DueHint,
   ThoughtDraft,
   ThreadMessage,
+  ThreadChip,
   ThreadPoint,
   ThreadStage,
 } from "./drafts.ts";
 import type { Task } from "./model.ts";
 import { localDate } from "./model.ts";
+import type { Plate } from "./personality.ts";
 import { QUESTION_ORDER, voice, type Mode, DEFAULT_MODE } from "./flow-voice.ts";
 
 /**
@@ -26,14 +28,92 @@ export type PointId =
   | "next";
 
 export const POINTS: { id: PointId; label: string; question: string }[] = [
-  { id: "outcome", label: "Outcome", question: "What result would make this feel resolved?" },
-  { id: "people", label: "People", question: "Who else is involved, if anyone?" },
-  { id: "timing", label: "Timing", question: "Is there a real date or time attached to this?" },
-  { id: "constraints", label: "Constraints", question: "What could block this, or what should Flow keep in mind?" },
-  { id: "motivation", label: "Why it matters", question: "Why does this matter to you right now?" },
-  { id: "dependencies", label: "Depends on", question: "Does anything need to happen first?" },
-  { id: "next", label: "Next context", question: "What's the very first thing you'd do on this?" },
+  { id: "outcome", label: "Outcome", question: "What would you want to come out of this? Say the result, not the work." },
+  { id: "people", label: "People", question: "Who else is in this?" },
+  { id: "timing", label: "Timing", question: "Is there a real date on this?" },
+  { id: "constraints", label: "In the way", question: "What's most likely to get in the way?" },
+  { id: "motivation", label: "Why it matters", question: "If that happened, what would it change for you?" },
+  { id: "dependencies", label: "Depends on", question: "Does anything have to happen first?" },
+  { id: "next", label: "First step", question: "What's the first bit you could do, and when?" },
 ];
+
+/**
+ * Flow's question in context: it quotes the person's own outcome when it has
+ * one, so the question is about their thing, not a form field.
+ */
+export function questionFor(point: { id: PointId; question: string }, points: ThreadPoint[] | undefined): string {
+  const outcome = (points ?? []).find((p) => p.id === "outcome" && p.state === "known")?.value;
+  if (point.id === "outcome" || !outcome) return point.question;
+  const quoted = outcome.replace(/[.!?…]+$/, "");
+  return `You said “${quoted.length > 70 ? quoted.slice(0, 69).trimEnd() + "…" : quoted}”. ${point.question}`;
+}
+
+const NONE_LABELS = new Set(["Just me", "No real date", "Nothing I can see", "Nothing — I can start"]);
+const UNSURE_LABELS = new Set(["Not sure where to start", "Not sure yet"]);
+
+/**
+ * Suggested answers for a question, from the person's own profile where it
+ * has them. Tapping one is a full answer; recording is always the other way.
+ */
+export function suggestionChips(point: PointId, plate?: Plate): ThreadChip[] {
+  const labels: string[] = (() => {
+    switch (point) {
+      case "outcome":
+        return ["Get it done and off my list", "Make a decision", "Get someone else to handle it", "Just get clear on it"];
+      case "motivation":
+        return ["Peace of mind", "Money", "Someone's counting on me", "It's overdue"];
+      case "constraints":
+        return [...(plate?.obstacles ?? []).slice(0, 3), "Nothing I can see"];
+      case "dependencies":
+        return ["Nothing — I can start", "Waiting on someone", "Need information first", "Need money first"];
+      case "people":
+        return [...(plate?.people ?? []).slice(0, 3), "Just me"];
+      case "timing":
+        return ["This week", "This month", "No real date"];
+      case "next":
+        return [whenLabel(plate?.timeWindow), "Tomorrow morning", "This weekend", "Not sure where to start"];
+    }
+  })();
+  return [...new Set(labels)].slice(0, 4).map((label, i) => ({ id: `s${i}`, label }));
+}
+
+/** "This evening", "Tomorrow morning"… from the person's usual time window. */
+export function whenLabel(timeWindow: string | undefined, now = new Date()): string {
+  const hour = now.getHours();
+  switch (timeWindow) {
+    case "Mornings":
+      return hour < 10 ? "This morning" : "Tomorrow morning";
+    case "Lunchtime":
+      return hour < 13 ? "At lunch today" : "At lunch tomorrow";
+    case "Evenings":
+      return hour < 20 ? "This evening" : "Tomorrow evening";
+    case "Weekends":
+      return now.getDay() === 0 || now.getDay() === 6 ? "Today" : "This weekend";
+    default:
+      return "Next free 15 minutes";
+  }
+}
+
+/** The calendar day an if-then move lands on, matching whenLabel. */
+export function plannedDateFor(timeWindow: string | undefined, now = new Date()): string {
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = (n: number) => localDate(new Date(base.getTime() + n * 864e5));
+  const hour = now.getHours();
+  switch (timeWindow) {
+    case "Mornings":
+      return hour < 10 ? days(0) : days(1);
+    case "Lunchtime":
+      return hour < 13 ? days(0) : days(1);
+    case "Evenings":
+      return hour < 20 ? days(0) : days(1);
+    case "Weekends": {
+      const d = base.getDay();
+      return d === 0 || d === 6 ? days(0) : days((6 - d + 7) % 7);
+    }
+    default:
+      return days(0);
+  }
+}
 
 /** A thread is ready for moves once this many points are known, including the outcome. */
 export const READY_KNOWN = 5;
@@ -305,7 +385,12 @@ function withMessages(thread: ThoughtDraft, added: ThreadMessage[]): ThoughtDraf
   return added.length ? { ...thread, messages: [...(thread.messages ?? []), ...added] } : thread;
 }
 
-function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string): ThreadMessage {
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** A move is an if-then plan: a moment the person actually has, then the step. */
+function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?: Plate): ThreadMessage {
   return message(
     thread,
     {
@@ -313,7 +398,7 @@ function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string): Threa
       from: "flow",
       kind: "offer",
       stepId: step.id,
-      text: step.title,
+      text: `${whenLabel(plate?.timeWindow, new Date(now))} → ${capitalise(step.title)}`,
       chips: [
         { id: "do", label: "Do this" },
         { id: "skip", label: "Not now" },
@@ -338,6 +423,7 @@ export function respondToRecording(
     reply?: string;
     question?: string;
     evidence?: Partial<Record<PointId, string>>;
+    plate?: Plate;
   } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
@@ -383,6 +469,14 @@ export function respondToRecording(
   };
   if (options.question && asksKnown(options.question)) options = { ...options, question: undefined };
   const hyped = new Set(thread.hypeGiven ?? []);
+  const ask = (point: { id: PointId; question: string }) =>
+    push({
+      from: "flow",
+      kind: "question",
+      pointId: point.id,
+      text: options.question?.trim() || questionFor(point, points),
+      chips: suggestionChips(point.id, options.plate),
+    });
   if (isReady(points)) {
     next = ensureMoves(next);
     if (!hyped.has("ready")) {
@@ -390,15 +484,14 @@ export function respondToRecording(
       hyped.add("ready");
     }
     const step = offerableSteps(next)[0];
-    if (step) added.push(offerMessage(next, step, at));
+    if (step) added.push(offerMessage(next, step, at, options.plate));
     else if (!isFirst || !hyped.has("ready")) {
       const point = nextMissingPoint(points, mode);
-      if (point) push({ from: "flow", kind: "question", pointId: point.id, text: options.question?.trim() || point.question });
+      if (point) ask(point);
     }
   } else {
     const point = nextMissingPoint(points, mode);
-    if (point)
-      push({ from: "flow", kind: "question", pointId: point.id, text: options.question?.trim() || point.question });
+    if (point) ask(point);
   }
   return { ...withMessages(next, added), hypeGiven: [...hyped] };
 }
@@ -414,10 +507,11 @@ export function answerChip(
   thread: ThoughtDraft,
   messageId: string,
   chipId: string,
-  options: { mode?: Mode; now?: Date } = {},
+  options: { mode?: Mode; now?: Date; plate?: Plate } = {},
 ): { thread: ThoughtDraft; effects: ChipEffect[] } {
   const mode = options.mode ?? DEFAULT_MODE;
   const at = (options.now ?? new Date()).toISOString();
+  const plate = options.plate;
   const target = (thread.messages ?? []).find((m) => m.id === messageId);
   if (!target || target.answered || !target.chips?.some((c) => c.id === chipId))
     return { thread, effects: [] };
@@ -433,7 +527,40 @@ export function answerChip(
   push({ from: "you", kind: "reply", text: label });
   const effects: ChipEffect[] = [];
   const hyped = new Set(thread.hypeGiven ?? []);
-  if (target.kind === "offer" && target.stepId) {
+  if (target.kind === "question" && target.pointId) {
+    // A tapped suggestion is a full answer to that point, in the person's chosen words.
+    const pointId = target.pointId as PointId;
+    const unsure = UNSURE_LABELS.has(label);
+    const points = (next.threadPoints ?? []).map((p) =>
+      p.id === pointId && p.state !== "known" && !unsure
+        ? { ...p, state: "known" as const, value: NONE_LABELS.has(label) ? label : label, sourceNoteIds: [] }
+        : p,
+    );
+    next = {
+      ...next,
+      threadPoints: points,
+      missingPoints: missingQuestions(points, mode),
+      goalsReady: isReady(points),
+      threadStatus: isReady(points) ? "ready" : "understanding",
+    };
+    if (isReady(points)) {
+      next = ensureMoves(next);
+      if (!hyped.has("ready")) {
+        push({ from: "flow", kind: "hype", text: voice.fullPicture(mode) });
+        hyped.add("ready");
+      }
+      const step = offerableSteps(next)[0];
+      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
+      else {
+        const point = nextMissingPoint(points, mode);
+        if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, points), chips: suggestionChips(point.id, plate) });
+      }
+    } else {
+      push({ from: "flow", kind: "ack", text: voice.replyAck(mode, messageId) });
+      const point = unsure ? nextMissingPoint(points.filter((p) => p.id !== pointId), mode) : nextMissingPoint(points, mode);
+      if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, points), chips: suggestionChips(point.id, plate) });
+    }
+  } else if (target.kind === "offer" && target.stepId) {
     if (chipId === "do") {
       effects.push({ type: "accept", stepId: target.stepId });
       next = {
@@ -444,7 +571,7 @@ export function answerChip(
     } else {
       next = { ...next, declinedStepIds: [...(thread.declinedStepIds ?? []), target.stepId] };
       const step = offerableSteps(next)[0];
-      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at));
+      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
       else push({ from: "flow", kind: "ack", text: "Fair. I'll hold this thread and bring it back when something changes." });
     }
   } else if (target.kind === "checkin" && target.id.includes(":check:resolved:")) {
@@ -453,7 +580,7 @@ export function answerChip(
       effects.push({ type: "credit", id: target.id });
       push({ from: "flow", kind: "hype", text: voice.resolved(mode) });
     } else {
-      push({ from: "flow", kind: "question", pointId: "next", text: "Okay. What's the next move on this?" });
+      push({ from: "flow", kind: "question", pointId: "next", text: "Okay. What's the next move on this, and when?", chips: suggestionChips("next", plate) });
     }
   } else if (target.kind === "checkin") {
     if (chipId === "yes") {
@@ -461,7 +588,7 @@ export function answerChip(
       effects.push({ type: "credit", id: target.id });
       push({ from: "flow", kind: "hype", text: voice.done(mode, target.id) });
       const step = isReady(next.threadPoints) ? offerableSteps(next)[0] : undefined;
-      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at));
+      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
     } else {
       push({ from: "flow", kind: "ack", text: "No problem. I'll ask again later, not every hour." });
     }
@@ -475,8 +602,8 @@ export function answerChip(
       const point = nextMissingPoint(next.threadPoints, mode);
       const step = offerableSteps(next)[0];
       if (isReady(next.threadPoints) && step)
-        added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at));
-      else if (point) push({ from: "flow", kind: "question", pointId: point.id, text: point.question });
+        added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
+      else if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, next.threadPoints), chips: suggestionChips(point.id, plate) });
     }
   }
   return { thread: { ...withMessages(next, added), hypeGiven: [...hyped] }, effects };
@@ -567,7 +694,7 @@ export function evaluateThread(
 export function noteMoveDone(
   thread: ThoughtDraft,
   task: Task,
-  options: { mode?: Mode; now?: Date } = {},
+  options: { mode?: Mode; now?: Date; plate?: Plate } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
   const at = (options.now ?? new Date()).toISOString();
@@ -583,7 +710,7 @@ export function noteMoveDone(
     { id, createdAt: at, from: "flow", kind: "hype", text: voice.done(mode, task.id) },
   ];
   const step = isReady(next.threadPoints) && !pendingMessage(next) ? offerableSteps(next)[0] : undefined;
-  if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at));
+  if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, options.plate));
   else if (!pendingMessage(next))
     added.push({
       id: `${thread.id}:check:resolved:${task.id}`,
@@ -606,6 +733,46 @@ export function noteLevelUp(thread: ThoughtDraft, level: string, mode: Mode, now
   return withMessages(thread, [
     { id, createdAt: now.toISOString(), from: "flow", kind: "hype", text: voice.levelUp(mode, level) },
   ]);
+}
+
+const AREA_KEYWORDS: Record<string, string[]> = {
+  "Work project": ["work", "project", "deadline", "launch"],
+  "Job or clients": ["job", "client", "interview", "cv", "resume", "hire"],
+  "Money & bills": ["money", "bill", "bills", "rent", "tax", "taxes", "invoice", "pay", "budget", "bank"],
+  "Paperwork or legal": ["form", "forms", "paperwork", "lawyer", "legal", "visa", "passport", "insurance", "claim", "contract"],
+  Health: ["doctor", "dentist", "health", "gym", "sleep", "appointment", "therapy", "exercise"],
+  "Home & repairs": ["home", "house", "flat", "apartment", "repair", "fix", "garage", "kitchen", "landlord", "clean"],
+  Family: ["family", "mom", "mum", "dad", "parents", "kids", "son", "daughter", "brother", "sister"],
+  Relationship: ["partner", "wife", "husband", "girlfriend", "boyfriend", "relationship", "date"],
+  Studying: ["study", "exam", "course", "class", "essay", "thesis", "school", "university"],
+  "A side project": ["side project", "app", "website", "portfolio", "startup", "idea"],
+  "Moving or travel": ["move", "moving", "trip", "travel", "flight", "pack", "visa"],
+};
+
+/**
+ * What Flow suggests recording next: the first area from the person's own
+ * profile that no open thread covers yet. The user is never asked to record
+ * "whatever"; there is always a specific prompt.
+ */
+export function suggestPrompt(
+  plate: Plate | undefined,
+  threads: ThoughtDraft[],
+): { title: string; prompt: string; area?: string } {
+  const open = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt);
+  const corpus = open.map((t) => [t.title, t.source, ...t.updates].join(" ").toLowerCase()).join("\n");
+  for (const area of plate?.areas ?? []) {
+    const words = AREA_KEYWORDS[area] ?? [area.toLowerCase()];
+    const covered = words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(corpus));
+    if (!covered)
+      return {
+        area,
+        title: area,
+        prompt: `What's the one thing in ${area.toLowerCase()} hanging over you? Say where it stands, what you'd want out of it, who's involved, and what's in the way.`,
+      };
+  }
+  if (!open.length)
+    return { title: "Start a thread", prompt: "Say everything about one thing that's on your mind: where it stands, what you'd want out of it, who's involved, what's in the way." };
+  return { title: "Anything new?", prompt: "Something new since last time, or something that's been nagging at you. One thing at a time." };
 }
 
 /** People Flow has heard about across threads, for the Me screen. */

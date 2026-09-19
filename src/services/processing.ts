@@ -147,6 +147,7 @@ async function processThoughtNote(note: Note): Promise<ThoughtDraft> {
     reply: flow.reply,
     question: flow.question,
     evidence: flow.evidence,
+    plate: profile?.plate,
   });
   await saveDraft(draft);
   return draft;

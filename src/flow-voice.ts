@@ -59,12 +59,17 @@ export function flowType(answers: number[] | undefined): FlowType | null {
   return mode ? { mode, ...TYPES[mode] } : null;
 }
 
-/** Order in which Flow asks about missing points, by mode. */
+/**
+ * Order in which Flow asks about missing points. The backbone is WOOP
+ * (Oettingen: Wish → Outcome → Obstacle → Plan): outcome first, then why it
+ * matters, then what is in the way, then the first step. Modes only move
+ * people and timing around inside that.
+ */
 export const QUESTION_ORDER: Record<Mode, string[]> = {
-  explorer: ["outcome", "motivation", "next", "timing", "people", "constraints", "dependencies"],
-  builder: ["outcome", "next", "timing", "dependencies", "constraints", "people", "motivation"],
-  analyst: ["outcome", "constraints", "dependencies", "timing", "next", "people", "motivation"],
-  connector: ["people", "outcome", "timing", "next", "constraints", "motivation", "dependencies"],
+  explorer: ["outcome", "motivation", "constraints", "next", "people", "timing", "dependencies"],
+  builder: ["outcome", "next", "constraints", "dependencies", "timing", "motivation", "people"],
+  analyst: ["outcome", "constraints", "dependencies", "motivation", "timing", "next", "people"],
+  connector: ["outcome", "people", "motivation", "constraints", "timing", "next", "dependencies"],
 };
 
 function pick<T>(items: T[], seed: string): T {

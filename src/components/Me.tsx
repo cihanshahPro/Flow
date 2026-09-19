@@ -2,11 +2,10 @@ import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Note } from "../model.ts";
-import { AREAS, type Profile } from "../personality.ts";
+import { emptyPlate, type Profile } from "../personality.ts";
 import { flowType } from "../flow-voice.ts";
 import { levelForProgress, type ProgressRecord } from "../progress.ts";
 import { peopleMentioned, repeatedPattern } from "../thread.ts";
-import { AREA_ACTIVE } from "./Quiz.tsx";
 import { C } from "./theme.ts";
 
 /** Me: who Flow thinks you are, how far you've come, and what it has noticed. The trust layer. */
@@ -31,10 +30,7 @@ export default function Me({
 }) {
   const type = flowType(profile.answers);
   const level = levelForProgress(progress);
-  const active = AREAS.filter((a) => {
-    const v = profile.areas[a.id];
-    return Array.isArray(v) ? v.includes(AREA_ACTIVE) : v === AREA_ACTIVE;
-  });
+  const plate = profile.plate ?? emptyPlate();
   const real = threads.filter((t) => !t.example);
   const people = peopleMentioned(real);
   const pattern = repeatedPattern(real);
@@ -51,10 +47,10 @@ export default function Me({
       <View style={s.card}>
         <Text style={s.kicker}>YOUR FLOW TYPE</Text>
         <Text style={s.title}>{type ? type.name : "Not set yet"}</Text>
-        <Text style={s.body}>{type ? type.line : "Twenty quick taps and Flow will know how you tick."}</Text>
+        <Text style={s.body}>{type ? type.line : "The two-minute test tells Flow how you tick."}</Text>
         {type && <Text style={s.bodyStrong}>{type.promise}</Text>}
-        <Pressable accessibilityRole="button" accessibilityLabel={type ? "Retake the quiz" : "Take the quiz"} onPress={onRetake} disabled={busy} hitSlop={8}>
-          <Text style={s.link}>{type ? "Retake the quiz" : "Take the quiz · 2 min"}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={type ? "Redo the test and profile" : "Take the test"} onPress={onRetake} disabled={busy} hitSlop={8}>
+          <Text style={s.link}>{type ? "Redo the test and profile" : "Take the test · 2 min"}</Text>
         </Pressable>
       </View>
       <View style={s.card}>
@@ -79,25 +75,35 @@ export default function Me({
             </View>
           </>
         ) : (
-          <Text style={s.body}>Levels start once you've done the quiz. Moves you finish and threads Flow understands count.</Text>
+          <Text style={s.body}>Levels start once you've done the test. Moves you finish and threads Flow understands count.</Text>
         )}
       </View>
       <View style={s.card}>
         <Text style={s.kicker}>WHAT FLOW KNOWS</Text>
-        {active.length ? (
+        {plate.areas.length ? (
           <View style={s.chips}>
-            {active.map((a) => (
-              <View key={a.id} style={s.chip}>
-                <Text style={s.chipText}>{a.title}</Text>
+            {plate.areas.map((a) => (
+              <View key={a} style={s.chip}>
+                <Text style={s.chipText}>{a}</Text>
               </View>
             ))}
           </View>
         ) : (
           <Text style={s.body}>Nothing on your plate yet — Flow learns from what you record.</Text>
         )}
-        {people.length > 0 && (
+        {(plate.people.length > 0 || people.length > 0) && (
           <Text style={s.body}>
-            People you've mentioned: <Text style={s.bodyStrong}>{people.join(", ")}</Text>
+            People in the picture: <Text style={s.bodyStrong}>{[...new Set([...plate.people, ...people])].join(", ")}</Text>
+          </Text>
+        )}
+        {!!plate.timeWindow && (
+          <Text style={s.body}>
+            Your time: <Text style={s.bodyStrong}>{plate.timeWindow}</Text>
+            {plate.obstacles.length ? (
+              <Text>
+                {" "}· Usually in the way: <Text style={s.bodyStrong}>{plate.obstacles.join(", ")}</Text>
+              </Text>
+            ) : null}
           </Text>
         )}
         <Text style={s.body}>

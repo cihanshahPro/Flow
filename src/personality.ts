@@ -148,10 +148,64 @@ export type Profile = {
   completed?: boolean;
   // The chosen working step stays attached to the user’s route across reloads.
   activeTaskId?: string;
-  /** Which onboarding funnel this profile has been through. Build 12's quiz → reveal → plate is 2. */
+  /** Which onboarding funnel this profile has been through. Build 12's test → reveal → profile → first thread is 3. */
   funnelVersion?: number;
+  /** Guided profile: what is on the person's plate, in their own taps. Additive. */
+  plate?: Plate;
 };
-export const FUNNEL_VERSION = 2;
+export const FUNNEL_VERSION = 3;
+
+export type Plate = {
+  areas: string[];
+  people: string[];
+  timeWindow?: string;
+  obstacles: string[];
+  datedSoon?: string;
+};
+export const emptyPlate = (): Plate => ({ areas: [], people: [], obstacles: [] });
+
+/**
+ * The guided profile. Five questions, each answered by tapping suggestions.
+ * The area and people lists follow GTD's areas-of-focus / mind-sweep
+ * triggers; obstacles and the time window feed WOOP-style thread questions
+ * and if-then moves later.
+ */
+export const PLATE_AREAS = [
+  "Work project",
+  "Job or clients",
+  "Money & bills",
+  "Paperwork or legal",
+  "Health",
+  "Home & repairs",
+  "Family",
+  "Relationship",
+  "Studying",
+  "A side project",
+  "Moving or travel",
+] as const;
+export const PLATE_PEOPLE = [
+  "Partner",
+  "Kids",
+  "Parents",
+  "Boss",
+  "Team",
+  "Clients",
+  "A friend",
+  "Doctor",
+  "Lawyer or accountant",
+  "Landlord",
+] as const;
+export const TIME_WINDOWS = ["Mornings", "Lunchtime", "Evenings", "Weekends", "It varies"] as const;
+export const OBSTACLES = [
+  "Not enough time",
+  "Don't know where to start",
+  "Waiting on other people",
+  "Money",
+  "Energy or motivation",
+  "Too many things at once",
+  "I forget",
+] as const;
+export const DATED_SOON = ["Yes, this week", "Yes, this month", "Not really"] as const;
 export const newProfile = (): Profile => ({
   version: 1,
   answers: [],

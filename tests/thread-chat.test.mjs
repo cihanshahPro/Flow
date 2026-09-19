@@ -31,9 +31,11 @@ test("a dumped thread shows the transcript, Flow's reply, one question, and only
     React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "explorer", onRecord() {}, onWrite() {}, onChip() {}, onClose() {} }),
   );
   const text = textOf(view);
-  assert.match(text, /garage situation/);
-  assert.match(text, /What result would make this feel resolved/);
   const found = labels(view);
+  assert.match(text, /garage situation/);
+  assert.match(text, /What would you want to come out of this/);
+  // Suggested answers ride along with the question; recording is still the other way.
+  assert.ok(found.includes("Get it done and off my list"));
   assert.ok(found.includes("Record"));
   assert.ok(found.includes("Write instead"));
   assert.ok(!found.includes("Do this"), "no move offered before the thread is ready");
@@ -102,7 +104,8 @@ test("Home is one Record button plus thread cards that say what Flow needs; the 
       nextTask: task,
       nextThread: b,
       levelLabel: "Starting point",
-      onRecord() {}, onWrite() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {},
+      suggestion: { title: "Health", prompt: "What's the one thing in health hanging over you?" },
+      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {},
       onOpenThread: (id) => opened.push(id),
     }),
   );
@@ -123,15 +126,18 @@ test("Home is one Record button plus thread cards that say what Flow needs; the 
   await act(async () => view.unmount());
 });
 
-test("an empty Home has nothing but the record button and an invitation", async () => {
+test("an empty Home is Flow's suggested prompt with one Record button", async () => {
   const view = await render(
     React.createElement(Home, {
       threads: [], tasks: [], levelLabel: "Me",
-      onRecord() {}, onWrite() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
+      suggestion: { title: "Money & bills", prompt: "What's the one thing in money & bills hanging over you?" },
+      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
     }),
   );
   const found = labels(view);
-  assert.deepEqual(found.sort(), ["Me", "Record", "Write instead"]);
-  assert.match(textOf(view), /What's on your mind\?/);
+  assert.deepEqual(found.sort(), ["Me", "Record", "Something else", "Write instead"]);
+  assert.match(textOf(view), /FLOW SUGGESTS/);
+  assert.match(textOf(view), /Money & bills/);
+  assert.doesNotMatch(textOf(view), /What's on your mind\?/);
   await act(async () => view.unmount());
 });
