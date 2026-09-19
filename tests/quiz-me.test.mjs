@@ -109,3 +109,21 @@ test("Me before the quiz is honest about what is not set", async () => {
   assert.match(text, /Pattern notices unlock at Momentum/);
   await act(async () => view.unmount());
 });
+
+test("a profile finished by an older build still gets the new funnel, and finishing stamps the funnel version", async () => {
+  const { FUNNEL_VERSION } = await import("../src/personality.ts");
+  let profile = { ...newProfile(), answers: Array(20).fill(3), completed: true, stage: "guide" };
+  const finished = [];
+  const props = () => ({ profile, onSave: async (p) => { profile = p; }, onFinish: async (p) => finished.push(p) });
+  assert.notEqual(profile.funnelVersion, FUNNEL_VERSION);
+  let view = await render(React.createElement(Quiz, { ...props(), profile: { ...profile, stage: "intro" } }));
+  assert.ok(labels(view).includes("Show me my Flow type"), "an already-answered quiz jumps to the reveal");
+  await press(view, "Show me my Flow type");
+  assert.equal(profile.stage, "results");
+  await act(async () => view.update(React.createElement(Quiz, props())));
+  await press(view, "Next");
+  await act(async () => view.update(React.createElement(Quiz, props())));
+  await press(view, "Start recording");
+  assert.equal(finished[0].funnelVersion, FUNNEL_VERSION);
+  await act(async () => view.unmount());
+});

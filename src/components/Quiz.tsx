@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { AREAS, ITEMS, type Profile } from "../personality.ts";
+import { AREAS, ITEMS, FUNNEL_VERSION, type Profile } from "../personality.ts";
 import { flowType } from "../flow-voice.ts";
 import { C } from "./theme.ts";
 
@@ -39,6 +39,7 @@ export default function Quiz({
       ...p,
       stage: "guide",
       completed: true,
+      funnelVersion: FUNNEL_VERSION,
       areas: Object.fromEntries(AREAS.map((a) => [a.id, selected.has(a.id) ? [AREA_ACTIVE] : ["Nothing current"]])),
     });
   return (
@@ -57,8 +58,16 @@ export default function Quiz({
           <Text style={s.body}>
             Say what's on your mind. Flow works out what it's about, asks you one thing at a time, and shows you a move when it's ready.
           </Text>
-          <Text style={s.body}>First, twenty quick taps so Flow knows how you tick.</Text>
-          <Primary label="Get to know me · 2 min" onPress={() => void onSave({ ...profile, stage: "assessment" })} busy={busy} />
+          <Text style={s.body}>
+            {answered === ITEMS.length
+              ? "Flow already has your twenty answers from before."
+              : "First, twenty quick taps so Flow knows how you tick."}
+          </Text>
+          <Primary
+            label={answered === ITEMS.length ? "Show me my Flow type" : "Get to know me · 2 min"}
+            onPress={() => void onSave({ ...profile, stage: answered === ITEMS.length ? "results" : "assessment" })}
+            busy={busy}
+          />
           <Secondary label="Skip for now" onPress={() => void finish(profile)} busy={busy} />
         </>
       )}

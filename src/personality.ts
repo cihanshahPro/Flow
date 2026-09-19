@@ -148,7 +148,10 @@ export type Profile = {
   completed?: boolean;
   // The chosen working step stays attached to the user’s route across reloads.
   activeTaskId?: string;
+  /** Which onboarding funnel this profile has been through. Build 12's quiz → reveal → plate is 2. */
+  funnelVersion?: number;
 };
+export const FUNNEL_VERSION = 2;
 export const newProfile = (): Profile => ({
   version: 1,
   answers: [],

@@ -29,7 +29,7 @@ import { syncProgress } from "./src/services/progress";
 import { processCapturedNote } from "./src/services/processing";
 import { syncReminders } from "./src/services/reminders";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
-import { newProfile, type Profile } from "./src/personality";
+import { newProfile, FUNNEL_VERSION, ITEMS, type Profile } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask } from "./src/task-flow";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
@@ -117,7 +117,8 @@ function Flow() {
     Promise.all([refresh(), loadProfile()])
       .then(async ([data, p]) => {
         setProfile(p);
-        setQuiz(!p.completed);
+        // Every device goes through the build-12 funnel once, whatever an older build saved.
+        setQuiz(p.funnelVersion !== FUNNEL_VERSION);
         await evaluateAll(data);
         setReady(true);
       })
@@ -344,7 +345,16 @@ function Flow() {
     );
 
   if (quiz) {
-    const stage = (QUIZ_STAGES as readonly string[]).includes(profile.stage) ? profile.stage : "areas";
+    const answered = profile.answers.filter((a) => Number.isInteger(a) && a >= 1 && a <= 5).length;
+    const fromOlderBuild = profile.funnelVersion !== FUNNEL_VERSION && !["assessment", "results", "areas"].includes(profile.stage);
+    // An older build's profile starts at the intro; if its quiz is already complete, the reveal comes right after.
+    const stage = fromOlderBuild
+      ? "intro"
+      : (QUIZ_STAGES as readonly string[]).includes(profile.stage)
+        ? profile.stage
+        : answered === ITEMS.length
+          ? "results"
+          : "intro";
     return (
       <SafeAreaView style={s.safe}>
         <StatusBar style="dark" />
