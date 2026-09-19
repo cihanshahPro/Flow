@@ -36,13 +36,23 @@ test("assessment advances through exact 20 answers, then choices build a map and
   for (let i = 0; i < 20; i++) await tap("Moderately accurate");
   assert.equal(profile.stage, "results");
   assert.equal(profile.answers.length, 20);
-  await tap("Start with smaller actions");
+  await tap("Use my recommended path");
   await tap("Build something");
+  await tap("Find work or clients");
+  assert.equal(profile.areaIndex, 0);
+  assert.deepEqual(profile.areas.work, [
+    "Build something",
+    "Find work or clients",
+  ]);
+  await tap("Continue with 2 selected");
   for (let i = 0; i < 5; i++) await tap("Nothing current");
   assert.equal(profile.stage, "map");
   assert.equal(view.root.findAllByType("TextInput").length, 0);
-  await tap("Talk about build something");
-  assert.equal(captured, "Work & making: Build something");
+  await tap("Walk me through this");
+  await tap("The task feels too big");
+  await tap("Record my first step");
+  assert.ok(captured.startsWith("Work & making: Build something"));
+  await tap("Back to my starting point");
   assert.equal(profile.completed, true);
   await tap("Remove personality answers");
   assert.deepEqual(profile.answers, []);

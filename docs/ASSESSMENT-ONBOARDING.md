@@ -11,3 +11,15 @@ Six life-area rounds are Flow's simplified adaptation of the GTD Incompletion Tr
 Progress saves before navigation. Resume, back, skip, retake, preference review and personality-answer removal are available. Existing notes, recordings and tasks are unaffected. Settings → My profile & life map reopens the funnel.
 
 Validation: strict TypeScript; 52 passing automated tests including keyed scoring, invalid input, full funnel UI, save failure, voice/draft/calendar regressions; iOS/Android/web exports; browser assessment completion and reload/resume. Physical iPhone microphone behavior remains a user-device check; this change reuses the existing recorder.
+
+## Build 07: multiple selections and guided follow-through
+
+Life areas now store multiple choices; legacy string selections remain readable without rewriting existing data. Tapping choices saves them immediately, and Continue advances only when the user is ready. Nothing current/Later explicitly replace that area's choices. All selected branches remain visible in an expandable map.
+
+Results now explain every trait in plain language and recommend one starting routine. The response-range cutoffs (<2.5, 2.5–<3.5, >=3.5) are descriptive product ranges, not population norms or personality types. Mini-IPIP interpretation must not imply normed categories: https://ipip.ori.org/InterpretingIndividualIPIPScaleScores.htm. The user can override small-action versus sequence presentation.
+
+The map leads with the first selected direction unless the user chooses another. This is explicitly not an urgency ranking. One obstacle question then leads to a specific starting plan and contextual recording prompt. Imagination changes concrete versus outcome-oriented prompts and obstacle choices; conscientiousness suggests presentation; other trait dimensions provide communication/routine suggestions in the expandable explanation. These mappings are Flow hypotheses, not validated prescriptions. No personality data is sent to the AI service.
+
+The obstacle-to-action step borrows the established if-then planning idea discussed in WOOP (https://woopmylife.org/en/practice). It is a simplified Flow adaptation, not the full validated WOOP exercise. No calendar commitments or messages are created automatically.
+
+Validation: 54 automated tests, strict TypeScript, full assessment → multiselect → map → obstacle → recording handoff; legacy selection compatibility and explicit preference precedence. Physical iPhone testing remains separate from export/browser checks.
