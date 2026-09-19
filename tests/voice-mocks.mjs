@@ -129,3 +129,35 @@ export class File {
     files.delete(this.uri);
   }
 }
+
+// Minimal Animated/Dimensions/Easing so decorative components render in tests.
+class AnimatedValue {
+  constructor(v) {
+    this.value = v;
+  }
+  setValue(v) {
+    this.value = v;
+  }
+  interpolate() {
+    return 0;
+  }
+}
+const animation = () => ({ start(cb) { cb?.({ finished: true }); }, stop() {} });
+export const Animated = {
+  Value: AnimatedValue,
+  View: "Animated.View",
+  Text: "Animated.Text",
+  timing: () => animation(),
+  parallel: () => animation(),
+};
+export const Easing = { in: (f) => f, quad: (x) => x };
+export const Dimensions = { get: () => ({ width: 390, height: 844 }) };
+export const Alert = { alert() {} };
+// expo-notifications is never exercised in tests; the planner is pure.
+export const SchedulableTriggerInputTypes = { DATE: "date" };
+export function setNotificationHandler() {}
+export async function getAllScheduledNotificationsAsync() { return []; }
+export async function cancelScheduledNotificationAsync() {}
+export async function getPermissionsAsync() { return { granted: false, canAskAgain: false }; }
+export async function requestPermissionsAsync() { return { granted: false, canAskAgain: false }; }
+export async function scheduleNotificationAsync() {}

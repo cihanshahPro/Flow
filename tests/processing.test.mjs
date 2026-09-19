@@ -134,3 +134,43 @@ test("typed thoughts keep context locally for AI and offline drafts without chan
   const unrelated = await createThoughtDraft("unrelated", transcript);
   assert.equal(unrelated.direction, undefined);
 });
+
+test("a processed recording opens a conversation: transcript, Flow's reply, and one question", async () => {
+  harness.reset();
+  const draft = await processVoiceNote(note);
+  const kinds = draft.messages.map((m) => `${m.from}:${m.kind}`);
+  assert.deepEqual(kinds, ["you:transcript", "flow:ack", "flow:question"]);
+  assert.equal(draft.messages[0].text, transcript);
+  assert.equal(draft.messages[0].noteId, note.id);
+  assert.equal(draft.threadPoints.length, 7);
+});
+
+test("the shaper's reply, question and grounded evidence shape Flow's turn; ungrounded evidence is ignored", async () => {
+  harness.reset();
+  harness.shape = {
+    ...shape,
+    reply: "Alex and the designer — got it.",
+    question: "When does the designer need the brief?",
+    points: [
+      { id: "people", evidence: "Call Alex" },
+      { id: "timing", evidence: "by next Tuesday" },
+    ],
+  };
+  const draft = await processVoiceNote(note);
+  assert.equal(draft.messages[1].text, "Alex and the designer — got it.");
+  assert.equal(draft.messages[2].text, "When does the designer need the brief?");
+  assert.equal(draft.threadPoints.find((p) => p.id === "people").state, "known");
+  assert.equal(draft.threadPoints.find((p) => p.id === "timing").state, "missing");
+});
+
+test("a new recording without a plan joins the open thread that shares its words", async () => {
+  harness.reset();
+  const first = await processVoiceNote(note);
+  harness.drafts = [first];
+  harness.notes = [];
+  const second = await processVoiceNote({ ...note, id: "recording-2", audioUri: "file://second.m4a" });
+  assert.equal(second.id, first.id, "same thread");
+  assert.deepEqual(second.sourceNoteIds, ["recording-2"]);
+  assert.equal(second.messages.filter((m) => m.kind === "transcript").length, 2);
+  assert.equal(second.source, first.source, "original words untouched");
+});

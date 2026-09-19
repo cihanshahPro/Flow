@@ -4,32 +4,29 @@
 
 Repository: https://github.com/cihanshahPro/Flow
 
-The handoff branch is `codex/final-thread-flow`. It contains the recording-first thread flow and is the branch to review before any release work. The protected baseline is `testing`; production/main is outside this handoff.
-
-Clone and create a personal working branch from the handoff branch:
+The baseline is `testing`. Test build 12 (the Flow loop: record → chat → move → level) was developed on `handoff/claude` and is proposed as a pull request into `testing`. Read in this order: [REQUIREMENTS.md](REQUIREMENTS.md) (what must be true), [SKELETON.html](SKELETON.html) (every screen, open it in a browser), [FLOW-LOOP.md](FLOW-LOOP.md) (how it works), then [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md).
 
 ```bash
 git clone https://github.com/cihanshahPro/Flow.git
 cd Flow
-git fetch origin codex/final-thread-flow
-git switch -c handoff/<your-name> --track origin/codex/final-thread-flow
+git switch -c handoff/<your-name> --track origin/testing
 npm ci
 npm run verify
 ```
 
-Work only on `handoff/<your-name>`. Push it and open a pull request into `codex/final-thread-flow`; do not push directly to `testing` or `main`. The owner can review and merge that PR after the testing build is checked. After merge, the owner promotes the reviewed commit to `testing` and runs the device checks below. Keep release/App Store work in a separate PR from product changes.
+Work only on your own branch and open a pull request into `testing`; never push to `testing` or `main` directly. Keep release/App Store work in a separate PR from product changes.
 
-The current user path is intentionally narrow: profile fingerprint → record a full dump → Flow transcribes and forms a thread → Flow asks one focused missing question → record the answer → only a ready thread can become goals. Do not reintroduce task lists, “mark done” steps, or open-ended classification during the dump/understanding stages. Read [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md) before changing routing or capture behavior.
+The rule of two: every screen has one primary button and at most one secondary link, and Flow decides with two chips. Do not reintroduce tabs, task lists, "mark done" during understanding, or open-ended classification. The old surfaces are kept in `ClassicFlow.tsx`, `PlanMap`, `TaskDetail` and `DraftReview` for reference only.
 
 Useful commands:
 
 ```bash
 npm run verify
-npx expo start --go --lan --port 8082
+npx expo start --go --lan --port 8083
 npx expo export --platform all --output-dir /tmp/flow-export
 ```
 
-The test Expo server is on the Mac mini at `10.0.0.152:8082`; use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only. Do not submit a build or merge into `main` as part of routine feature work.
+The test Expo server runs on the Mac mini at `10.0.0.152:8083` from `~/Library/Caches/Anchor/flow-build-12`; the voice processor runs from the same checkout with `node --env-file=.env.processor scripts/voice-server.mjs` and the shaper binary at `~/Library/Caches/Anchor/shape-thought` (compile with `swiftc -parse-as-library scripts/shape-thought.swift -o ~/Library/Caches/Anchor/shape-thought`). Use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only.
 
 ## Scope and boundary
 
@@ -58,8 +55,14 @@ TestFlight needs the owner's/friend's Expo account, paid Apple Developer members
 Run these on a real iPhone; automated checks or a JavaScript bundle alone do not verify microphone and calendar behavior. Record the device, iOS version, Expo Go/build version, and results.
 
 - [ ] Install dependencies, run typechecking and tests, then open the app through the documented Expo Go route.
-- [ ] Create a task, change its estimate and available-time filter, complete/reopen it, and verify the visible results.
-- [ ] Save a text thought. Fully close and reopen the app; confirm saved tasks and notes survive.
+- [ ] Go through the funnel: the twenty-statement test (no skip), the reveal without a four-letter code, the five profile questions, then the prompted first thread. Confirm `TEST 12` is visible.
+- [ ] Confirm Home shows a "Flow suggests" prompt from your profile, not a blank record button.
+- [ ] Record a dump. Confirm the thread opens with your transcript, Flow's reply and one question; the meter shows n/7; the recording plays back.
+- [ ] Record the answer. Confirm the meter rises, the celebration and emoji shower appear once, and one move is offered with exactly two chips.
+- [ ] Do this → Next card on Home. Done → Flow's note in the thread and the level pill changes. Confirm "Resolved / There's more" appears after the last move.
+- [ ] Record something unrelated; confirm a new thread. Record from inside a thread; confirm it appends.
+- [ ] Mention a date, then move the device clock past it and reopen; confirm one check-in with two chips and that a local reminder fired the morning after (permission prompt appears only then).
+- [ ] Save a written thought. Fully close and reopen the app; confirm threads, moves and levels survive.
 - [ ] Deny microphone permission and confirm a useful recovery message and usable text capture. Then enable permission and record, stop, save, and play a short clip.
 - [ ] Close and reopen after saving audio; replay the same clip. Test an interruption/phone lock during recording and verify the app's result matches its message. Do not assume background recording support.
 - [ ] After loading the development bundle, disconnect networking and repeat text/task/audio saves. Reconnect before reloading from the development server.

@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow Skeleton</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  :root {
+    --paper: #F6F7FA; --ink: #142138; --muted: #5E6B80; --line: #DCE1EA; --blue: #345BEE; --blue-soft: #EAEFFF;
+    --lime: #DFF586; --white: #FFFFFF; --warn: #B86A1E; --warn-soft: #FBEEDD; --bad: #B44343; --bad-soft: #F8E3E3; --ok: #2F7D4F; --ok-soft: #E1F2E7;
+    --screen: #FFFFFF; --frame: #142138;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0F1420; --ink: #EEF1F7; --muted: #A5B0C3; --line: #2A3347; --blue: #7B95FF; --blue-soft: #1B2447;
+      --lime: #B9D45E; --white: #171D2B; --warn: #E0A15C; --warn-soft: #3A2B16; --bad: #E58686; --bad-soft: #3A1C1C; --ok: #7BCB97; --ok-soft: #173224;
+      --screen: #171D2B; --frame: #3A4460;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0F1420; --ink: #EEF1F7; --muted: #A5B0C3; --line: #2A3347; --blue: #7B95FF; --blue-soft: #1B2447;
+    --lime: #B9D45E; --white: #171D2B; --warn: #E0A15C; --warn-soft: #3A2B16; --bad: #E58686; --bad-soft: #3A1C1C; --ok: #7BCB97; --ok-soft: #173224;
+    --screen: #171D2B; --frame: #3A4460;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Source Sans 3", "Helvetica Neue", Arial, sans-serif; font-size: 16px; line-height: 1.5; padding: 0 20px; padding-block: 28px 64px; }
+  h1, h2, h3 { font-family: Manrope, "Helvetica Neue", Arial, sans-serif; text-wrap: balance; margin: 0; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+  h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+  h3 { font-size: 15px; font-weight: 700; }
+  .lede { max-width: 62ch; color: var(--muted); margin: 10px 0 0; }
+  .eyebrow { font-family: "JetBrains Mono", Menlo, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; max-width: 1180px; margin: 0 auto 28px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+  .chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .ok { background: var(--ok-soft); color: var(--ok); }
+  .warn { background: var(--warn-soft); color: var(--warn); }
+  .bad { background: var(--bad-soft); color: var(--bad); }
+  .stage { max-width: 1180px; margin: 0 auto 40px; }
+  .stage > .head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .stage > .head p { margin: 0; color: var(--muted); max-width: 70ch; }
+  .rail { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 18px; }
+  .screen { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; }
+  .screen .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .screen .meta h3 { font-size: 14px; }
+  .phone { background: var(--screen); border: 3px solid var(--frame); border-radius: 26px; padding: 14px 12px; min-height: 360px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; line-height: 1.35; }
+  .phone .k { font-family: "JetBrains Mono", Menlo, monospace; font-size: 9px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
+  .phone .h { font-family: Manrope, sans-serif; font-weight: 800; font-size: 16px; line-height: 1.2; letter-spacing: -0.01em; }
+  .phone .p { color: var(--muted); }
+  .phone .btn { background: var(--blue); color: #fff; text-align: center; border-radius: 12px; padding: 9px 8px; font-weight: 700; }
+  .phone .btn.lime { background: var(--lime); color: #142138; }
+  .phone .link { color: var(--blue); text-align: center; font-weight: 600; }
+  .phone .opt { border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; }
+  .phone .opt.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .phone .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .phone .chips span { border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 600; }
+  .phone .chips span.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .phone .bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .phone .bar i { display: block; height: 100%; background: var(--blue); }
+  .phone .card { border: 1px solid var(--line); border-radius: 12px; padding: 8px 9px; display: flex; flex-direction: column; gap: 5px; }
+  .phone .card.dark { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .phone .you { align-self: flex-end; background: var(--blue); color: #fff; border-radius: 12px 12px 3px 12px; padding: 6px 9px; max-width: 88%; }
+  .phone .flow { align-self: flex-start; background: var(--paper); border-radius: 12px 12px 12px 3px; padding: 6px 9px; max-width: 88%; }
+  .phone .flow.hype { background: var(--lime); color: #142138; font-weight: 700; }
+  .phone .flow.offer { background: var(--blue-soft); border: 1px solid var(--line); }
+  .phone .row { display: flex; gap: 6px; justify-content: space-between; align-items: center; }
+  .phone .pill { border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 700; }
+  .phone .spacer { flex: 1; }
+  .phone .tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); padding-top: 6px; margin: 4px -4px -6px; font-size: 9.5px; text-align: center; color: var(--muted); font-weight: 600; }
+  .phone .tabs b { color: var(--blue); font-weight: 800; }
+  .note { font-size: 13px; color: var(--muted); margin: 0; }
+  .note strong { color: var(--ink); font-weight: 600; }
+  .gaps { max-width: 1180px; margin: 0 auto; }
+  .gaps table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  .gaps th { text-align: left; font-family: "JetBrains Mono", Menlo, monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+  .gaps td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .gaps td:first-child { white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+  .flowline { max-width: 1180px; margin: 0 auto 36px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: "JetBrains Mono", Menlo, monospace; font-size: 12px; }
+  .flowline b { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-weight: 500; }
+  .flowline i { color: var(--muted); font-style: normal; }
+  @media (prefers-reduced-motion: no-preference) { .phone { transition: transform .15s ease; } .phone:hover { transform: translateY(-2px); } }
+</style>
+</head><body>
+
+<header>
+  <div>
+    <div class="eyebrow">Test build 12 · branch handoff/claude · PR #13</div>
+    <h1>Flow Skeleton</h1>
+    <p class="lede">Every screen in the app, in the order a new user meets them, with what's behind each one and what's still missing. Copy on the screens is the real copy from the build.</p>
+  </div>
+  <div class="legend">
+    <span class="chip ok">Built · tested in code</span>
+    <span class="chip ok">Verified on the iOS simulator</span><span class="chip warn">Needs a physical iPhone (mic, playback, notifications, calendar)</span>
+    <span class="chip bad">Missing or thin</span>
+  </div>
+</header>
+
+<div class="flowline">
+  <b>Test (20 taps)</b><i>→</i><b>Reveal</b><i>→</i><b>Profile (5 taps)</b><i>→</i><b>First thread (prompted)</b><i>→</i><b>Today: Flow suggests</b><i>→</i><b>Thread chat: 1 question + suggestions</b><i>→</i><b>Move: When → What</b><i>→</i><b>Next card → Done</b><i>→</i><b>Level up (Progress)</b><i>↺ check-ins</i>
+</div>
+
+<section class="stage">
+  <div class="head"><h2>1 · The funnel</h2><p>Runs once on every device, top to bottom, nothing skippable. Basis: Mini-IPIP (Big Five) for the test; GTD areas-of-focus for the profile taps.</p></div>
+  <div class="rail">
+    <div class="screen">
+      <div class="meta"><h3>Intro</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="h">flow.</span><span class="k">TEST 12</span></div>
+        <div class="spacer"></div>
+        <div class="h">Record it once. Flow keeps the thread.</div>
+        <div class="p">First, a two-minute personality test. Flow uses it to decide how to talk to you and which question to ask first.</div>
+        <div class="btn">Start the test</div>
+      </div>
+      <p class="note">One button. The build tag tells you which bundle you're on.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Test</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="k">7 of 20</div>
+        <div class="bar"><i style="width:35%"></i></div>
+        <div class="h">Am not interested in other people's problems.</div>
+        <div class="opt">Not me</div><div class="opt">Not really</div><div class="opt on">Somewhat</div><div class="opt">Mostly</div><div class="opt">Very me</div>
+        <div class="link">Back</div>
+      </div>
+      <p class="note">Twenty statements, five taps each. No skip.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Reveal</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="k">Your Flow type</div>
+        <div class="h">You're a Steward.</div>
+        <div class="p">You like a clear order and a quiet finish line.</div>
+        <div><strong>Flow will keep the sequence and tell you exactly what's next.</strong></div>
+        <div class="p" style="font-size:10.5px">Adapted from the Big Five (Mini-IPIP). It shapes how Flow talks to you, never what you have to do.</div>
+        <div class="spacer"></div>
+        <div class="btn">Build my profile</div>
+      </div>
+      <p class="note">Catalyst · Steward · Architect · Coordinator. Sets Flow's voice, question order, emoji.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Profile 1 of 5</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="k">Your profile · 1 of 5</div>
+        <div class="h">What's taking up space in your head right now?</div>
+        <div class="p">Tap everything that applies.</div>
+        <div class="chips"><span class="on">Work project</span><span>Job or clients</span><span class="on">Money &amp; bills</span><span>Paperwork or legal</span><span>Health</span><span>Home &amp; repairs</span><span>Family</span><span>Relationship</span><span>Studying</span><span>A side project</span><span>Moving or travel</span></div>
+        <div class="spacer"></div>
+        <div class="btn">Next</div>
+      </div>
+      <p class="note">Then: <strong>who's in the picture</strong> (people + add a name), <strong>when you get time</strong> (one answer), <strong>what gets in the way</strong>, <strong>anything dated</strong>.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Profile 4 of 5</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="k">Your profile · 4 of 5</div>
+        <div class="h">What usually gets in the way?</div>
+        <div class="p">Flow will ask about these first when a thread stalls.</div>
+        <div class="chips"><span class="on">Not enough time</span><span>Don't know where to start</span><span class="on">Waiting on other people</span><span>Money</span><span>Energy or motivation</span><span>Too many things at once</span><span>I forget</span></div>
+        <div class="spacer"></div>
+        <div class="btn">Next</div>
+        <div class="link">Back</div>
+      </div>
+      <p class="note">These become the suggested answers to "what's in the way?" later.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>First thread</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="k">Your first thread</div>
+        <div class="h">Let's start with work project.</div>
+        <div class="p">Tell me about work project: where it stands, what you'd want to come out of it, who's involved, and what's in the way. Don't organise it — just talk.</div>
+        <div class="spacer"></div>
+        <div class="btn">● Record</div>
+        <div class="link">or write it down</div>
+      </div>
+      <p class="note">The first dump is prompted from your top area — never "record whatever".</p>
+    </div>
+  </div>
+</section>
+
+<section class="stage">
+  <div class="head"><h2>2 · Navigation — four tabs</h2><p>Tinder / RizzMaster structure: a bottom bar with four places, always visible after the funnel. Each tab has one primary action; nothing inside a tab asks you to classify anything.</p></div>
+  <div class="rail">
+    <div class="screen">
+      <div class="meta"><h3>Today</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="h">Today</span><span class="pill">Building</span></div>
+        <div class="card dark"><div class="k" style="color:#B9C3DD">Next</div><div class="h">This evening → Dig out the receipts</div><div class="btn lime">Done ✓</div></div>
+        <div class="card"><div class="k" style="color:var(--blue)">Flow suggests</div><div class="h">Health</div><div class="btn">● Record</div></div>
+        <div class="k">Needs you</div>
+        <div class="card"><strong>Website for the new client</strong><div style="color:var(--blue);font-weight:600">Flow has a question</div></div>
+        <div class="spacer"></div>
+        <div class="tabs"><b>Today</b><span>Threads</span><span>Progress</span><span>Profile</span></div>
+      </div>
+      <p class="note">Your one Next move, Flow's suggested recording, and only the threads that need you right now.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Threads</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="h">Threads</span><span class="pill">3 open</span></div>
+        <div class="card"><strong>Tax filing before Friday</strong><div class="p">In motion</div><div class="bar"><i style="width:86%"></i></div></div>
+        <div class="card"><strong>Website for the new client</strong><div style="color:var(--blue);font-weight:600">Flow has a question</div><div class="bar"><i style="width:43%"></i></div></div>
+        <div class="card"><strong>Dentist for the kids</strong><div class="p">Flow is working on this</div><div class="bar"><i style="width:29%"></i></div></div>
+        <div class="card" style="opacity:.55"><strong>Garage</strong><div class="p">Parked</div></div>
+        <div class="spacer"></div>
+        <div class="btn">● New thread</div>
+        <div class="tabs"><span>Today</span><b>Threads</b><span>Progress</span><span>Profile</span></div>
+      </div>
+      <p class="note">Every conversation, like Tinder's chats list. Needs-you first, then active, then parked and done.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Progress</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="h">Progress</span></div>
+        <div class="card"><div class="k">Your level</div><div class="h">Building</div><div class="bar"><i style="width:33%"></i></div><div class="p">2 more to Momentum</div></div>
+        <div class="row"><span class="card" style="flex:1"><strong>1</strong><div class="p">moves done</div></span><span class="card" style="flex:1"><strong>1</strong><div class="p">threads understood</div></span><span class="card" style="flex:1"><strong>0</strong><div class="p">check-ins kept</div></span></div>
+        <div class="k">Ladder</div>
+        <div class="p">✓ Starting point · <strong>● Building</strong> · Momentum (3) · Follow-through (7) · Mastery (15)</div>
+        <div class="k">Lately</div>
+        <div class="flow hype">✔️📈 Done and logged.</div>
+        <div class="spacer"></div>
+        <div class="tabs"><span>Today</span><span>Threads</span><b>Progress</b><span>Profile</span></div>
+      </div>
+      <p class="note">RizzMaster's levels screen: the ladder, what counts, and Flow's recent gas-ups in one place. Patterns unlock here at Momentum.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Profile</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="h">Profile</span></div>
+        <div class="card"><div class="k">Your Flow type</div><div class="h">Steward</div><div class="p">You like a clear order and a quiet finish line.</div></div>
+        <div class="card"><div class="k">On your plate</div><div class="chips"><span>Work project</span><span>Money &amp; bills</span></div><div class="p">People: Partner, Sam · Time: Evenings · In the way: Not enough time</div><div class="link" style="text-align:left">Edit</div></div>
+        <div class="card"><div class="k">Tell Flow something</div><div class="btn" style="padding:6px">Record feedback</div></div>
+        <div class="link">Redo the test</div>
+        <div class="spacer"></div>
+        <div class="tabs"><span>Today</span><span>Threads</span><span>Progress</span><b>Profile</b></div>
+      </div>
+      <p class="note">Who Flow thinks you are and what it knows — editable, so the profile is a living thing, not a one-time quiz.</p>
+    </div>
+  </div>
+</section>
+
+<section class="stage">
+  <div class="head"><h2>3 · Today, in detail</h2><p>No tabs. One suggestion, one button, the threads Flow made. Level pill opens Me.</p></div>
+  <div class="rail">
+    <div class="screen">
+      <div class="meta"><h3>Home · first visit</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="h">flow. <span class="k">TEST 12</span></span><span class="pill">Starting point</span></div>
+        <div class="card">
+          <div class="k" style="color:var(--blue)">Flow suggests</div>
+          <div class="h">Money &amp; bills</div>
+          <div class="p">What's the one thing in money &amp; bills hanging over you? Say where it stands, what you'd want out of it, who's involved, and what's in the way.</div>
+          <div class="btn">● Record</div>
+          <div class="link">write it down · something else</div>
+        </div>
+        <div class="k">Your threads</div>
+        <div class="card"><div><strong>Website for the new client</strong></div><div style="color:var(--blue);font-weight:600">Flow has a question</div><div class="bar"><i style="width:43%"></i></div></div>
+      </div>
+      <p class="note">Suggestion = first profile area with no thread yet. Cards show what Flow needs from you.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Home · with a Next card</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="h">flow.</span><span class="pill">Building</span></div>
+        <div class="card dark">
+          <div class="k" style="color:#B9C3DD">Next</div>
+          <div class="h">This evening → Dig out the receipts</div>
+          <div style="color:#B9C3DD;font-size:11px">from "Tax filing before Friday"</div>
+          <div class="btn lime">Done ✓</div>
+          <div class="link">Put it on my calendar</div>
+        </div>
+        <div class="card"><div class="k" style="color:var(--blue)">Flow suggests</div><div class="h">Health</div><div class="btn">● Record</div></div>
+        <div class="k">Your threads</div>
+        <div class="card"><div><strong>Tax filing before Friday</strong></div><div class="p">In motion</div><div class="bar"><i style="width:86%"></i></div></div>
+      </div>
+      <p class="note">Only one Next card at a time. Done and calendar — nothing else to manage.</p>
+    </div>
+  </div>
+</section>
+
+<section class="stage">
+  <div class="head"><h2>4 · A thread</h2><p>A chat with Flow. Basis: WOOP (Wish → Outcome → Obstacle → Plan) for the question order; implementation intentions ("When → What") for the moves.</p></div>
+  <div class="rail">
+    <div class="screen">
+      <div class="meta"><h3>After the dump</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><strong>Tax filing before Friday</strong><span class="link">Done</span></div>
+        <div class="card"><div class="row"><span class="k">What Flow has</span><span><strong>3/7</strong></span></div><div class="bar"><i style="width:43%"></i></div></div>
+        <div class="you">I keep putting off the tax filing. My accountant needs the receipts and I want to get it done before Friday.</div>
+        <div class="flow">Logged. Here's what I have so far.</div>
+        <div class="flow">You said "get it done before Friday". What's most likely to get in the way?</div>
+        <div class="chips"><span>Not enough time</span><span>Waiting on other people</span><span>Nothing I can see</span></div>
+        <div class="spacer"></div>
+        <div class="btn">● Record the answer</div>
+      </div>
+      <p class="note">Transcript, Flow's reply, the meter, one question quoting your outcome, suggested answers from <em>your</em> profile. Tap one or record.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Ready → a move</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="card"><div class="row"><span class="k">What Flow has</span><span><strong>6/7</strong></span></div><div class="bar"><i style="width:86%"></i></div></div>
+        <div class="you">Waiting on other people</div>
+        <div class="flow">Good. That's another point confirmed.</div>
+        <div class="flow hype">✅🧭 Clear picture. Solid work.</div>
+        <div class="flow offer"><div class="k" style="color:var(--blue)">A move for this</div><strong>This evening → Dig out the receipts</strong><div class="chips" style="margin-top:4px"><span class="on">Do this</span><span>Not now</span></div></div>
+        <div class="spacer"></div>
+        <div class="btn">● Record</div>
+      </div>
+      <p class="note">Emoji shower on the celebration. The move is placed in the time window you gave Flow.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Check-in later</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="flow hype">✔️📈 Done and logged.</div>
+        <div class="flow hype">🏆 Building. Consistent.</div>
+        <div class="flow">It's past Friday — did that part happen?</div>
+        <div class="chips"><span class="on">Yes 🎉</span><span>Not yet</span></div>
+        <div class="flow" style="opacity:.6">That was the last move I had. Is this whole thing resolved now?</div>
+        <div class="chips" style="opacity:.6"><span class="on">Resolved 🎉</span><span>There's more</span></div>
+        <div class="spacer"></div>
+        <div class="btn">● Record</div>
+      </div>
+      <p class="note">Flow re-reads threads on open, on foreground, every 15 min. Dates passed, slipped moves, quiet threads → one two-chip question. A thread closes only when you say <strong>Resolved</strong>.</p>
+    </div>
+    <div class="screen">
+      <div class="meta"><h3>Me</h3><span class="chip ok">simulator ✓</span></div>
+      <div class="phone">
+        <div class="row"><span class="link">‹ Home</span><span class="k">Me</span></div>
+        <div class="card"><div class="k">Your Flow type</div><strong>Steward</strong><div class="link" style="text-align:left">Redo the test and profile</div></div>
+        <div class="card"><div class="k">Your level</div><strong>Building</strong><div class="bar"><i style="width:33%"></i></div><div class="p">2 more to Momentum. No streaks, nothing expires.</div><div class="row"><span><strong>1</strong> moves</span><span><strong>1</strong> threads</span><span><strong>0</strong> check-ins</span></div></div>
+        <div class="card"><div class="k">What Flow knows</div><div class="chips"><span>Work project</span><span>Money &amp; bills</span></div><div class="p">People: Partner, Sam · Your time: Evenings</div></div>
+        <div class="card"><div class="k">Tell Flow something</div><div class="btn" style="padding:6px">Record feedback</div></div>
+      </div>
+      <p class="note">The trust layer. Patterns unlock at Momentum.</p>
+    </div>
+  </div>
+</section>
+
+<section class="gaps">
+  <div class="head" style="margin-bottom:12px"><h2>What's still missing or thin</h2></div>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Status</th><th>Gap</th><th>What it means for you</th><th>Plan</th></tr>
+    <tr><td><span class="chip ok">done</span></td><td>Four-tab navigation (Today · Threads · Progress · Profile)</td><td>Bottom tab bar after the funnel; Today = Next card + Flow suggests + needs-you; Threads = all conversations; Progress = ladder + counters + gas-ups; Profile = type + editable plate + feedback</td><td>Verify on the simulator</td></tr>
+    <tr><td><span class="chip ok">done</span></td><td>Walked end to end on an iPhone 17 simulator (iOS 26.5) with the real Mac mini AI</td><td>Funnel → dump → reply → question with suggestions → move → Next card → Done → level-up → Resolved. Two native bugs found and fixed (close control under Expo Go's dev button; accepted moves creating no task)</td><td>Physical iPhone still owns: microphone, playback, the emoji shower's motion, notifications, calendar</td></tr>
+    <tr><td><span class="chip bad">thin</span></td><td>The Mac mini's AI doesn't see your profile yet</td><td>Its reply and question are grounded in your words, but not in your people, obstacles or time window — the profile only shapes the template questions and suggestion chips</td><td>Send the plate to the shaper; let it phrase the question with your obstacles and people</td></tr>
+    <tr><td><span class="chip bad">thin</span></td><td>Suggested answers for "outcome" are generic</td><td>The four outcome chips are the same for everyone; people, obstacles and timing chips are yours</td><td>Derive outcome chips from the thread's own sentences via the shaper</td></tr>
+    <tr><td><span class="chip warn">partial</span></td><td>"Hourly" evaluation only runs while the app is open</td><td>Expo Go has no background execution; local notifications nudge you the morning after a date instead</td><td>A small server job when the processor leaves the Mac mini</td></tr>
+    <tr><td><span class="chip warn">partial</span></td><td>Patterns are noticed, not offered</td><td>Me says "X came up in 3 threads"; Flow never offers it as a routine</td><td>Offer a routine as a two-chip question once a pattern repeats 3+ times</td></tr>
+    <tr><td><span class="chip warn">partial</span></td><td>Kept notes have no home</td><td>Old Library notes stay saved but there's no screen for them; feedback has one under Me</td><td>A "Kept" list under Me if you still want it — or drop Library for good</td></tr>
+    <tr><td><span class="chip ok">done</span></td><td>Old threads on your phone</td><td>Threads saved by the previous build now get Flow's conversation backfilled from their words, so they don't open empty</td><td>—</td></tr>
+    <tr><td><span class="chip ok">done</span></td><td>Old profile on your phone</td><td>The funnel is versioned; every device goes through the new one once regardless of what the old build saved</td><td>—</td></tr>
+  </table>
+  </div>
+</section>
+
+</body></html>

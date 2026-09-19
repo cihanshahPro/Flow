@@ -1,6 +1,8 @@
 import type { DirectionContext, Task, Topic } from "./model.ts";
 import { localDate } from "./model.ts";
 import { extractContactDetails, deviceTimeZone } from "./calendar-model.ts";
+import { fingerprint, missingQuestions, isReady } from "./thread.ts";
+import { DEFAULT_MODE } from "./flow-voice.ts";
 
 export type DraftStep = {
   id: string;
@@ -44,36 +46,49 @@ export type ThoughtDraft = {
   goalsReady?: boolean;
   goalIds?: string[];
   level?: number;
+  /** Conversation with Flow. See src/thread.ts; all fields stay optional. */
+  messages?: ThreadMessage[];
+  stage?: ThreadStage;
+  dueHints?: DueHint[];
+  hypeGiven?: string[];
+  declinedStepIds?: string[];
+  lastEvaluatedAt?: string;
+  lastOpenedAt?: string;
+  /** Set only when the person confirms the whole thread is resolved. */
+  resolvedAt?: string;
+};
+export type ThreadStage = "dumped" | "understood" | "moving" | "done" | "parked";
+export type DueHint = { date: string; phrase: string };
+export type ThreadChip = { id: string; label: string };
+export type ThreadMessage = {
+  id: string;
+  from: "flow" | "you";
+  kind:
+    | "transcript"
+    | "ack"
+    | "question"
+    | "hype"
+    | "offer"
+    | "checkin"
+    | "stale"
+    | "reply";
+  text: string;
+  createdAt: string;
+  noteId?: string;
+  pointId?: string;
+  stepId?: string;
+  taskId?: string;
+  chips?: ThreadChip[];
+  /** Chip id or note id that answered this message. */
+  answered?: string;
 };
 
 /** Ask for one missing fingerprint feature at a time, without creating tasks. */
 export function missingThreadPoints(source: string): string[] {
-  const text = source.replace(/\s+/g, " ").trim();
-  const hasOutcome = /\b(want|need|goal|build|make|finish|complete|resolve|apply|deal with|figure out|follow up|schedule|create|start|stop)\b/i.test(text);
-  const hasTiming = /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week|\b\d{1,2}[/:.-]\d{1,2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b\d{4}\b)\b/i.test(text);
-  const hasPeople = /\b(i alone|just me|no one else|my lawyer|my doctor|my friend|my partner|my client|with [A-Z][a-z]+|[A-Z][a-z]+ and I)\b/i.test(text);
-  const hasConstraint = /\b(because|but|can't|cannot|won't|waiting|budget|money|deadline|blocked|depends|after|before|unless|limited)\b/i.test(text);
-  const missing: string[] = [];
-  if (!hasOutcome) missing.push("What result would make this thread feel resolved?");
-  if (!hasTiming) missing.push("Is there a real date or time Flow should keep with this thread?");
-  if (!hasPeople) missing.push("Who else is involved, if anyone?");
-  if (!hasConstraint) missing.push("What could block this, or what should Flow keep in mind?");
-  return missing;
+  return missingQuestions(fingerprint(source), DEFAULT_MODE);
 }
 export function threadFingerprint(source: string): ThreadPoint[] {
-  const missing = new Set(missingThreadPoints(source));
-  const points: Array<[string, string, string]> = [
-    ["outcome", "Outcome", "What result would make this thread feel resolved?"],
-    ["timing", "Timing", "Is there a real date or time Flow should keep with this thread?"],
-    ["people", "People", "Who else is involved, if anyone?"],
-    ["constraints", "Constraints", "What could block this, or what should Flow keep in mind?"],
-  ];
-  return points.map(([id, label, question]) => ({
-    id,
-    label,
-    state: missing.has(question) ? "missing" : "known",
-    ...(missing.has(question) ? { value: question } : {}),
-  }));
+  return fingerprint(source);
 }
 const actionStart =
   /^(?:i (?:need|want|have) to |(?:we|i) should |let'?s |please )?(?:call|email|ask|send|finish|start|build|make|choose|pick|book|find|write|prepare|follow up|check|review|talk|contact|collect|buy|research|schedule|create|apply|visit|read|plan|update|design|test|record)\b/i;
@@ -85,6 +100,8 @@ export function suggestDraft(
   const source = text.trim();
   if (!source || source.length > 20000)
     throw new Error("Use between 1 and 20,000 characters.");
+  const points = fingerprint(source);
+  const missing = missingQuestions(points, DEFAULT_MODE);
   const sentences = source
     .split(/(?:\n+|[.!?]+\s+|;\s*|,?\s+then\s+)/i)
     .map((s) =>
@@ -127,10 +144,11 @@ export function suggestDraft(
     })),
     state: "draft",
     createdAt: now.toISOString(),
-    threadStatus: "dumped",
-    goalsReady: false,
-    missingPoints: missingThreadPoints(source),
-    threadPoints: threadFingerprint(source),
+    // A first dump that already answers every point is ready; nothing forces a second recording.
+    threadStatus: isReady(points) ? "ready" : "dumped",
+    goalsReady: isReady(points),
+    missingPoints: missing,
+    threadPoints: points,
   };
 }
 export function refineDraft(draft: ThoughtDraft, update: string): ThoughtDraft {
@@ -271,6 +289,36 @@ export function shapedDraft(
   };
 }
 
+/** Flow's own words from the shaper: a short reply, one question, and grounded evidence per point. */
+export type ShapedVoice = {
+  reply?: string;
+  question?: string;
+  evidence: Partial<Record<string, string>>;
+};
+export function shapedVoice(value: unknown, source: string): ShapedVoice {
+  const out: ShapedVoice = { evidence: {} };
+  if (!value || typeof value !== "object") return out;
+  const plan = value as Record<string, unknown>;
+  const bounded = (v: unknown, max: number) =>
+    typeof v === "string" && v.trim().length > 0 && v.trim().length <= max ? v.trim() : "";
+  const reply = bounded(plan.reply, 200);
+  const question = bounded(plan.question, 160);
+  // A reply must not smuggle in advice or facts: keep it short and free of URLs.
+  if (reply && !/https?:\/\//i.test(reply)) out.reply = reply;
+  if (question && /\?$/.test(question)) out.question = question;
+  const normalized = source.replace(/\s+/g, " ").toLowerCase();
+  if (Array.isArray(plan.points)) {
+    for (const raw of plan.points.slice(0, 7)) {
+      if (!raw || typeof raw !== "object") continue;
+      const id = bounded((raw as Record<string, unknown>).id, 20).toLowerCase();
+      const evidence = bounded((raw as Record<string, unknown>).evidence, 200).replace(/^["“]|["”]$/g, "");
+      if (id && evidence && normalized.includes(evidence.replace(/\s+/g, " ").toLowerCase()))
+        out.evidence[id] = evidence;
+    }
+  }
+  return out;
+}
+
 /** Attach a saved update to its existing plan without changing original words or chosen IDs. */
 export function appendPlanUpdate(
   plan: ThoughtDraft,
@@ -288,15 +336,15 @@ export function appendPlanUpdate(
           plan.steps.filter((step) => !step.accepted && !step.deferred).length,
       ),
     );
-  const combined = [plan.source, ...plan.updates, update.source].join("\n\n");
-  const missingPoints = missingThreadPoints(combined);
+  const points = fingerprint(update.source, plan.threadPoints, update.id);
+  const missingPoints = missingQuestions(points, DEFAULT_MODE);
   return {
     ...plan,
     state: "draft",
-    threadStatus: missingPoints.length ? "understanding" : "ready",
-    goalsReady: missingPoints.length === 0,
+    threadStatus: isReady(points) ? "ready" : "understanding",
+    goalsReady: isReady(points),
     missingPoints,
-    threadPoints: threadFingerprint(combined),
+    threadPoints: points,
     sourceNoteIds: [...(plan.sourceNoteIds ?? []), update.id],
     updates: [...plan.updates, update.source],
     steps: [

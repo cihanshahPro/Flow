@@ -1,12 +1,46 @@
 # Validation record — September 18, 2026
 
+## Test build 12 — iOS simulator walkthrough (2026-09-19)
+
+Run by Claude on the Mac mini: Xcode 26.6, iOS 26.5 simulator runtime, "Flow iPhone" (iPhone 17), Expo Go SDK 57 from the `10.0.0.153:8083` dev server, the real voice processor and Apple Foundation Models shaper on the same machine. Driven over SSH with `idb` (taps, text, accessibility tree, screenshots). Text input only: the simulator's recorder cannot prepare an audio session (`AudioRecordingException: Failed to prepare recorder`), so the microphone path remains a physical-device check.
+
+Verified on the simulator, in this order:
+
+- Intro shows `TEST 12`; the test cannot be skipped; twenty taps produce the reveal ("You're a Catalyst.") with no four-letter code.
+- Five profile questions save on every tap (areas, Partner, Evenings, two obstacles, dated soon); "Let's start with money & bills." with one Record button and a write link.
+- A written dump goes to the Mac mini: title "Get receipts for tax filing", Flow's reply from the shaper, 6/7, celebration, a move "This evening → …" with Do this / Not now, and the Building level-up in the thread. The reminder permission prompt appears here because a date was mentioned.
+- A 4/7 dump ("mum's birthday dinner") gets the WOOP outcome question quoting the person's sentence with four suggested answers; tapping one adds the reply bubble, reaches 5/7, celebrates once, and offers a move.
+- Do this creates the task and the Next card on Today with Done and "Put it on my calendar" (after the fix below). Done leaves Flow's note and the Follow-through level-up in the thread and asks "Is this whole thing resolved?"; Resolved closes the thread ("Thread closed"), and the Threads tab shows it done.
+- Today suggests the next uncovered profile area (Health once Money & bills had a thread; "Anything new?" once all were covered). Threads orders needs-you first and badges the count. Progress shows the level, counters and ladder. Profile shows the type, the plate and Edit. Reload keeps everything.
+
+Fixed during the walkthrough:
+
+- The thread's close control sat under Expo Go's floating dev button; it is now "‹ Back" at the top-left and all tab headers keep the top-right clear.
+- Accepting a move created no task on native: the accepted flag was saved before `acceptStep` looked for the step, and a move created in the same turn (`auto-next`) was not in the saved draft yet. The app now saves the new step, runs `acceptStep`, writes the task directly if the exclusive transaction produced none, and `evaluateAll` repairs any accepted step without a task.
+- The shaper's title is kept even when its moves fail grounding; move titles stop at the reason clause and drop "I will"; the moment named in the step ("Tomorrow morning", "On Saturday morning") wins over the profile time window.
+
+Not verified: microphone recording and playback, the emoji shower's motion, notification delivery, Apple Calendar from the Next card. Note for testers: `simctl openurl` with the same project URL does not reload the JavaScript — terminate Expo Go or use the dev menu's Reload.
+
+## Test build 12 — the Flow loop
+
+Completed on this Mac (Node 22, macOS 26) on 2026-09-19:
+
+- Strict TypeScript typecheck and all 193 automated tests pass (`npm run verify`). New coverage: thread fingerprint, routing, Flow's turn, chips, check-ins, parking, resolved, patterns, modes, reminders planner, processing with shaper reply/question/evidence, and rendered Home / thread chat / quiz / Me asserting the rule of two.
+- Expo Doctor: 21/21 checks passed. iOS, Android and web bundles exported with Expo SDK 57.
+- Browser walkthrough at 390×844 (React Native Web): intro → twenty taps → "You're a Steward" → plate chips → Home with one Record button → written dump → transcript, reply and one question at 3/7 → written answer → 6/7, celebration, one move with two chips → Do this → Next card → Done → Flow's note and level pill "Building" → second unrelated dump created a separate thread → Me showed type, level counters, plate and unlock notice. State survived a page reload.
+- The extended Swift shaper compiled on the Mac mini (Swift 6.2, macOS 26.5) and returned reply, question, grounded points and choices for a sample input through Apple Foundation Models.
+
+Also corrected: the `testing` branch did not typecheck (a stray `src/processing.ts` from commit 8b57c1c) and the missing-question wiring had been dropped; both fixed in this build's first commit.
+
+Not verified: physical-iPhone microphone recording through the new capture sheet, audio playback inside chat bubbles, the emoji shower animation on device, local notification delivery, and Apple Calendar from the Next card. React Native Web checks do not establish those. Typed thoughts in the browser used the regex fallback because the browser cannot reach the Mac mini processor.
+
 ## Final thread-flow test build
 
 - Strict typecheck passed on the Mac mini runtime.
 - `npm run verify` passed: 158 tests, 0 failures.
 - iOS, Android, and web exports passed with Expo SDK 57.
 - Browser QA confirmed that a dumped thread stays in understanding, shows one generated missing question, exposes only `Record the answer`, and withholds goal development until the thread is ready.
-- Testing server restarted at `10.0.0.152:8082`. No production or App Store deployment was performed.
+- Testing server restarted at `10.0.0.152:8083`. No production or App Store deployment was performed.
 
 Completed on Node 22.22.1 / macOS:
 
