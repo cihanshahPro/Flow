@@ -1,3 +1,4 @@
+import ProfileCompletion from "./ProfileCompletion";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { productivityGuide, type Profile } from "../personality";
@@ -15,6 +16,9 @@ export default function ProfileView({
   onAssessment,
   onPreference,
   onFocus,
+  onConfigure,
+  onCompleteAssessment,
+  onCompleteAreas,
 }: {
   profile: Profile;
   notes: Note[];
@@ -26,6 +30,9 @@ export default function ProfileView({
   onAssessment: () => void;
   onPreference: () => void;
   onFocus: (title: string) => void;
+  onConfigure: (patch: Partial<Profile>) => Promise<void>;
+  onCompleteAssessment: () => void;
+  onCompleteAreas: (areaIndex?: number) => void;
 }) {
   const state = journeyState(profile, notes, drafts, tasks);
   const guide = productivityGuide(profile.answers, profile.presentation);
@@ -47,6 +54,13 @@ export default function ProfileView({
     <View style={s.page}>
       <Text style={s.kicker}>PROFILE · YOUR STARTING POINT, KEPT</Text>
       <Text style={s.title}>A picture of you.</Text>
+      <ProfileCompletion
+        profile={profile}
+        busy={busy}
+        onConfigure={onConfigure}
+        onAssessment={onCompleteAssessment}
+        onAreas={onCompleteAreas}
+      />
       <View style={s.level}>
         <Text style={s.kicker}>
           LEVEL {state.level.number} · {state.level.title.toUpperCase()}
@@ -60,25 +74,6 @@ export default function ProfileView({
             {m.done ? "✓" : "○"} {m.label}
           </Text>
         ))}
-      </View>
-      <View style={s.card}>
-        <Text style={s.heading}>What Flow knows so far</Text>
-        <Text style={s.body}>
-          {state.coverage.answered}/20 assessment answers
-        </Text>
-        <Text style={s.body}>
-          {state.coverage.reviewed}/6 life areas reviewed ·{" "}
-          {state.coverage.deferred} left for later
-        </Text>
-        <Text style={s.body}>
-          {directionOptions(profile).length} saved interests ·{" "}
-          {tasks.filter((t) => t.direction).length} linked actions
-        </Text>
-        <Text style={s.small}>
-          This measures information supplied—not how accurately we understand
-          you. Dates, constraints and priorities are known only when you provide
-          them.
-        </Text>
       </View>
       <View style={s.card}>
         <Text style={s.kicker}>YOUR CURRENT APPROACH</Text>

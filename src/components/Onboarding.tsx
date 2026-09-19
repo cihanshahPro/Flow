@@ -10,7 +10,6 @@ import {
   ITEMS,
   scoreAnswers,
   suggestedPresentation,
-  newProfile,
   type Profile,
 } from "../personality";
 const ratings = [
@@ -30,6 +29,7 @@ export default function Onboarding({
   existingWork = false,
   externalBusy = false,
   externalError = "",
+  sectionMode,
 }: {
   profile: Profile;
   onSave: (p: Profile) => Promise<void>;
@@ -40,8 +40,17 @@ export default function Onboarding({
   existingWork?: boolean;
   externalBusy?: boolean;
   externalError?: string;
+  sectionMode?: "assessment" | "areas";
 }) {
-  const [index, setIndex] = useState(Math.min(profile.answers.length, 19));
+  const [index, setIndex] = useState(() => {
+    const first = Array.from({ length: 20 }, (_, i) => i).find(
+      (i) =>
+        !Number.isInteger(profile.answers[i]) ||
+        profile.answers[i] < 1 ||
+        profile.answers[i] > 5,
+    );
+    return first ?? (sectionMode === "assessment" ? 0 : 19);
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lock = useRef(false);
@@ -78,14 +87,40 @@ export default function Onboarding({
   );
   const area = AREAS[Math.min(profile.areaIndex, AREAS.length - 1)];
   function advanceArea(status?: string) {
-    const next = profile.areaIndex + 1;
-    void save({
+    const updated = {
       ...profile,
       areas: status ? { ...profile.areas, [area.id]: status } : profile.areas,
+    };
+    if (sectionMode === "areas") {
+      const remaining = AREAS.findIndex(
+        (a, i) =>
+          i > profile.areaIndex &&
+          (updated.areas[a.id] === "Later" ||
+            !(
+              updated.areas[a.id] === "Nothing current" ||
+              areaSelections(updated.areas[a.id]).some((c) =>
+                a.choices.includes(c),
+              )
+            )),
+      );
+      void save(
+        {
+          ...updated,
+          areaIndex: remaining < 0 ? profile.areaIndex : remaining,
+          stage: remaining < 0 ? "map" : "areas",
+        },
+        remaining < 0 ? onClose : undefined,
+      );
+      return;
+    }
+    const next = profile.areaIndex + 1;
+    void save({
+      ...updated,
       areaIndex: Math.min(next, 5),
       stage: next === 6 ? "map" : "areas",
     });
   }
+
   const active = AREAS.flatMap((a) =>
     areaSelections(profile.areas[a.id]).map((choice) => ({
       title: choice,
@@ -129,6 +164,11 @@ export default function Onboarding({
       )}
       {profile.stage === "assessment" && (
         <>
+          {sectionMode && (
+            <Text style={s.small}>
+              Finish this section, then return to your profile.
+            </Text>
+          )}
           <Text style={s.kicker}>QUESTION {index + 1} OF 20</Text>
           <View style={s.track}>
             <View style={[s.progress, { width: `${(index + 1) * 5}%` }]} />
@@ -147,7 +187,11 @@ export default function Onboarding({
                     answers,
                     stage: index === 19 ? "results" : "assessment",
                   },
-                  () => setIndex(Math.min(index + 1, 19)),
+                  () => {
+                    if (index === 19 && sectionMode === "assessment") {
+                      onClose();
+                    } else setIndex(Math.min(index + 1, 19));
+                  },
                 );
               },
             ),
@@ -371,9 +415,8 @@ export default function Onboarding({
             () =>
               void save(
                 {
-                  ...newProfile(),
-                  areas: profile.areas,
-                  completed: profile.completed,
+                  ...profile,
+                  answers: [],
                   stage: "assessment",
                 },
                 () => setIndex(0),
@@ -381,8 +424,7 @@ export default function Onboarding({
           )}
           {button(
             "Remove personality answers",
-            () =>
-              void save({ ...profile, answers: [], presentation: undefined }),
+            () => void save({ ...profile, answers: [] }),
           )}
         </>
       )}
