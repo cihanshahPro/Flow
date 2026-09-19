@@ -28,3 +28,7 @@ test("cleanMove drops a trailing deadline and never ends on a dangling word", ()
   assert.equal(cleanMove("Finish the quarterly report for my boss by Friday"), "Finish the quarterly report for my boss");
   assert.ok(!/\b(?:by|for|to|the|of|my)…$/i.test(cleanMove("Finish the quarterly report for my boss and then send it to everyone on the team", 40)));
 });
+
+test("cleanMove trims a clipped trailing 'by…'", () => {
+  assert.equal(cleanMove("Finish the quarterly report for my boss by…"), "Finish the quarterly report for my boss");
+});

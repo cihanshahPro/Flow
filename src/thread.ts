@@ -406,6 +406,7 @@ export function cleanMove(text: string, max = 60): string {
   let t = text.trim().replace(/[.!?…]+$/, "");
   t = t.replace(MOVE_LEAD, "");
   t = t.replace(MOVE_WHEN, " ").replace(/\s+/g, " ").trim().replace(/^(?:and|then|to)\s+/i, "");
+  t = t.replace(/(?:\s+(?:by|for|to|the|of|and|with|my|a|an|in|on|at))+$/i, "");
   if (t.split(/\s+/).filter(Boolean).length < 2) t = text.trim().replace(/[.!?…]+$/, "");
   if (t.length > max) {
     const cut = t.slice(0, max - 1);
