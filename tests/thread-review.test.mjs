@@ -12,18 +12,20 @@ const draft = {
   updates: [], steps: [], state: "draft", createdAt: "2026-09-18T00:00:00.000Z", threadStatus: "dumped", goalsReady: false,
 };
 
-test("a dumped thread offers another recording and does not expose goals", async () => {
+test("a dumped thread asks for one missing answer and does not expose goals", async () => {
   let view;
-  await act(async () => { view = renderer.create(React.createElement(ThreadReview, { draft, onCapture() {}, onDevelop() {}, onClose() {} })); });
+  await act(async () => { view = renderer.create(React.createElement(ThreadReview, { draft, prompt: "What outcome matters most?", onCapture() {}, onDevelop() {}, onClose() {} })); });
   const labels = view.root.findAllByType("Pressable").map(node => node.props.accessibilityLabel);
-  assert.ok(labels.includes("Add to this thread"));
+  assert.ok(labels.includes("Record the answer"));
+  assert.ok(!labels.includes("Add another recording"));
+  assert.ok(!labels.includes("Add to this thread"));
   assert.ok(!labels.includes("Develop this thread into goals"));
   await act(async () => view.unmount());
 });
 
 test("only a ready thread exposes goal development", async () => {
   let view;
-  await act(async () => { view = renderer.create(React.createElement(ThreadReview, { draft: { ...draft, threadStatus: "ready", goalsReady: true }, onCapture() {}, onDevelop() {}, onClose() {} })); });
+  await act(async () => { view = renderer.create(React.createElement(ThreadReview, { draft: { ...draft, threadStatus: "ready", goalsReady: true }, prompt: "What outcome matters most?", onCapture() {}, onDevelop() {}, onClose() {} })); });
   assert.ok(view.root.findAllByType("Pressable").some(node => node.props.accessibilityLabel === "Develop this thread into goals"));
   await act(async () => view.unmount());
 });
