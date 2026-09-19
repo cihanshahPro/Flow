@@ -7,7 +7,7 @@ import { flowType } from "../flow-voice.ts";
 import { peopleMentioned } from "../thread.ts";
 import { C } from "./theme.ts";
 
-export const PRIVACY_URL = "https://kodavena.com/privacy";
+export const PRIVACY_URL = "https://kodavena.com/flow/privacy";
 
 /** Profile: who Flow thinks you are and what it knows — a living thing you can edit, not a one-time quiz. */
 /** "08:30" moved by `delta` minutes, wrapping around midnight. */
