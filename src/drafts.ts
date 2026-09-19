@@ -92,6 +92,21 @@ export function threadFingerprint(source: string): ThreadPoint[] {
 }
 const actionStart =
   /^(?:i (?:need|want|have) to |(?:we|i) should |let'?s |please )?(?:call|email|ask|send|finish|start|build|make|choose|pick|book|find|write|prepare|follow up|check|review|talk|contact|collect|buy|research|schedule|create|apply|visit|read|plan|update|design|test|record)\b/i;
+/** A thread name, not a transcript: first clause, filler dropped, at most ~40 chars on a word boundary. */
+export function shortTitle(text: string, max = 40): string {
+  let t = text
+    .trim()
+    .replace(/^(?:(?:okay|ok|so|well|um+|uh+|hi|hey|right|yeah|basically|like)[,.]?\s+)+/i, "")
+    .replace(/^(?:i(?:'m| am)? (?:really |just )?(?:want|need|have|got|trying|going|wanna|gotta)(?: to| got to)? |i(?:'ve| have) (?:got|been) |let me |there(?:'s| is) )/i, "")
+    .split(/[,;:.!?…]| - | — | but | and (?:then|also) | because | so /i)[0]
+    .trim();
+  if (t.length < 4) t = text.trim();
+  if (t.length > max) {
+    const cut = t.slice(0, max);
+    t = cut.slice(0, Math.max(cut.lastIndexOf(" "), 12)).replace(/[\s,;:–—-]+$/, "") + "…";
+  }
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 export function suggestDraft(
   id: string,
   text: string,
@@ -123,7 +138,7 @@ export function suggestDraft(
     .slice(0, 3);
   return {
     id,
-    title: sentences[0].replace(/^i (?:want|need|have) to /i, "").slice(0, 90),
+    title: shortTitle(sentences[0]),
     topic: /\b(client|portfolio|website|work|business|invoice|job)\b/i.test(
       source,
     )

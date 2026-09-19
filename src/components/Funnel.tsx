@@ -11,6 +11,7 @@ import {
   emptyPlate,
   type Plate,
   type Profile,
+  areaPhrase,
 } from "../personality.ts";
 import { flowType } from "../flow-voice.ts";
 import { C } from "./theme.ts";
@@ -48,7 +49,7 @@ export function firstPrompt(plate: Plate | undefined): { area: string; prompt: s
   const area = plate?.areas[0] ?? "the thing on your mind";
   return {
     area,
-    prompt: `Tell me about ${area.toLowerCase()}: where it stands, what you'd want to come out of it, who's involved, and what's in the way. Don't organise it — just talk.`,
+    prompt: `Tell me about ${areaPhrase(area)}: where it stands, what you'd want to come out of it, who's involved, and what's in the way. Don't organise it — just talk.`,
   };
 }
 
@@ -229,7 +230,7 @@ export default function Funnel({
       {step === "first" && (
         <>
           <Text style={s.kicker}>YOUR FIRST THREAD</Text>
-          <Text style={s.headline}>Let's start with {first.area.toLowerCase()}.</Text>
+          <Text style={s.headline}>Let's start with {areaPhrase(first.area)}.</Text>
           <Text style={s.body}>{first.prompt}</Text>
           <Text style={s.small}>Flow will turn it into a thread, ask you one thing at a time, and offer a move when it has enough.</Text>
           <Pressable

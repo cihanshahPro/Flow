@@ -336,3 +336,21 @@ export function obstaclePlan(obstacle: string, presentation: Presentation) {
     ? "Start with one five-minute action. Review after you finish."
     : "Follow the first step in your draft, then review the next one.";
 }
+
+const AREA_PHRASE: Record<string, string> = {
+  "Work project": "your work project",
+  "Job or clients": "your job or clients",
+  "Money & bills": "money and bills",
+  "Paperwork or legal": "paperwork or legal stuff",
+  Health: "your health",
+  "Home & repairs": "home and repairs",
+  Family: "your family",
+  Relationship: "your relationship",
+  Studying: "your studies",
+  "A side project": "your side project",
+  "Moving or travel": "moving or travel",
+};
+/** An area name as it reads mid-sentence: "Work project" → "your work project". */
+export function areaPhrase(area: string): string {
+  return AREA_PHRASE[area] ?? area.toLowerCase();
+}

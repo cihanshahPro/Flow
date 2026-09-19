@@ -50,8 +50,8 @@ export default function Today({
 }) {
   const lastAt = (t: ThoughtDraft) => t.messages?.at(-1)?.createdAt ?? t.createdAt;
   const sorted = threads
-    .filter((t) => !t.example && t.state !== "parked" && pendingMessage(t))
-    .sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
+    .filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt)
+    .sort((a, b) => Number(!!pendingMessage(b)) - Number(!!pendingMessage(a)) || lastAt(b).localeCompare(lastAt(a)));
   return (
     <View style={s.root}>
       <View style={s.header}>
@@ -127,7 +127,7 @@ export default function Today({
         </View>
         {sorted.length > 0 && (
           <View style={s.threads}>
-            <Text style={s.kicker}>NEEDS YOU</Text>
+            <Text style={s.kicker}>YOUR THREADS</Text>
             {sorted.map((t) => {
               const meter = clarity(t.threadPoints);
               const pending = pendingMessage(t);

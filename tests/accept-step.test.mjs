@@ -27,3 +27,14 @@ test("acceptStep is idempotent", async () => {
   await acceptStep(draft, step);
   assert.equal(db.records.size, 1);
 });
+
+const { shortTitle } = await import("../src/drafts.ts");
+const { concreteMove, whenLabel } = await import("../src/thread.ts");
+const { areaPhrase } = await import("../src/personality.ts");
+test("thread titles are short, move labels are never bare times", () => {
+  const t = shortTitle("So I need to sort out the quarterly numbers for my boss, and then talk to the team about it");
+  assert.ok(t.length <= 41 && !/^so /i.test(t), t);
+  assert.equal(concreteMove("Tomorrow morning"), false);
+  assert.equal(concreteMove("Ask Ali for the numbers"), true);
+  assert.equal(areaPhrase("Work project"), "your work project");
+});

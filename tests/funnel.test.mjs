@@ -98,13 +98,13 @@ test("the funnel is test → reveal → five profile questions → prompted firs
   assert.deepEqual(profile.plate, { areas: ["Money & bills", "Health"], people: ["Partner"], timeWindow: "Evenings", obstacles: ["Not enough time"], datedSoon: "Yes, this week" });
 
   // The first thread is prompted from the profile, not "record whatever".
-  assert.match(textOf(view), /Let's start with ","money & bills"/);
+  assert.match(textOf(view), /Let's start with ","money and bills"/);
   assert.deepEqual(labels(view), ["Record", "or write it down"]);
   await press(view, "Record");
   assert.equal(finished.length, 1);
   assert.equal(finished[0].funnelVersion, FUNNEL_VERSION);
   assert.equal(recorded.length, 1);
-  assert.match(recorded[0], /money & bills/);
+  assert.match(recorded[0], /money and bills/);
   await act(async () => view.unmount());
 });
 

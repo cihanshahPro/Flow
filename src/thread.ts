@@ -9,7 +9,7 @@ import type {
 } from "./drafts.ts";
 import type { Task } from "./model.ts";
 import { localDate } from "./model.ts";
-import type { Plate } from "./personality.ts";
+import { areaPhrase, type Plate } from "./personality.ts";
 import { QUESTION_ORDER, voice, type Mode, DEFAULT_MODE } from "./flow-voice.ts";
 
 /**
@@ -355,6 +355,18 @@ export function offerableSteps(thread: ThoughtDraft): DraftStep[] {
   return thread.steps.filter((s) => !s.accepted && !declined.has(s.id) && !offered.has(s.id)).slice(0, 3);
 }
 
+const GENERIC_ANSWERS = new Set([
+  "get it done and off my list", "make a decision", "get someone else to handle it", "just get clear on it",
+  "not sure where to start", "not sure yet", "this weekend", "this week", "this month", "no real date",
+]);
+/** True when an answer is a real "verb + object" move, not a time label or a canned chip. */
+export function concreteMove(value: string): boolean {
+  const v = value.trim().toLowerCase().replace(/[.!?…]+$/, "");
+  if (GENERIC_ANSWERS.has(v)) return false;
+  if (/^(?:(?:this|tomorrow|next|at|in the|first thing|tonight|today)\b[\w\s]*|morning|evening|afternoon|lunch(?:time)?|next free 15 minutes)$/.test(v) && v.split(/\s+/).length <= 4) return false;
+  return v.split(/\s+/).length >= 2;
+}
+
 /**
  * A ready thread always has at least one move to offer. When the person's
  * words held no explicit action, the move is their own "next" or outcome
@@ -363,11 +375,12 @@ export function offerableSteps(thread: ThoughtDraft): DraftStep[] {
 export function ensureMoves(thread: ThoughtDraft): ThoughtDraft {
   if (thread.steps.length) return thread;
   const points = thread.threadPoints ?? [];
-  const seed =
-    points.find((p) => p.id === "next" && p.state === "known")?.value ??
-    points.find((p) => p.id === "outcome" && p.state === "known")?.value;
-  if (!seed) return thread;
-  const title = seed.replace(/[.!?…]+$/, "").replace(/^(first|then|next|tonight|tomorrow)\s+/i, "");
+  const known = (id: PointId) => points.find((p) => p.id === id && p.state === "known")?.value;
+  const seed = [known("next"), known("outcome")].find((v) => v && concreteMove(v));
+  if (!known("next") && !known("outcome")) return thread;
+  const title = seed
+    ? seed.replace(/[.!?…]+$/, "").replace(/^(first|then|next|tonight|tomorrow)\s+/i, "")
+    : `Take the first small step on ${thread.title.toLowerCase()}`;
   return {
     ...thread,
     steps: [{ id: "auto-next", title: clip(title, 80), minutes: 15 }],
@@ -400,7 +413,7 @@ function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?
       from: "flow",
       kind: "offer",
       stepId: step.id,
-      text: `${whenLabel(plate?.timeWindow, new Date(now))} → ${capitalise(step.title)}`,
+      text: `${whenLabel(plate?.timeWindow, new Date(now))}: ${capitalise(step.title)}`,
       chips: [
         { id: "do", label: "Do this" },
         { id: "skip", label: "Not now" },
@@ -738,7 +751,7 @@ export function noteLevelUp(thread: ThoughtDraft, level: string, mode: Mode, now
 }
 
 const AREA_KEYWORDS: Record<string, string[]> = {
-  "Work project": ["work", "project", "deadline", "launch"],
+  "Work project": ["work", "project", "deadline", "launch", "boss", "team", "manager", "office", "colleague", "meeting", "report"],
   "Job or clients": ["job", "client", "interview", "cv", "resume", "hire"],
   "Money & bills": ["money", "bill", "bills", "rent", "tax", "taxes", "invoice", "pay", "budget", "bank"],
   "Paperwork or legal": ["form", "forms", "paperwork", "lawyer", "legal", "visa", "passport", "insurance", "claim", "contract"],
@@ -762,14 +775,16 @@ export function suggestPrompt(
 ): { title: string; prompt: string; area?: string } {
   const open = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt);
   const corpus = open.map((t) => [t.title, t.source, ...t.updates].join(" ").toLowerCase()).join("\n");
-  for (const area of plate?.areas ?? []) {
+  for (const [i, area] of (plate?.areas ?? []).entries()) {
+    // The first thread is prompted from the first area, so once any thread is open that area is taken.
+    if (i === 0 && open.length) continue;
     const words = AREA_KEYWORDS[area] ?? [area.toLowerCase()];
     const covered = words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(corpus));
     if (!covered)
       return {
         area,
         title: area,
-        prompt: `What's the one thing in ${area.toLowerCase()} hanging over you? Say where it stands, what you'd want out of it, who's involved, and what's in the way.`,
+        prompt: `What's the one thing in ${areaPhrase(area)} hanging over you? Say where it stands, what you'd want out of it, who's involved, and what's in the way.`,
       };
   }
   if (!open.length)

@@ -120,7 +120,7 @@ test("Today is the Next card, Flow's suggestion with one Record button, and only
   const cards = found.filter((l) => l.startsWith("Open thread "));
   assert.equal(cards.length, 2, "both threads need the person; example drafts are never shown");
   const text = textOf(view);
-  assert.match(text, /NEEDS YOU/);
+  assert.match(text, /YOUR THREADS/);
   assert.match(text, /Flow has a question/);
   assert.match(text, /Flow has a move for you/);
   const card = view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === `Open thread ${a.title}`);
