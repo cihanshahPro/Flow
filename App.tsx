@@ -37,7 +37,7 @@ import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask } from "./src/task-flow";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
 import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, pendingMessage, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
-import type { ThoughtDraft } from "./src/drafts";
+import { taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
 type Screen = Tab | "thread";
@@ -319,8 +319,14 @@ function Flow() {
           if (step) {
             // The move is an if-then plan: it lands on the day the person said they have time.
             const id = `flow:${thread.id}:${step.id}`;
+            const plannedDate = plannedDateFor(profile.plate?.timeWindow);
             const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
-            if (saved) await saveTask({ ...saved, plannedDate: plannedDateFor(profile.plate?.timeWindow) });
+            if (saved) await saveTask({ ...saved, plannedDate });
+            else {
+              // The exclusive-transaction insert did not land; write the task plainly so the Next card exists.
+              console.warn("[Flow] acceptStep produced no task; saving directly");
+              await saveTask({ ...taskForStep(thread, step, plannedDate), plannedDate });
+            }
             await updateProfile({ ...profile, activeTaskId: id });
           }
         } else if (effect.type === "complete") {
