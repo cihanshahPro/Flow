@@ -117,6 +117,8 @@ export type Profile = {
   obstacle?: string;
   presentation?: Presentation;
   completed?: boolean;
+  // The chosen working step stays attached to the user’s route across reloads.
+  activeTaskId?: string;
 };
 export const newProfile = (): Profile => ({
   version: 1,

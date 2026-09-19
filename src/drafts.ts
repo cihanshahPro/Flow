@@ -14,7 +14,17 @@ export type DraftStep = {
   evidence?: string;
   chosenTitle?: string;
 };
+/** A thread is the user's ongoing understanding of one subject, before it is a task list. */
+export type ThreadStatus = "dumped" | "understanding" | "ready" | "active" | "paused" | "complete";
+export type ThreadPoint = {
+  id: string;
+  label: string;
+  value?: string;
+  state: "known" | "missing" | "suggested";
+  sourceNoteIds?: string[];
+};
 export type ThoughtDraft = {
+  sourceNoteIds?: string[];
   id: string;
   title: string;
   topic: Topic;
@@ -27,6 +37,13 @@ export type ThoughtDraft = {
   summary?: string;
   organizer?: "apple-local";
   direction?: DirectionContext;
+  /** New fields are additive so existing local drafts remain readable. */
+  threadStatus?: ThreadStatus;
+  threadPoints?: ThreadPoint[];
+  missingPoints?: string[];
+  goalsReady?: boolean;
+  goalIds?: string[];
+  level?: number;
 };
 const actionStart =
   /^(?:i (?:need|want|have) to |(?:we|i) should |let'?s |please )?(?:call|email|ask|send|finish|start|build|make|choose|pick|book|find|write|prepare|follow up|check|review|talk|contact|collect|buy|research|schedule|create|apply|visit|read|plan|update|design|test|record)\b/i;
@@ -80,6 +97,9 @@ export function suggestDraft(
     })),
     state: "draft",
     createdAt: now.toISOString(),
+    threadStatus: "dumped",
+    goalsReady: false,
+    missingPoints: [],
   };
 }
 export function refineDraft(draft: ThoughtDraft, update: string): ThoughtDraft {
@@ -217,5 +237,37 @@ export function shapedDraft(
     summary: faithfulSummary,
     steps,
     organizer: "apple-local",
+  };
+}
+
+/** Attach a saved update to its existing plan without changing original words or chosen IDs. */
+export function appendPlanUpdate(
+  plan: ThoughtDraft,
+  update: ThoughtDraft,
+): ThoughtDraft {
+  if (plan.sourceNoteIds?.includes(update.id)) return plan;
+  const titles = new Set(plan.steps.map((step) => step.title.toLowerCase()));
+  const additions = update.steps
+    .filter((step) => !titles.has(step.title.toLowerCase()))
+    .slice(
+      0,
+      Math.max(
+        0,
+        3 -
+          plan.steps.filter((step) => !step.accepted && !step.deferred).length,
+      ),
+    );
+  return {
+    ...plan,
+    state: "draft",
+    sourceNoteIds: [...(plan.sourceNoteIds ?? []), update.id],
+    updates: [...plan.updates, update.source],
+    steps: [
+      ...plan.steps,
+      ...additions.map((step, i) => ({
+        ...step,
+        id: `update:${update.id}:${i}`,
+      })),
+    ],
   };
 }
