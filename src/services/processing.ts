@@ -127,6 +127,9 @@ async function processThoughtNote(note: Note): Promise<ThoughtDraft> {
       draft = shapedDraft(note.id, text, shape);
     } catch {
       console.warn("[Flow] organizer output could not be grounded");
+      // The title is still useful on its own; the moves fall back to the person's words.
+      const title = (shape as { title?: unknown }).title;
+      if (typeof title === "string" && title.trim() && title.trim().length <= 120) draft = { ...draft, title: title.trim() };
     }
   }
   const flow = shapedVoice(shape, text);

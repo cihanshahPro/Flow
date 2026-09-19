@@ -77,6 +77,23 @@ export function suggestionChips(point: PointId, plate?: Plate): ThreadChip[] {
   return [...new Set(labels)].slice(0, 4).map((label, i) => ({ id: `s${i}`, label }));
 }
 
+/** The moment named in the step itself ("tomorrow morning", "on Saturday") beats the profile window. */
+export function whenInText(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/\btonight\b/.test(t)) return "Tonight";
+  if (/\btomorrow morning\b/.test(t)) return "Tomorrow morning";
+  if (/\btomorrow\b/.test(t)) return "Tomorrow";
+  if (/\bthis weekend\b/.test(t)) return "This weekend";
+  const day = t.match(/\b(?:(on|next|this) )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)( morning| afternoon| evening)?\b/);
+  if (day) {
+    const name = day[2].charAt(0).toUpperCase() + day[2].slice(1);
+    const prefix = day[1] ? day[1].charAt(0).toUpperCase() + day[1].slice(1) + " " : "On ";
+    return `${prefix}${name}${day[3] ?? ""}`;
+  }
+  if (/\bnext week\b/.test(t)) return "Next week";
+  return null;
+}
+
 /** "This evening", "Tomorrow morning"… from the person's usual time window. */
 export function whenLabel(timeWindow: string | undefined, now = new Date()): string {
   const hour = now.getHours();
@@ -136,7 +153,7 @@ const detectors: Record<PointId, RegExp> = {
   dependencies:
     /\b(after|before|first|then|once|until|requires|depends on|waiting (?:for|on)|need(?:s)? to .{1,40} (?:before|first)|as soon as)\b/i,
   next:
-    /\b(first step|first thing|next step|next i|start by|starting with|tonight i|tomorrow i|i'?ll|i will|going to|gonna|plan to|then i|i can just|i could just|step one)\b/i,
+    /\b(first step|first thing|next step|next i|first i|start by|starting with|tonight i|tomorrow i|i'?ll|i will|i should|i need to|i have to|going to|gonna|plan to|then i|i can just|i could just|step one)\b/i,
 };
 
 function sentences(text: string): string[] {
@@ -367,7 +384,12 @@ export function ensureMoves(thread: ThoughtDraft): ThoughtDraft {
     points.find((p) => p.id === "next" && p.state === "known")?.value ??
     points.find((p) => p.id === "outcome" && p.state === "known")?.value;
   if (!seed) return thread;
-  const title = seed.replace(/[.!?…]+$/, "").replace(/^(first|then|next|tonight|tomorrow)\s+/i, "");
+  const title = seed
+    .replace(/[.!?…]+$/, "")
+    // The move is the action, not the reason behind it.
+    .split(/\s+(?:because|so that|since|as long as|otherwise)\b|,\s+(?:but|and then|then)\b/i)[0]
+    .replace(/^(first|then|next|tonight|tomorrow|so)[,\s]+/i, "")
+    .replace(/^(i'?ll|i will|i should|i need to|i have to|i want to|i am going to|i'?m going to|we should|let'?s)\s+/i, "");
   return {
     ...thread,
     steps: [{ id: "auto-next", title: clip(title, 80), minutes: 15 }],
@@ -400,7 +422,7 @@ function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?
       from: "flow",
       kind: "offer",
       stepId: step.id,
-      text: `${whenLabel(plate?.timeWindow, new Date(now))} → ${capitalise(step.title)}`,
+      text: `${whenInText(step.title) ?? whenLabel(plate?.timeWindow, new Date(now))} → ${capitalise(step.title)}`,
       chips: [
         { id: "do", label: "Do this" },
         { id: "skip", label: "Not now" },

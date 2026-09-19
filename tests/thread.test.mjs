@@ -292,3 +292,18 @@ test("a thread saved by an older build gets Flow's conversation backfilled from 
   assert.equal(backfillConversation(filled, { now }), filled, "already has a conversation");
   assert.equal(backfillConversation({ ...legacy, example: true }, { now }).messages, undefined);
 });
+
+test("a move's own timing wins over the profile window, and move titles drop 'I will'", async () => {
+  const { whenInText, ensureMoves } = await import("../src/thread.ts");
+  assert.equal(whenInText("I will get two quotes online tomorrow morning"), "Tomorrow morning");
+  assert.equal(whenInText("buy a washer at the hardware store on Saturday morning"), "On Saturday morning");
+  assert.equal(whenInText("I could do it next Friday"), "Next Friday");
+  assert.equal(whenInText("call the clinic"), null);
+  const text = "I want to sort the car insurance. First I will get two quotes online tomorrow morning because the policy lapses and my brother knows a broker.";
+  const t = ensureMoves({ ...suggestDraft("m", text, now), steps: [] });
+  assert.equal(t.steps[0].title, "get two quotes online tomorrow morning");
+  const r = respondToRecording({ ...suggestDraft("m2", text, now), steps: [] }, "n1", text, { now, plate: { areas: [], people: [], obstacles: [], timeWindow: "Evenings" } });
+  const offer = pendingMessage(r);
+  assert.equal(offer.kind, "offer");
+  assert.match(offer.text, /^Tomorrow morning → Get two quotes/);
+});
