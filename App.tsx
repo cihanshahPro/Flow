@@ -44,7 +44,8 @@ import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
+import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks } from "./src/thread";
+import { whenFromAnswer, type When } from "./src/when";
 import type { ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
@@ -369,7 +370,14 @@ function Flow() {
             // The move is an if-then plan: it lands on the day the person said they have time.
             const id = `flow:${thread.id}:${step.id}`;
             const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
-            if (saved) await saveTask({ ...saved, plannedDate: plannedDateFor(profile.plate?.timeWindow) });
+            // The time the person gave ("Tomorrow morning") wins; otherwise their usual window, no time yet.
+            const when = moveWhen(thread);
+            if (saved)
+              await saveTask(
+                when
+                  ? { ...saved, plannedDate: when.date, plannedTime: when.time }
+                  : { ...saved, plannedDate: plannedDateFor(profile.plate?.timeWindow) },
+              );
             await updateProfile({ ...profile, activeTaskId: id });
           }
         } else if (effect.type === "complete") {
@@ -413,10 +421,35 @@ function Flow() {
         { cancelable: false },
       ),
     );
+  /** A move without a date and time asks for one moment first, instead of a dead end. */
+  const pickMoment = (): Promise<When | null> =>
+    new Promise((resolve) => {
+      const now = new Date();
+      const options = ["This evening", "Tomorrow morning", "Tomorrow afternoon"]
+        .map((t) => whenFromAnswer(t, now))
+        .filter((w, i, all): w is When => !!w && all.findIndex((o) => o?.date === w.date && o?.time === w.time) === i);
+      Alert.alert(
+        "When will you do it?",
+        "Pick a time and Flow puts it on your calendar.",
+        [
+          ...options.map((w) => ({ text: `${w.label} · ${w.time}`, onPress: () => resolve(w) })),
+          { text: "Cancel", style: "cancel" as const, onPress: () => resolve(null) },
+        ],
+        { cancelable: false },
+      );
+    });
   function calendarNext() {
     if (!nextTask) return;
     void run(async () => {
-      const message = await addTaskToCalendar(nextTask, choose);
+      let task = nextTask;
+      if (!task.plannedDate || !task.plannedTime) {
+        const when = await pickMoment();
+        if (!when) return;
+        task = { ...task, plannedDate: when.date, plannedTime: when.time };
+        await saveTask(task);
+        await refresh();
+      }
+      const message = await addTaskToCalendar(task, choose);
       setNotice(message);
     });
   }
@@ -475,7 +508,7 @@ function Flow() {
                   {voiceResult ? (
                     <View style={s.card}>
                       <Text style={s.cardTitle}>{processing ? "Saved." : "Recording saved."}</Text>
-                      {processing ? <Thinking onBackground={continueInBackground} onCancel={cancelShaping} /> : <AudioPlayback uri={voiceResult.audioUri!} />}
+                      {processing ? (!consentAsk && <Thinking onBackground={continueInBackground} onCancel={cancelShaping} />) : <AudioPlayback uri={voiceResult.audioUri!} />}
                       {!processing && <Text style={s.body}>{processingError}</Text>}
                       {!processing && (
                         <Pressable accessibilityRole="button" accessibilityLabel="Retry processing" onPress={() => void processRecording(voiceResult)} style={s.primary}>
@@ -515,7 +548,8 @@ function Flow() {
                   >
                     <Text style={s.primaryText}>{processing ? "Flow is reading…" : capture?.kind === "feedback" ? "Save feedback" : "Send to Flow"}</Text>
                   </Pressable>
-                  {processing && <Thinking onBackground={continueInBackground} onCancel={cancelShaping} />}
+                  {/* While Flow waits for the cloud answer, nothing is thinking yet. */}
+                  {processing && !consentAsk && <Thinking onBackground={continueInBackground} onCancel={cancelShaping} />}
                   {!!processingError && <Text style={s.error}>{processingError}</Text>}
                   {!processing && (
                     <Pressable accessibilityRole="button" accessibilityLabel="Speak instead" onPress={() => capture && setCapture({ ...capture, mode: "voice" })} hitSlop={8} style={{ alignSelf: "center" }}>

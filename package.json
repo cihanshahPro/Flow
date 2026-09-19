@@ -1,7 +1,7 @@
 {
   "name": "anchor-mobile",
   "description": "A native personal planning starter for iOS and Android",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start --go",

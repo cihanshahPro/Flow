@@ -79,7 +79,7 @@ function pick<T>(items: T[], seed: string): T {
 }
 
 const ACK: Record<Mode, string[]> = {
-  explorer: ["Got it — I'm holding this one.", "Okay, that's in. Nothing else to do right now.", "Saved. I'll connect it to what I already know."],
+  explorer: ["Got it — I'm holding this one.", "Okay, that's in.", "Saved. I'll connect it to what I already know."],
   builder: ["Logged. Here's what I have so far.", "Got it. I'll keep this in order.", "Saved and filed with the rest."],
   analyst: ["Noted. Here's what's established so far.", "Got it. Facts so far below.", "Recorded. I'll keep the dependencies straight."],
   connector: ["Got it — I'll keep everyone in this straight.", "Saved. I've noted who's involved.", "Okay, I've got it. Nothing to sort out on your end."],

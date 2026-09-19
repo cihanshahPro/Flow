@@ -224,25 +224,34 @@ export default function Funnel({
           <Text style={s.headline}>{FIRST_QUESTION}</Text>
           <Text style={s.body}>Say it the way it comes — a worry, a to-do, a half idea. You don't have to organise it.</Text>
           <Text style={s.small}>Flow turns it into a thread, asks you one thing at a time, and offers one next move.</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Record"
-            onPress={() =>
-              void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onRecordFirst(FIRST_PROMPT))
-            }
-            disabled={busy}
-            style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}
-          >
-            <Text style={s.recordIcon}>●</Text>
-            <Text style={s.recordText}>Record</Text>
-          </Pressable>
-          <Secondary
-            label="or write it down"
-            onPress={() =>
-              void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onWriteFirst(FIRST_PROMPT))
-            }
-            busy={busy}
-          />
+          {/* Two equal ways in; the microphone is only asked for once Talk is chosen. */}
+          <View style={s.choices}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Talk it out"
+              onPress={() =>
+                void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onRecordFirst(FIRST_PROMPT))
+              }
+              disabled={busy}
+              style={({ pressed }) => [s.choice, (pressed || busy) && { opacity: 0.6 }]}
+            >
+              <Text style={s.choiceIcon}>🎙️</Text>
+              <Text style={s.choiceText}>Talk it out</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Type it"
+              onPress={() =>
+                void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onWriteFirst(FIRST_PROMPT))
+              }
+              disabled={busy}
+              style={({ pressed }) => [s.choice, (pressed || busy) && { opacity: 0.6 }]}
+            >
+              <Text style={s.choiceIcon}>⌨️</Text>
+              <Text style={s.choiceText}>Type it</Text>
+            </Pressable>
+          </View>
+          <Text style={[s.small, { textAlign: "center" }]}>Your voice stays on your iPhone.</Text>
         </>
       )}
     </ScrollView>
@@ -279,6 +288,10 @@ const s = StyleSheet.create({
   body: { fontSize: 17, lineHeight: 25, color: C.muted },
   bodyStrong: { fontSize: 17, lineHeight: 25, color: C.ink, fontWeight: "600" },
   small: { fontSize: 12, lineHeight: 17, color: C.faint },
+  choices: { flexDirection: "row", gap: 12, marginTop: 8 },
+  choice: { flex: 1, backgroundColor: C.blue, borderRadius: 18, paddingVertical: 20, alignItems: "center", gap: 6 },
+  choiceIcon: { fontSize: 26 },
+  choiceText: { color: C.white, fontSize: 17, fontWeight: "700" },
   track: { height: 6, borderRadius: 3, backgroundColor: C.line, overflow: "hidden" },
   fill: { height: 6, backgroundColor: C.blue, borderRadius: 3 },
   ratings: { gap: 8 },

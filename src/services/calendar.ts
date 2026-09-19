@@ -1,4 +1,5 @@
-import * as Calendar from 'expo-calendar';
+// SDK 57 moved this function API to /legacy; the root import now throws deprecation errors.
+import * as Calendar from 'expo-calendar/legacy';
 import { Platform } from 'react-native';
 import type { Task } from '../model';
 import { eventDraft } from '../calendar-model';

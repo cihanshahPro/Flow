@@ -10,6 +10,7 @@ import type {
 import { shortTitle } from "./drafts.ts";
 import type { Task } from "./model.ts";
 import { localDate } from "./model.ts";
+import { whenFromAnswer, type When } from "./when.ts";
 import { areaPhrase, type Plate } from "./personality.ts";
 import { QUESTION_ORDER, voice, type Mode, DEFAULT_MODE } from "./flow-voice.ts";
 
@@ -470,8 +471,15 @@ function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** The moment the person gave for their next move ("Tomorrow morning"), as a real date and time. */
+export function moveWhen(thread: Pick<ThoughtDraft, "threadPoints">, now = new Date()): When | undefined {
+  const known = (id: PointId) => (thread.threadPoints ?? []).find((p) => p.id === id && p.state === "known")?.value;
+  return whenFromAnswer(known("next"), now) ?? whenFromAnswer(known("timing"), now);
+}
+
 /** A move is an if-then plan: a moment the person actually has, then the step. */
 function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?: Plate): ThreadMessage {
+  const when = moveWhen(thread, new Date(now))?.label ?? whenLabel(plate?.timeWindow, new Date(now));
   return message(
     thread,
     {
@@ -479,7 +487,7 @@ function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?
       from: "flow",
       kind: "offer",
       stepId: step.id,
-      text: `${whenLabel(plate?.timeWindow, new Date(now))}: ${capitalise(step.title)}`,
+      text: `${when}: ${capitalise(step.title)}`,
       chips: [
         { id: "do", label: "Do this" },
         { id: "skip", label: "Not now" },
@@ -556,7 +564,8 @@ export function respondToRecording(
       kind: "question",
       pointId: point.id,
       text: options.question?.trim() || questionFor(point, points),
-      chips: suggestionChips(point.id, options.plate),
+      // The shaper words its own question; fixed chips only fit it when it asks for the outcome.
+      chips: !options.question?.trim() || point.id === "outcome" ? suggestionChips(point.id, options.plate) : undefined,
     });
   if (isReady(points)) {
     next = ensureMoves(next);
