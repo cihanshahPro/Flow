@@ -60,6 +60,21 @@ export function missingThreadPoints(source: string): string[] {
   if (!hasConstraint) missing.push("What could block this, or what should Flow keep in mind?");
   return missing;
 }
+export function threadFingerprint(source: string): ThreadPoint[] {
+  const missing = new Set(missingThreadPoints(source));
+  const points: Array<[string, string, string]> = [
+    ["outcome", "Outcome", "What result would make this thread feel resolved?"],
+    ["timing", "Timing", "Is there a real date or time Flow should keep with this thread?"],
+    ["people", "People", "Who else is involved, if anyone?"],
+    ["constraints", "Constraints", "What could block this, or what should Flow keep in mind?"],
+  ];
+  return points.map(([id, label, question]) => ({
+    id,
+    label,
+    state: missing.has(question) ? "missing" : "known",
+    ...(missing.has(question) ? { value: question } : {}),
+  }));
+}
 const actionStart =
   /^(?:i (?:need|want|have) to |(?:we|i) should |let'?s |please )?(?:call|email|ask|send|finish|start|build|make|choose|pick|book|find|write|prepare|follow up|check|review|talk|contact|collect|buy|research|schedule|create|apply|visit|read|plan|update|design|test|record)\b/i;
 export function suggestDraft(
@@ -115,6 +130,7 @@ export function suggestDraft(
     threadStatus: "dumped",
     goalsReady: false,
     missingPoints: missingThreadPoints(source),
+    threadPoints: threadFingerprint(source),
   };
 }
 export function refineDraft(draft: ThoughtDraft, update: string): ThoughtDraft {
@@ -280,6 +296,7 @@ export function appendPlanUpdate(
     threadStatus: missingPoints.length ? "understanding" : "ready",
     goalsReady: missingPoints.length === 0,
     missingPoints,
+    threadPoints: threadFingerprint(combined),
     sourceNoteIds: [...(plan.sourceNoteIds ?? []), update.id],
     updates: [...plan.updates, update.source],
     steps: [
