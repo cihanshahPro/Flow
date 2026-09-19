@@ -53,6 +53,7 @@ test("a ready thread's move is a verb + object, not a bare time", () => {
   const pt = (id, value) => ({ id, state: "known", value, sourceNoteIds: [] });
   const a = ensureMoves({ ...base, threadPoints: [pt("next", "Tomorrow morning"), pt("outcome", "So I need to finish the quarterly report for my boss by Friday, but it is a mess")] });
   assert.match(a.steps[0].title, /^Finish the quarterly report/);
-  const b = ensureMoves({ ...base, threadPoints: [pt("next", "Tomorrow morning")] });
-  assert.match(b.steps[0].title, /^Take the first small step on quarterly report/);
+  const said = [{ id: "m0", from: "you", kind: "transcript", text: "the quarterly report is a mess", createdAt: "" }];
+  const b = ensureMoves({ ...base, messages: said, threadPoints: [pt("next", "Tomorrow morning")] });
+  assert.match(b.steps[0].title, /^Make a start on the quarterly report/);
 });

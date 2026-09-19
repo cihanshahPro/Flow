@@ -445,13 +445,42 @@ export function ensureMoves(thread: ThoughtDraft): ThoughtDraft {
   const known = (id: PointId) => points.find((p) => p.id === id && p.state === "known")?.value;
   const seed = [known("next"), known("outcome")].find((v) => v && concreteMove(v));
   if (!known("next") && !known("outcome")) return thread;
-  const title = seed
-    ? cleanMove(seed, 70)
-    : `Take the first small step on ${thread.title.toLowerCase()}`;
+  const said = (thread.messages ?? []).filter((m) => m.from === "you").map((m) => m.text).join(" ");
+  // Titles are clipped for display ("…the Lisbon…"); the person's first sentence is the full phrase.
+  const first = sentences((thread.messages ?? []).find((m) => m.kind === "transcript")?.text ?? "")[0];
+  const source = first && MOVE_VERBS.test(first.trim()) ? first : thread.title;
+  const title = secondPerson(seed ? cleanMove(seed, 60) : templateMove(source, said));
   return {
     ...thread,
     steps: [{ id: "auto-next", title: clip(title, 80), minutes: 15 }],
   };
+}
+
+/** "Renew my passport…" → "Renew your passport…": moves speak to the person. Their own casing is kept. */
+export function secondPerson(text: string): string {
+  const swap: Record<string, string> = { i: "you", me: "you", my: "your", mine: "yours", myself: "yourself", "i'm": "you're", "i've": "you've", "i'll": "you'll" };
+  const out = text.replace(/\b(I'm|I've|I'll|I|me|my|mine|myself)\b/gi, (w) => {
+    const r = swap[w.toLowerCase()] ?? w;
+    return w[0] === w[0].toUpperCase() && w !== "I" ? capitalise(r) : r;
+  });
+  return capitalise(out);
+}
+
+const MOVE_VERBS =
+  /^(?:renew|call|email|text|message|send|write|draft|plan|prepare|update|submit|register|cancel|check|find|ask|visit|order|return|apply|file|read|learn|practice|practise|clean|pay|book|buy|sell|fix|finish|complete|start|stop|make|build|create|schedule|sort|organi[sz]e|move|launch|ship|review|reply|research|compare|choose|decide|pick|get|set|open|close|sign|print|pack|go|meet|talk|tell|share|list|research|study|call|contact|follow|arrange|reserve|refill|replace|repair|renovate|train|run|walk|cook|tidy|declutter|backup|back|save|budget|invest|apply|quit|join|finalise|finalize|design|test|record)\b/i;
+const DETERMINER = /^(?:the|a|an|my|our|your|his|her|their|this|that|these|those|some)\b/i;
+
+/**
+ * A move from the thread title when the person gave no concrete step. A title that starts with a
+ * verb is already a move; a noun phrase becomes "Make a start on the …". The person's casing is kept,
+ * except a first word they themselves wrote in lower case (so "Lisbon" stays "Lisbon").
+ */
+function templateMove(title: string, said: string): string {
+  const move = cleanMove(title, 60);
+  if (MOVE_VERBS.test(move)) return move;
+  const first = move.split(/\s+/)[0];
+  const phrase = new RegExp(`\\b${first.toLowerCase()}\\b`).test(said) || DETERMINER.test(move) ? first.toLowerCase() + move.slice(first.length) : move;
+  return cleanMove(`Make a start on ${DETERMINER.test(phrase) ? "" : "the "}${phrase}`, 60);
 }
 
 function message(
@@ -472,9 +501,11 @@ function capitalise(s: string): string {
 }
 
 /** The moment the person gave for their next move ("Tomorrow morning"), as a real date and time. */
-export function moveWhen(thread: Pick<ThoughtDraft, "threadPoints">, now = new Date()): When | undefined {
+export function moveWhen(thread: Pick<ThoughtDraft, "threadPoints" | "messages">, now = new Date()): When | undefined {
   const known = (id: PointId) => (thread.threadPoints ?? []).find((p) => p.id === id && p.state === "known")?.value;
-  return whenFromAnswer(known("next"), now) ?? whenFromAnswer(known("timing"), now);
+  // The latest time the person gave wins; "next" may already hold a sentence with no time in it.
+  const said = [...(thread.messages ?? [])].reverse().filter((m) => m.from === "you").map((m) => whenFromAnswer(m.text, now)).find(Boolean);
+  return said ?? whenFromAnswer(known("next"), now) ?? whenFromAnswer(known("timing"), now);
 }
 
 /** A move is an if-then plan: a moment the person actually has, then the step. */
@@ -535,7 +566,13 @@ export function respondToRecording(
     return built;
   };
   push({ from: "you", kind: "transcript", text, noteId });
-  const points = fingerprint(text, thread.threadPoints, noteId, options.evidence);
+  // A recording right after Flow's question answers that question, even when no detector matches its words.
+  const asked = [...previous].reverse().find((m) => m.from === "flow" && m.kind === "question" && !m.answered)?.pointId as PointId | undefined;
+  const points = fingerprint(text, thread.threadPoints, noteId, options.evidence).map((p) =>
+    p.id === asked && p.state !== "known"
+      ? { ...p, state: "known" as const, value: clip(text.trim()), sourceNoteIds: [noteId] }
+      : p,
+  );
   const hints = extractDueHints(text, options.now);
   next = {
     ...next,

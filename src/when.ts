@@ -4,6 +4,7 @@ import { localDate } from "./model.ts";
 export type When = { date: string; time: string; label: string };
 
 const PARTS = { morning: 9, lunch: 12, afternoon: 14, evening: 19 } as const;
+const WEEKEND_HOUR = 10;
 type Part = keyof typeof PARTS;
 
 const hhmm = (h: number) => `${String(h).padStart(2, "0")}:00`;
@@ -27,7 +28,7 @@ function soon(now: Date): When {
 /**
  * Turns a spoken or tapped time ("Tomorrow morning", "This evening", "This weekend",
  * "Next free 15 minutes") into a real local date and time: morning 09:00, lunch 12:00,
- * afternoon 14:00, evening 19:00. Returns undefined when the words hold no moment.
+ * afternoon 14:00, evening 19:00, weekend Saturday (or Sunday) 10:00. Returns undefined when the words hold no moment.
  */
 export function whenFromAnswer(text: string | undefined, now = new Date()): When | undefined {
   const t = (text ?? "").toLowerCase();
@@ -38,9 +39,12 @@ export function whenFromAnswer(text: string | undefined, now = new Date()): When
     return { date: localDate(addDays(now, 1)), time: hhmm(PARTS[p]), label: part ? `Tomorrow ${p === "lunch" ? "at lunch" : p}` : "Tomorrow" };
   }
   if (/\bweekend\b/.test(t)) {
+    // Weekend moves land on a weekend day at 10:00 (or the part of day named); never "today at the next hour".
+    const h = part ? PARTS[part] : WEEKEND_HOUR;
     const day = now.getDay();
-    if (day === 6 || day === 0) return soon(now);
-    return { date: localDate(addDays(now, 6 - day)), time: hhmm(PARTS[part ?? "morning"]), label: "This weekend" };
+    const ahead = day === 6 ? (now.getHours() < h ? 0 : 1) : day === 0 ? (now.getHours() < h ? 0 : 6) : 6 - day;
+    const label = ahead === 0 ? "This weekend" : day === 6 && ahead === 1 ? "Sunday" : day === 0 ? "Next weekend" : "This weekend";
+    return { date: localDate(addDays(now, ahead)), time: hhmm(h), label };
   }
   if (part) {
     const h = PARTS[part];
