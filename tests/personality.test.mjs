@@ -41,3 +41,35 @@ test("presentation is bounded and topic coverage does not depend on personality"
   assert.equal(suggestedPresentation(Array(20).fill(3)), "small");
   assert.equal(new Set(AREAS.map((a) => a.id)).size, 6);
 });
+
+test("multiple areas preserve legacy selections and toggle without losing other topics", async () => {
+  const { areaSelections, toggleArea, newProfile } =
+    await import("../src/personality.ts");
+  assert.deepEqual(areaSelections("Build something"), ["Build something"]);
+  assert.deepEqual(areaSelections("Later"), []);
+  let p = {
+    ...newProfile(),
+    areas: { work: "Build something", home: "Transport" },
+  };
+  p = toggleArea(p, "work", "Find work or clients");
+  assert.deepEqual(p.areas.work, ["Build something", "Find work or clients"]);
+  assert.equal(p.areas.home, "Transport");
+  p = toggleArea(p, "work", "Build something");
+  assert.deepEqual(p.areas.work, ["Find work or clients"]);
+});
+test("guide respects an explicit preference and provides all five trait interpretations", async () => {
+  const { productivityGuide, obstaclePlan } =
+    await import("../src/personality.ts");
+  const highest = ITEMS.map((i) => (i.reverse ? 1 : 5));
+  const g = productivityGuide(highest, "small");
+  assert.equal(g.presentation, "small");
+  assert.equal(g.traits.length, 5);
+  assert.ok(g.obstacles.includes("Too many directions"));
+  assert.equal(productivityGuide([], undefined).traits.length, 0);
+  assert.ok(
+    obstaclePlan("The task feels too big", "sequence").includes("five minutes"),
+  );
+  assert.ok(
+    obstaclePlan("I need more clarity", "small").includes("missing fact"),
+  );
+});
