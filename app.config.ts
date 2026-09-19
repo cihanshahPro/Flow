@@ -9,7 +9,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
   ios: {
-    supportsTablet: true,
+    supportsTablet: false,
     bundleIdentifier: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
