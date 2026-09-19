@@ -368,6 +368,41 @@ export function concreteMove(value: string): boolean {
   return v.split(/\s+/).length >= 2;
 }
 
+const MOVE_LEAD =
+  /^(?:(?:ok(?:ay)?|so|well|and|then|first|next|also|maybe|probably|just|i'?ll|i will|i'?m going to|i am going to|i can|i could|i'?m gonna|gonna|going to|plan to|i plan to|want to|i want to|need to|i need to|should|i should|i|start by|starting with|step one|the first (?:thing|step) is(?: to)?|first step is(?: to)?|to)\s+)+/i;
+const MOVE_WHEN =
+  /\s*\b(?:tonight|today|tomorrow(?:\s+(?:morning|afternoon|evening|night))?|this\s+(?:morning|afternoon|evening|weekend)|(?:on\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)day|(?:at|by|around)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|first thing|later)\b[\s,.]*/gi;
+
+/** A short "verb + object" move from someone's own sentence: no filler, no time words, at most `max` characters. */
+export function cleanMove(text: string, max = 60): string {
+  let t = text.trim().replace(/[.!?…]+$/, "");
+  t = t.replace(MOVE_LEAD, "");
+  t = t.replace(MOVE_WHEN, " ").replace(/\s+/g, " ").trim().replace(/^(?:and|then|to)\s+/i, "");
+  if (t.split(/\s+/).filter(Boolean).length < 2) t = text.trim().replace(/[.!?…]+$/, "");
+  if (t.length > max) {
+    const cut = t.slice(0, max - 1);
+    const at = cut.lastIndexOf(" ");
+    t = (at > max * 0.5 ? cut.slice(0, at) : cut).replace(/[\s,;:–-]+$/, "") + "…";
+  }
+  return capitalise(t);
+}
+
+/** The Next card's one-line move: "This evening: Draft page 1 of the quarterly report". */
+export function moveHeadline(
+  task: { title: string; plannedDate?: string },
+  timeWindow: string | undefined,
+  now = new Date(),
+): string {
+  const today = localDate(now);
+  const tomorrow = localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  let when: string;
+  if (!task.plannedDate || task.plannedDate === today) when = whenLabel(timeWindow, now).replace(/^Tomorrow.*/, "Today");
+  else if (task.plannedDate === tomorrow) when = "Tomorrow";
+  else when = new Date(`${task.plannedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" });
+  if (when === "Next free 15 minutes") when = "Today";
+  return `${when}: ${cleanMove(task.title, 60 - when.length - 2)}`;
+}
+
 /**
  * A ready thread always has at least one move to offer. When the person's
  * words held no explicit action, the move is their own "next" or outcome
@@ -380,7 +415,7 @@ export function ensureMoves(thread: ThoughtDraft): ThoughtDraft {
   const seed = [known("next"), known("outcome")].find((v) => v && concreteMove(v));
   if (!known("next") && !known("outcome")) return thread;
   const title = seed
-    ? shortTitle(seed.replace(/[.!?…]+$/, "").replace(/^(first|then|next|tonight|tomorrow)\s+/i, ""), 70)
+    ? cleanMove(seed, 70)
     : `Take the first small step on ${thread.title.toLowerCase()}`;
   return {
     ...thread,

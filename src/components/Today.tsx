@@ -2,7 +2,7 @@ import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Task } from "../model.ts";
-import { attentionLabel, clarity, pendingMessage } from "../thread.ts";
+import { attentionLabel, clarity, moveHeadline, pendingMessage } from "../thread.ts";
 import { BUILD_TAG } from "./Funnel.tsx";
 import { C } from "./theme.ts";
 
@@ -16,6 +16,7 @@ export default function Today({
   nextTask,
   nextThread,
   levelLabel,
+  timeWindow,
   suggestion,
   busy = false,
   notice = "",
@@ -34,6 +35,8 @@ export default function Today({
   nextTask?: Task;
   nextThread?: ThoughtDraft;
   levelLabel: string;
+  /** The person's usual time window, used to word when the move happens. */
+  timeWindow?: string;
   /** What Flow suggests recording next, from the person's own profile. */
   suggestion: { title: string; prompt: string };
   busy?: boolean;
@@ -81,7 +84,7 @@ export default function Today({
         {nextTask && (
           <View style={s.next}>
             <Text style={s.kicker}>NEXT</Text>
-            <Text style={s.nextTitle}>{nextTask.title}</Text>
+            <Text style={s.nextTitle} numberOfLines={3}>{moveHeadline(nextTask, timeWindow)}</Text>
             {nextThread && (
               <Pressable accessibilityRole="button" accessibilityLabel="Open the thread for your next move" onPress={() => onOpenThread(nextThread.id)}>
                 <Text style={s.nextThread}>from “{nextThread.title}”</Text>

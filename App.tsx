@@ -512,6 +512,7 @@ function Flow() {
             nextTask={nextTask}
             nextThread={nextThread}
             levelLabel={level.level ? level.level.title : type ? type.name : "Level"}
+            timeWindow={profile.plate?.timeWindow}
             suggestion={suggestion}
             busy={busy}
             notice={notice}
