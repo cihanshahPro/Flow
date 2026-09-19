@@ -45,6 +45,21 @@ export type ThoughtDraft = {
   goalIds?: string[];
   level?: number;
 };
+
+/** Ask for one missing fingerprint feature at a time, without creating tasks. */
+export function missingThreadPoints(source: string): string[] {
+  const text = source.replace(/\s+/g, " ").trim();
+  const hasOutcome = /\b(want|need|goal|build|make|finish|complete|resolve|apply|deal with|figure out|follow up|schedule|create|start|stop)\b/i.test(text);
+  const hasTiming = /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week|\b\d{1,2}[/:.-]\d{1,2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b\d{4}\b)\b/i.test(text);
+  const hasPeople = /\b(i alone|just me|no one else|my lawyer|my doctor|my friend|my partner|my client|with [A-Z][a-z]+|[A-Z][a-z]+ and I)\b/i.test(text);
+  const hasConstraint = /\b(because|but|can't|cannot|won't|waiting|budget|money|deadline|blocked|depends|after|before|unless|limited)\b/i.test(text);
+  const missing: string[] = [];
+  if (!hasOutcome) missing.push("What result would make this thread feel resolved?");
+  if (!hasTiming) missing.push("Is there a real date or time Flow should keep with this thread?");
+  if (!hasPeople) missing.push("Who else is involved, if anyone?");
+  if (!hasConstraint) missing.push("What could block this, or what should Flow keep in mind?");
+  return missing;
+}
 const actionStart =
   /^(?:i (?:need|want|have) to |(?:we|i) should |let'?s |please )?(?:call|email|ask|send|finish|start|build|make|choose|pick|book|find|write|prepare|follow up|check|review|talk|contact|collect|buy|research|schedule|create|apply|visit|read|plan|update|design|test|record)\b/i;
 export function suggestDraft(
@@ -99,7 +114,7 @@ export function suggestDraft(
     createdAt: now.toISOString(),
     threadStatus: "dumped",
     goalsReady: false,
-    missingPoints: [],
+    missingPoints: missingThreadPoints(source),
   };
 }
 export function refineDraft(draft: ThoughtDraft, update: string): ThoughtDraft {
@@ -257,9 +272,14 @@ export function appendPlanUpdate(
           plan.steps.filter((step) => !step.accepted && !step.deferred).length,
       ),
     );
+  const combined = [plan.source, ...plan.updates, update.source].join("\n\n");
+  const missingPoints = missingThreadPoints(combined);
   return {
     ...plan,
     state: "draft",
+    threadStatus: missingPoints.length ? "understanding" : "ready",
+    goalsReady: missingPoints.length === 0,
+    missingPoints,
     sourceNoteIds: [...(plan.sourceNoteIds ?? []), update.id],
     updates: [...plan.updates, update.source],
     steps: [
