@@ -1,3 +1,4 @@
+import { starterFor } from "../starters";
 import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
@@ -24,11 +25,21 @@ export default function Onboarding({
   onSave,
   onClose,
   onCapture,
+  onStart,
+  onContinue,
+  existingWork = false,
+  externalBusy = false,
+  externalError = "",
 }: {
   profile: Profile;
   onSave: (p: Profile) => Promise<void>;
   onClose: () => void;
   onCapture: (topic: string) => void;
+  onStart: (topic: string) => void;
+  onContinue: () => void;
+  existingWork?: boolean;
+  externalBusy?: boolean;
+  externalError?: string;
 }) {
   const [index, setIndex] = useState(Math.min(profile.answers.length, 19));
   const [busy, setBusy] = useState(false);
@@ -58,7 +69,7 @@ export default function Onboarding({
       key={label}
       accessibilityRole="button"
       accessibilityLabel={label}
-      disabled={busy}
+      disabled={busy || externalBusy}
       onPress={fn}
       style={[s.button, primary && s.primary, busy && { opacity: 0.5 }]}
     >
@@ -79,6 +90,7 @@ export default function Onboarding({
     areaSelections(profile.areas[a.id]).map((choice) => ({
       title: choice,
       topic: `${a.title}: ${choice}`,
+      direction: { directionId: `${a.id}:${choice}`, areaId: a.id, choice },
     })),
   );
   const focus = active.find((x) => x.topic === profile.focus) ?? active[0];
@@ -157,7 +169,7 @@ export default function Onboarding({
               1. Collect what matters across your life.
             </Text>
             <Text style={s.body}>
-              2. Take one direction into a voice draft.
+              2. Review a suggested first step or use a saved thought.
             </Text>
             <Text style={s.body}>
               3.{" "}
@@ -166,21 +178,22 @@ export default function Onboarding({
                 : "Follow the first step in the sequence."}
             </Text>
           </View>
-          {guide.traits.map((t) => (
-            <View key={t.trait} style={s.card}>
-              <Text style={s.buttonText}>
-                {t.trait === "Neuroticism" ? "Emotional stability" : t.trait}
-              </Text>
-              <Text style={s.body}>{t.description}</Text>
-            </View>
-          ))}
+          {details &&
+            guide.traits.map((t) => (
+              <View key={t.trait} style={s.card}>
+                <Text style={s.buttonText}>
+                  {t.trait === "Neuroticism" ? "Emotional stability" : t.trait}
+                </Text>
+                <Text style={s.body}>{t.description}</Text>
+              </View>
+            ))}
           {button(
             "Use my recommended path",
             () =>
               void save({
                 ...profile,
                 presentation: guide.presentation,
-                stage: "areas",
+                stage: Object.keys(profile.areas).length ? "map" : "areas",
               }),
             true,
           )}
@@ -193,7 +206,7 @@ export default function Onboarding({
                 ...profile,
                 presentation:
                   guide.presentation === "small" ? "sequence" : "small",
-                stage: "areas",
+                stage: Object.keys(profile.areas).length ? "map" : "areas",
               }),
           )}
           {button(
@@ -233,7 +246,7 @@ export default function Onboarding({
                 accessibilityRole="checkbox"
                 accessibilityLabel={c}
                 accessibilityState={{ checked }}
-                disabled={busy}
+                disabled={busy || externalBusy}
                 onPress={() => void save(toggleArea(profile, area.id, c))}
                 style={[s.button, checked && s.primary]}
               >
@@ -277,17 +290,20 @@ export default function Onboarding({
               <Text style={s.kicker}>START HERE</Text>
               <Text style={s.title}>{focus.title}</Text>
               <Text style={s.body}>{guide.reason}</Text>
-              {button(
-                "Walk me through this",
-                () =>
-                  void save({
-                    ...profile,
-                    focus: focus.topic,
-                    obstacle: undefined,
-                    stage: "guide",
-                  }),
-                true,
-              )}
+              {existingWork &&
+                button("Continue my saved work", onContinue, true)}
+              {!existingWork &&
+                button(
+                  "Walk me through this",
+                  () =>
+                    void save({
+                      ...profile,
+                      focus: focus.topic,
+                      obstacle: undefined,
+                      stage: "guide",
+                    }),
+                  true,
+                )}
               {active.length > 1 &&
                 button(
                   alternatives
@@ -302,8 +318,9 @@ export default function Onboarding({
                     button(
                       x.title,
                       () =>
-                        void save({ ...profile, focus: x.topic }, () =>
-                          setAlternatives(false),
+                        void save(
+                          { ...profile, focus: x.topic, focusExplicit: true },
+                          () => setAlternatives(false),
                         ),
                     ),
                   )}
@@ -336,8 +353,8 @@ export default function Onboarding({
             </View>
           )}
           {button(
-            "Use Flow",
-            () => void save({ ...profile, completed: true }, onClose),
+            "Go to my next step",
+            () => void save({ ...profile, completed: true }, onContinue),
             true,
           )}
           {button(
@@ -369,46 +386,31 @@ export default function Onboarding({
           )}
         </>
       )}
-      {profile.stage === "guide" && (
+      {profile.stage === "guide" && focus && (
         <>
-          <Text style={s.kicker}>YOUR FIRST GUIDED STEP</Text>
-          <Text style={s.title}>{focus?.title ?? "Choose a direction"}</Text>
-          {!profile.obstacle ? (
+          <Text style={s.kicker}>
+            YOUR FIRST ACTION · {focus.title.toUpperCase()}
+          </Text>
+          {existingWork ? (
             <>
+              <Text style={s.title}>Pick up where you left off.</Text>
               <Text style={s.body}>
-                What is getting in the way of starting?
+                You already have saved work. We’ll continue that before asking
+                for more.
               </Text>
-              {guide.obstacles.map((o) =>
-                button(o, () => void save({ ...profile, obstacle: o })),
-              )}
+              {button("Continue my saved work", onContinue, true)}
             </>
           ) : (
             <>
-              <View style={s.card}>
-                <Text style={s.buttonText}>Here’s the plan</Text>
-                <Text style={s.body}>
-                  {obstaclePlan(profile.obstacle, guide.presentation)}
-                </Text>
-              </View>
-              <Text style={s.body}>{guide.voicePrompt}</Text>
+              <Text style={s.title}>{starterFor(focus.direction).title}</Text>
+              <Text style={s.body}>{starterFor(focus.direction).why}</Text>
               <Text style={s.small}>
-                Record once. Flow will transcribe your words and offer a draft.
-                Choose its first action to put the plan into practice.
+                Suggested from the interest you selected. Accept it only if it
+                fits; your existing details can replace it.
               </Text>
-              {focus &&
-                button(
-                  "Record my first step",
-                  () =>
-                    void save({ ...profile, completed: true }, () =>
-                      onCapture(
-                        `${focus.topic}. ${guide.voicePrompt} ${obstaclePlan(profile.obstacle!, guide.presentation)}`,
-                      ),
-                    ),
-                  true,
-                )}
-              {button(
-                "Change what’s blocking me",
-                () => void save({ ...profile, obstacle: undefined }),
+              {button("Use this first step", () => onStart(focus.topic), true)}
+              {button("Use my own details instead", () =>
+                onCapture(focus.topic),
               )}
             </>
           )}
@@ -417,6 +419,11 @@ export default function Onboarding({
             () => void save({ ...profile, stage: "map" }),
           )}
         </>
+      )}
+      {!!externalError && (
+        <Text accessibilityRole="alert" style={s.error}>
+          {externalError}
+        </Text>
       )}
       {!!error && (
         <Text accessibilityRole="alert" style={s.error}>

@@ -19,6 +19,8 @@ test("assessment advances through exact 20 answers, then choices build a map and
       view.update(React.createElement(Onboarding, props()));
     },
     onClose() {},
+    onStart() {},
+    onContinue() {},
     onCapture: (t) => (captured = t),
   });
   await act(async () => {
@@ -49,11 +51,10 @@ test("assessment advances through exact 20 answers, then choices build a map and
   assert.equal(profile.stage, "map");
   assert.equal(view.root.findAllByType("TextInput").length, 0);
   await tap("Walk me through this");
-  await tap("The task feels too big");
-  await tap("Record my first step");
+  await tap("Use my own details instead");
   assert.ok(captured.startsWith("Work & making: Build something"));
   await tap("Back to my starting point");
-  assert.equal(profile.completed, true);
+  assert.notEqual(profile.completed, true);
   await tap("Remove personality answers");
   assert.deepEqual(profile.answers, []);
   assert.equal(profile.presentation, undefined);
@@ -69,6 +70,8 @@ test("saving failure stays on current question and offers retry", async () => {
           throw Error("disk");
         },
         onClose() {},
+        onStart() {},
+        onContinue() {},
         onCapture() {},
       }),
     );

@@ -23,3 +23,11 @@ The map leads with the first selected direction unless the user chooses another.
 The obstacle-to-action step borrows the established if-then planning idea discussed in WOOP (https://woopmylife.org/en/practice). It is a simplified Flow adaptation, not the full validated WOOP exercise. No calendar commitments or messages are created automatically.
 
 Validation: 54 automated tests, strict TypeScript, full assessment → multiselect → map → obstacle → recording handoff; legacy selection compatibility and explicit preference precedence. Physical iPhone testing remains separate from export/browser checks.
+
+## Build 08: persistent profile and setup-to-action continuity
+
+The guided product plan is now in `GUIDED-PRODUCT-PLAN.md`. Profile has a permanent tab with factual assessment/area coverage, trait details, saved interests, effective guidance style, linked action status and milestones. Today uses one shared saved-state selector, including legacy and orphaned linked work, instead of a generic capture hero. Explicit new focus is distinguished from legacy focus so returning users resume saved work by default.
+
+Optional direction metadata persists through original notes, transcription, shaped or fallback drafts, retries, refinement, reorganization and accepted tasks. It is not inserted into source text or sent as personality data to the AI backend. Suggested starter actions are visibly labeled suggestions, require acceptance, use stable IDs, and do not invent dates or contacts. Opening the recorder does not complete a milestone. The survey-complete flag is no longer the activation signal.
+
+Validation: 77 automated tests, strict TypeScript, iOS/Android/web exports. Browser checks: existing profile loads, saved legacy action remains usable, explicit focus changes Today, starter acceptance survives reload, and completion updates Profile to a linked completed action. Phone microphone and native Calendar were covered by existing regression tests, not retested on a physical iPhone in this pass.

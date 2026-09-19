@@ -103,6 +103,7 @@ export type Profile = {
   areaIndex: number;
   areas: Record<string, string | string[]>;
   focus?: string;
+  focusExplicit?: boolean;
   obstacle?: string;
   presentation?: Presentation;
   completed?: boolean;

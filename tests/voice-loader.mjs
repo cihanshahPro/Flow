@@ -4,6 +4,8 @@ const mocks = new URL("./voice-mocks.mjs", import.meta.url).href;
 export async function resolve(specifier, context, next) {
   if (["react-native", "expo-audio", "expo-file-system"].includes(specifier))
     return { url: mocks, shortCircuit: true };
+  if (["../starters", "../journey"].includes(specifier))
+    return next(specifier + ".ts", context);
   if (specifier === "../personality") return next("../personality.ts", context);
   if (specifier === "../recording-lifecycle")
     return next("../recording-lifecycle.ts", context);
