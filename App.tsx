@@ -435,29 +435,30 @@ function Flow() {
             <ScrollView contentContainerStyle={s.sheetBody} keyboardShouldPersistTaps="handled">
               <Text style={s.sheetTitle}>{captureTitle}</Text>
               <Text style={s.body}>{captureHint}</Text>
+              {consentAsk && (
+                <View style={s.card}>
+                  <View style={{ gap: 10 }}>
+                    <Text style={s.body}>
+                      Your iPhone can't run Apple's on-device AI. Flowthread can send the text of your note (never the audio) to a secure server to shape it. Nothing is stored.
+                    </Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Allow" onPress={() => consentAsk(true)} style={s.primary}>
+                      <Text style={s.primaryText}>Allow</Text>
+                    </Pressable>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Keep it basic" onPress={() => consentAsk(false)} hitSlop={8} style={{ alignSelf: "center" }}>
+                      <Text style={s.link}>Keep it basic</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
               {capture?.mode === "voice" ? (
                 <>
                   {voiceResult ? (
                     <View style={s.card}>
                       <Text style={s.cardTitle}>{processing ? "Saved. Flow is listening back…" : "Recording saved."}</Text>
                       {processing ? <ActivityIndicator color={C.blue} /> : <AudioPlayback uri={voiceResult.audioUri!} />}
-                      {consentAsk ? (
-                        <View style={{ gap: 10 }}>
-                          <Text style={s.body}>
-                            Your iPhone can't run Apple's on-device AI. Flowthread can send the text of your note (never the audio) to a secure server to shape it. Nothing is stored.
-                          </Text>
-                          <Pressable accessibilityRole="button" accessibilityLabel="Allow" onPress={() => consentAsk(true)} style={s.primary}>
-                            <Text style={s.primaryText}>Allow</Text>
-                          </Pressable>
-                          <Pressable accessibilityRole="button" accessibilityLabel="Keep it basic" onPress={() => consentAsk(false)} hitSlop={8} style={{ alignSelf: "center" }}>
-                            <Text style={s.link}>Keep it basic</Text>
-                          </Pressable>
-                        </View>
-                      ) : (
-                        <Text style={s.body}>
-                          {processing ? "Your audio stays on this phone. Turning it into text here." : processingError}
-                        </Text>
-                      )}
+                      <Text style={s.body}>
+                        {processing ? "Your audio stays on this phone. Turning it into text here." : processingError}
+                      </Text>
                       {!processing && (
                         <Pressable accessibilityRole="button" accessibilityLabel="Retry processing" onPress={() => void processRecording(voiceResult)} style={s.primary}>
                           <Text style={s.primaryText}>Retry</Text>

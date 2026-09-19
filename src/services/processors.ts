@@ -50,7 +50,9 @@ export function deviceLocale(): string {
 export async function capabilities(): Promise<Capabilities> {
   if (!FlowIntelligence) return { speech: false, llm: false, reason: "no-native-module" };
   try {
-    return await FlowIntelligence.capabilities();
+    const caps = await FlowIntelligence.capabilities();
+    if (typeof __DEV__ !== "undefined" && __DEV__) console.log("[Flow caps]", JSON.stringify(caps));
+    return caps;
   } catch {
     return { speech: false, llm: false, reason: "capabilities-failed" };
   }
