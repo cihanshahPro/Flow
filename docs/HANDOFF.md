@@ -4,7 +4,7 @@
 
 Repository: https://github.com/cihanshahPro/Flow
 
-The baseline is `testing`. Test build 12 (the Flow loop: record → chat → move → level) was developed on `handoff/claude` and is proposed as a pull request into `testing`. Read [FLOW-LOOP.md](FLOW-LOOP.md) first, then [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md).
+The baseline is `testing`. Test build 12 (the Flow loop: record → chat → move → level) was developed on `handoff/claude` and is proposed as a pull request into `testing`. Read in this order: [REQUIREMENTS.md](REQUIREMENTS.md) (what must be true), [SKELETON.html](SKELETON.html) (every screen, open it in a browser), [FLOW-LOOP.md](FLOW-LOOP.md) (how it works), then [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md).
 
 ```bash
 git clone https://github.com/cihanshahPro/Flow.git
