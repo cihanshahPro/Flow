@@ -10,6 +10,7 @@ import {
 import type { ThoughtDraft, DraftStep } from "../drafts";
 
 type Props = {
+  presentation?: "small" | "sequence";
   draft: ThoughtDraft;
   busy: boolean;
   organizing: boolean;
@@ -56,6 +57,7 @@ function ChoiceButton({
   );
 }
 export default function DraftReview({
+  presentation,
   draft,
   busy,
   organizing,
@@ -81,7 +83,11 @@ export default function DraftReview({
   const locked = busy || organizing;
   return (
     <ScrollView contentContainerStyle={s.page}>
-      <Text style={s.eyebrow}>YOUR THOUGHT, TAKING SHAPE</Text>
+      <Text style={s.eyebrow}>
+        {presentation === "small"
+          ? "ONE SMALL STEP IS ENOUGH"
+          : "YOUR THOUGHT, TAKING SHAPE"}
+      </Text>
       <Text style={s.heading}>{draft.title}</Text>
       <Text style={s.summary}>
         {draft.summary ??
@@ -160,13 +166,14 @@ export default function DraftReview({
           <ChoiceButton
             title="Choose this step"
             detail={focused.title}
-            primary
+            primary={presentation !== "small"}
             disabled={locked}
             onPress={() => onChoose(focused, false)}
           />
           {focused.smallAction?.toLowerCase() !==
             focused.title.toLowerCase() && (
             <ChoiceButton
+              primary={presentation === "small"}
               title="Start smaller"
               detail={
                 focused.smallAction ?? `Just five minutes on this direction`
