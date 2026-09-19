@@ -11,7 +11,7 @@ test("spoken times become real local dates and times", () => {
   assert.deepEqual(whenFromAnswer("This afternoon", now), { date: "2026-09-18", time: "14:00", label: "This afternoon" });
   assert.deepEqual(whenFromAnswer("This evening", now), { date: "2026-09-18", time: "19:00", label: "This evening" });
   assert.deepEqual(whenFromAnswer("tonight after dinner", now), { date: "2026-09-18", time: "19:00", label: "Tonight" });
-  assert.deepEqual(whenFromAnswer("This weekend", now), { date: "2026-09-19", time: "09:00", label: "This weekend" });
+  assert.deepEqual(whenFromAnswer("This weekend", now), { date: "2026-09-19", time: "10:00", label: "This weekend" });
   assert.deepEqual(whenFromAnswer("Next free 15 minutes", now), { date: "2026-09-18", time: "11:00", label: "Today" });
   assert.equal(whenFromAnswer("Not sure where to start", now), undefined);
 });
@@ -35,4 +35,11 @@ test("a shaper-worded question gets no fixed chips unless it asks for the outcom
   const q = t.messages.find((m) => m.kind === "question");
   if (q && q.pointId !== "outcome") assert.equal(q.chips, undefined);
   assert.ok(suggestionChips("motivation").length > 0, "template questions keep their chips");
+});
+
+test("this weekend is a weekend day at 10:00, never the next free hour", () => {
+  const sat = new Date(2026, 8, 19, 20, 0), sun = new Date(2026, 8, 20, 12, 0), mon = new Date(2026, 8, 21, 9, 0);
+  assert.deepEqual(whenFromAnswer("This weekend", sat), { date: "2026-09-20", time: "10:00", label: "Sunday" });
+  assert.deepEqual(whenFromAnswer("This weekend", sun), { date: "2026-09-26", time: "10:00", label: "Next weekend" });
+  assert.deepEqual(whenFromAnswer("This weekend", mon), { date: "2026-09-26", time: "10:00", label: "This weekend" });
 });
