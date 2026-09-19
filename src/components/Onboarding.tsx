@@ -1,6 +1,10 @@
 import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
+  areaSelections,
+  toggleArea,
+  productivityGuide,
+  obstaclePlan,
   AREAS,
   ITEMS,
   scoreAnswers,
@@ -30,6 +34,10 @@ export default function Onboarding({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lock = useRef(false);
+  const [details, setDetails] = useState(false);
+  const [alternatives, setAlternatives] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const guide = productivityGuide(profile.answers, profile.presentation);
   async function save(p: Profile, after?: () => void) {
     if (lock.current) return;
     lock.current = true;
@@ -58,20 +66,22 @@ export default function Onboarding({
     </Pressable>
   );
   const area = AREAS[Math.min(profile.areaIndex, AREAS.length - 1)];
-  function areaAnswer(answer: string) {
+  function advanceArea(status?: string) {
     const next = profile.areaIndex + 1;
     void save({
       ...profile,
-      areas: { ...profile.areas, [area.id]: answer },
+      areas: status ? { ...profile.areas, [area.id]: status } : profile.areas,
       areaIndex: Math.min(next, 5),
       stage: next === 6 ? "map" : "areas",
     });
   }
-  const active = AREAS.filter(
-    (a) =>
-      profile.areas[a.id] &&
-      !["Nothing current", "Later"].includes(profile.areas[a.id]),
+  const active = AREAS.flatMap((a) =>
+    areaSelections(profile.areas[a.id]).map((choice) => ({
+      title: choice,
+      topic: `${a.title}: ${choice}`,
+    })),
   );
+  const focus = active.find((x) => x.topic === profile.focus) ?? active[0];
   return (
     <ScrollView contentContainerStyle={s.page}>
       <View style={s.top}>
@@ -138,44 +148,72 @@ export default function Onboarding({
       )}
       {profile.stage === "results" && (
         <>
-          <Text style={s.title}>Your starting profile.</Text>
-          <Text style={s.body}>
-            These are averages from 1–5, not percentiles or labels. No single
-            score decides what you should do.
-          </Text>
-          {Object.entries(scoreAnswers(profile.answers)).map(
-            ([trait, value]) => (
-              <View key={trait} style={s.card}>
-                <Text style={s.buttonText}>
-                  {trait === "Neuroticism" ? "Emotional stability" : trait} ·{" "}
-                  {(trait === "Neuroticism" ? 6 - value : value).toFixed(2)} / 5
-                </Text>
-              </View>
-            ),
-          )}
-          <Text style={s.body}>
-            Flow suggests{" "}
-            {suggestedPresentation(profile.answers) === "small"
-              ? "a smaller first action"
-              : "a visible sequence of steps"}
-            . This is a product experiment, not a validated personality
-            prescription. Choose what feels useful.
-          </Text>
+          <Text style={s.kicker}>YOUR PERSONALITY, IN PLAIN WORDS</Text>
+          <Text style={s.title}>{guide.title}</Text>
+          <Text style={s.body}>{guide.reason}</Text>
+          <View style={s.card}>
+            <Text style={s.buttonText}>Your recommended starting routine</Text>
+            <Text style={s.body}>
+              1. Collect what matters across your life.
+            </Text>
+            <Text style={s.body}>
+              2. Take one direction into a voice draft.
+            </Text>
+            <Text style={s.body}>
+              3.{" "}
+              {guide.presentation === "small"
+                ? "Choose a five-minute first action."
+                : "Follow the first step in the sequence."}
+            </Text>
+          </View>
+          {guide.traits.map((t) => (
+            <View key={t.trait} style={s.card}>
+              <Text style={s.buttonText}>
+                {t.trait === "Neuroticism" ? "Emotional stability" : t.trait}
+              </Text>
+              <Text style={s.body}>{t.description}</Text>
+            </View>
+          ))}
           {button(
-            "Start with smaller actions",
-            () =>
-              void save({ ...profile, presentation: "small", stage: "areas" }),
-            suggestedPresentation(profile.answers) === "small",
-          )}
-          {button(
-            "Show me the step sequence",
+            "Use my recommended path",
             () =>
               void save({
                 ...profile,
-                presentation: "sequence",
+                presentation: guide.presentation,
                 stage: "areas",
               }),
-            suggestedPresentation(profile.answers) === "sequence",
+            true,
+          )}
+          {button(
+            guide.presentation === "small"
+              ? "I prefer a visible step sequence"
+              : "I prefer a smaller first action",
+            () =>
+              void save({
+                ...profile,
+                presentation:
+                  guide.presentation === "small" ? "sequence" : "small",
+                stage: "areas",
+              }),
+          )}
+          {button(
+            details ? "Hide how this works" : "Why this recommendation?",
+            () => setDetails(!details),
+          )}
+          {details && (
+            <View style={s.card}>
+              {guide.tips.map((t) => (
+                <Text key={t} style={s.body}>
+                  {t}
+                </Text>
+              ))}
+              <Text style={s.small}>
+                Your Mini-IPIP answers describe five traits, not a fixed type.
+                Flow’s routine is a starting recommendation to try, not a proven
+                best method for your personality. Interpretations use response
+                ranges, not population percentiles. You can change the route.
+              </Text>
+            </View>
           )}
         </>
       )}
@@ -184,9 +222,36 @@ export default function Onboarding({
           <Text style={s.kicker}>LIFE AREA {profile.areaIndex + 1} OF 6</Text>
           <Text style={s.title}>{area.title}</Text>
           <Text style={s.body}>{area.prompt}</Text>
-          {area.choices.map((c) => button(c, () => areaAnswer(c), true))}
-          {button("Nothing current", () => areaAnswer("Nothing current"))}
-          {button("Later", () => areaAnswer("Later"))}
+          <Text style={s.small}>
+            Select everything that applies. We’ll focus on one afterward.
+          </Text>
+          {area.choices.map((c) => {
+            const checked = areaSelections(profile.areas[area.id]).includes(c);
+            return (
+              <Pressable
+                key={c}
+                accessibilityRole="checkbox"
+                accessibilityLabel={c}
+                accessibilityState={{ checked }}
+                disabled={busy}
+                onPress={() => void save(toggleArea(profile, area.id, c))}
+                style={[s.button, checked && s.primary]}
+              >
+                <Text style={[s.buttonText, checked && { color: "white" }]}>
+                  {checked ? "✓ " : "＋ "}
+                  {c}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {areaSelections(profile.areas[area.id]).length > 0 &&
+            button(
+              `Continue with ${areaSelections(profile.areas[area.id]).length} selected`,
+              () => advanceArea(),
+              true,
+            )}
+          {button("Nothing current", () => advanceArea("Nothing current"))}
+          {button("Later", () => advanceArea("Later"))}
           {profile.areaIndex > 0 &&
             button(
               "Previous area",
@@ -200,30 +265,76 @@ export default function Onboarding({
       )}
       {profile.stage === "map" && (
         <>
-          <Text style={s.title}>Room for what matters.</Text>
+          <Text style={s.title}>Everything saved. One place to start.</Text>
           <Text style={s.body}>
-            Your first map—not a list of commitments. Pick one branch to add the
-            details by voice.
+            {active.length} directions captured.{" "}
+            {focus
+              ? "We’ll start with the first direction you selected. This is a starting suggestion, not an urgency ranking."
+              : "You can return to add directions whenever something comes up."}
           </Text>
-          <View style={s.card}>
-            <Text style={s.kicker}>MY LIFE</Text>
-            {AREAS.map((a) => (
-              <View key={a.id} style={s.branch}>
-                <Text style={s.buttonText}>↳ {a.title}</Text>
-                <Text style={s.small}>
-                  {profile.areas[a.id] || "Not explored"}
-                </Text>
-                {active.includes(a) &&
-                  button(
-                    `Talk about ${profile.areas[a.id].toLowerCase()}`,
-                    () =>
-                      void save({ ...profile, completed: true }, () =>
-                        onCapture(`${a.title}: ${profile.areas[a.id]}`),
-                      ),
+          {focus && (
+            <View style={s.card}>
+              <Text style={s.kicker}>START HERE</Text>
+              <Text style={s.title}>{focus.title}</Text>
+              <Text style={s.body}>{guide.reason}</Text>
+              {button(
+                "Walk me through this",
+                () =>
+                  void save({
+                    ...profile,
+                    focus: focus.topic,
+                    obstacle: undefined,
+                    stage: "guide",
+                  }),
+                true,
+              )}
+              {active.length > 1 &&
+                button(
+                  alternatives
+                    ? "Hide other starting points"
+                    : "Choose a different starting point",
+                  () => setAlternatives(!alternatives),
+                )}
+              {alternatives &&
+                active
+                  .filter((x) => x.topic !== focus.topic)
+                  .map((x) =>
+                    button(
+                      x.title,
+                      () =>
+                        void save({ ...profile, focus: x.topic }, () =>
+                          setAlternatives(false),
+                        ),
+                    ),
                   )}
-              </View>
-            ))}
-          </View>
+            </View>
+          )}
+          {button(showMap ? "Hide my full map" : "See my full map", () =>
+            setShowMap(!showMap),
+          )}
+          {showMap && (
+            <View style={s.card}>
+              <Text style={s.kicker}>MY LIFE</Text>
+              {AREAS.map((a) => (
+                <View key={a.id} style={s.branch}>
+                  <Text style={s.buttonText}>↳ {a.title}</Text>
+                  {areaSelections(profile.areas[a.id]).length ? (
+                    areaSelections(profile.areas[a.id]).map((c) => (
+                      <Text key={c} style={s.body}>
+                        • {c}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text style={s.small}>
+                      {typeof profile.areas[a.id] === "string"
+                        ? profile.areas[a.id]
+                        : "Not explored"}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
           {button(
             "Use Flow",
             () => void save({ ...profile, completed: true }, onClose),
@@ -255,6 +366,55 @@ export default function Onboarding({
             "Remove personality answers",
             () =>
               void save({ ...profile, answers: [], presentation: undefined }),
+          )}
+        </>
+      )}
+      {profile.stage === "guide" && (
+        <>
+          <Text style={s.kicker}>YOUR FIRST GUIDED STEP</Text>
+          <Text style={s.title}>{focus?.title ?? "Choose a direction"}</Text>
+          {!profile.obstacle ? (
+            <>
+              <Text style={s.body}>
+                What is getting in the way of starting?
+              </Text>
+              {guide.obstacles.map((o) =>
+                button(o, () => void save({ ...profile, obstacle: o })),
+              )}
+            </>
+          ) : (
+            <>
+              <View style={s.card}>
+                <Text style={s.buttonText}>Here’s the plan</Text>
+                <Text style={s.body}>
+                  {obstaclePlan(profile.obstacle, guide.presentation)}
+                </Text>
+              </View>
+              <Text style={s.body}>{guide.voicePrompt}</Text>
+              <Text style={s.small}>
+                Record once. Flow will transcribe your words and offer a draft.
+                Choose its first action to put the plan into practice.
+              </Text>
+              {focus &&
+                button(
+                  "Record my first step",
+                  () =>
+                    void save({ ...profile, completed: true }, () =>
+                      onCapture(
+                        `${focus.topic}. ${guide.voicePrompt} ${obstaclePlan(profile.obstacle!, guide.presentation)}`,
+                      ),
+                    ),
+                  true,
+                )}
+              {button(
+                "Change what’s blocking me",
+                () => void save({ ...profile, obstacle: undefined }),
+              )}
+            </>
+          )}
+          {button(
+            "Back to my starting point",
+            () => void save({ ...profile, stage: "map" }),
           )}
         </>
       )}
