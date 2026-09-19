@@ -8,8 +8,8 @@ export async function resolve(specifier, context, next) {
     ["../starters", "../journey", "../profile-completion"].includes(specifier)
   )
     return next(specifier + ".ts", context);
-  if (specifier === "./ProfileCompletion")
-    return next("./ProfileCompletion.tsx", context);
+  if (["./ProfileCompletion", "./ProgressCard"].includes(specifier))
+    return next(specifier + ".tsx", context);
   if (specifier === "../personality") return next("../personality.ts", context);
   if (specifier === "../recording-lifecycle")
     return next("../recording-lifecycle.ts", context);

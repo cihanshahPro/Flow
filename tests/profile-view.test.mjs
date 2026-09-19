@@ -7,6 +7,7 @@ register("./voice-loader.mjs", import.meta.url);
 const { default: ProfileView } =
   await import("../src/components/ProfileView.tsx");
 const { newProfile } = await import("../src/personality.ts");
+const { newProgress } = await import("../src/progress.ts");
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 test("profile exposes supplied coverage, saved interests and a real continuation without rerunning onboarding", async () => {
   let view,
@@ -25,6 +26,7 @@ test("profile exposes supplied coverage, saved interests and a real continuation
     view = renderer.create(
       React.createElement(ProfileView, {
         profile: p,
+        progress: newProgress(),
         notes: [],
         drafts: [],
         tasks: [],
@@ -32,6 +34,7 @@ test("profile exposes supplied coverage, saved interests and a real continuation
         onContinue() {
           continued++;
         },
+        onCapture() {},
         onEditAreas() {},
         onAssessment() {},
         onPreference() {},
@@ -52,7 +55,7 @@ test("profile exposes supplied coverage, saved interests and a real continuation
   assert.equal(view.root.findAllByType("TextInput").length, 0);
   const text = JSON.stringify(view.toJSON());
   assert.ok(text.includes("PROFILE COMPLETION"));
-  assert.ok(text.includes("Getting acquainted".toUpperCase()));
+  assert.ok(text.includes("Levels unlock at 100%"));
   assert.ok(text.includes("%"));
   assert.equal(
     view.root
@@ -68,5 +71,38 @@ test("profile exposes supplied coverage, saved interests and a real continuation
   assert.equal(focus, "Work & making: Build something");
   await tap("See my personality");
   assert.ok(JSON.stringify(view.toJSON()).includes("Emotional stability"));
+  await act(async () => view.unmount());
+});
+
+test("a setup-only profile has one missing-piece route instead of a self-link", async () => {
+  let view;
+  await act(async () => {
+    view = renderer.create(
+      React.createElement(ProfileView, {
+        profile: newProfile(),
+        progress: newProgress(),
+        notes: [],
+        drafts: [],
+        tasks: [],
+        busy: false,
+        onContinue() {
+          throw Error("Self-link should not exist");
+        },
+        onCapture() {},
+        onEditAreas() {},
+        onAssessment() {},
+        onPreference() {},
+        onConfigure: async () => {},
+        onCompleteAssessment() {},
+        onCompleteAreas() {},
+        onFocus() {},
+      }),
+    );
+  });
+  const labels = view.root
+    .findAllByType("Pressable")
+    .map((b) => b.props.accessibilityLabel);
+  assert.ok(labels.includes("Finish personality questions"));
+  assert.ok(!labels.includes("Go to my next step"));
   await act(async () => view.unmount());
 });

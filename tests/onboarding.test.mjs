@@ -7,6 +7,7 @@ register("./voice-loader.mjs", import.meta.url);
 const { default: Onboarding } =
   await import("../src/components/Onboarding.tsx");
 const { newProfile } = await import("../src/personality.ts");
+const { profileCompletion } = await import("../src/profile-completion.ts");
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 test("assessment advances through exact 20 answers, then choices build a map and hand off to voice", async () => {
   let profile = newProfile(),
@@ -51,6 +52,10 @@ test("assessment advances through exact 20 answers, then choices build a map and
   assert.equal(profile.stage, "map");
   assert.equal(view.root.findAllByType("TextInput").length, 0);
   await tap("Walk me through this");
+  assert.equal(profile.stage, "capacity");
+  assert.equal(profile.focusExplicit, true);
+  await tap("10 minutes");
+  assert.equal(profileCompletion(profile).percent, 100);
   await tap("Use my own details instead");
   assert.ok(captured.startsWith("Work & making: Build something"));
   await tap("Back to my starting point");
