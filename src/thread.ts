@@ -611,7 +611,8 @@ export function respondToRecording(
       hyped.add("ready");
     }
     const step = offerableSteps(next)[0];
-    if (step) added.push(offerMessage(next, step, at, options.plate));
+    // The offer must see this recording too: its time words decide when the move lands.
+    if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, options.plate));
     else if (!isFirst || !hyped.has("ready")) {
       const point = nextMissingPoint(points, mode);
       if (point) ask(point);
