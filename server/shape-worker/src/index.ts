@@ -43,7 +43,10 @@ async function callAnthropic(env: Env, text: string, context: string): Promise<S
       messages: [{ role: "user", content: buildUserPrompt(text, context) }],
     }),
   });
-  if (!res.ok) throw new Error("upstream " + res.status);
+  if (!res.ok) {
+    console.error("anthropic status", res.status); // status only, never content
+    throw new Error("upstream " + res.status);
+  }
   return extractShape(await res.json());
 }
 
