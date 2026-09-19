@@ -347,6 +347,34 @@ export function attentionLabel(thread: ThoughtDraft, tasks: Task[]): string {
   return STAGE_LABEL[stage];
 }
 
+export type ThreadGroup = "active" | "waiting" | "done";
+
+/** Threads list bucket: parked or blocked on someone else = waiting; resolved = done; the rest are active. */
+export function threadGroup(thread: ThoughtDraft, tasks: Task[]): ThreadGroup {
+  const stage = stageFor(thread, tasks);
+  if (stage === "done") return "done";
+  if (stage === "parked") return "waiting";
+  const open = threadTasks(thread, tasks).filter((t) => !t.done);
+  if (open.length && open.every((t) => t.followUp || t.waitingOn?.trim())) return "waiting";
+  return "active";
+}
+
+/** One line under a thread's title: the next move, else the nearest date, else its status. */
+export function threadLine(thread: ThoughtDraft, tasks: Task[], now = new Date()): string {
+  const today = localDate(now);
+  const open = threadTasks(thread, tasks).filter((t) => !t.done);
+  const waiting = open.find((t) => t.waitingOn?.trim());
+  if (waiting) return `Waiting on ${waiting.waitingOn.trim()}${waiting.chaseDate ? ` · check ${waiting.chaseDate}` : ""}`;
+  const pending = pendingMessage(thread);
+  if (!pending && open.length) {
+    const t = [...open].sort((a, b) => (a.plannedDate || "9").localeCompare(b.plannedDate || "9"))[0];
+    return `Next: ${cleanMove(t.title, 48)}${t.plannedDate && t.plannedDate > today ? ` · ${t.plannedDate}` : ""}`;
+  }
+  const due = (thread.dueHints ?? []).map((h) => h.date).filter((d) => d >= today).sort()[0];
+  if (!pending && due && thread.state !== "parked" && !thread.resolvedAt) return `${attentionLabel(thread, tasks)} · due ${due}`;
+  return attentionLabel(thread, tasks);
+}
+
 /** Moves Flow can offer: steps not yet accepted or declined, at most three. */
 export function offerableSteps(thread: ThoughtDraft): DraftStep[] {
   const declined = new Set(thread.declinedStepIds ?? []);
