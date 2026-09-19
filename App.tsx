@@ -27,9 +27,13 @@ import {
   registerVoiceNote,
   saveTask,
 } from "./src/services/storage";
+import ProfileView from "./src/components/ProfileView";
+import { journeyState, directionOptions } from "./src/journey";
+import { starterFor, starterDraft } from "./src/starters";
+import type { DirectionContext } from "./src/model";
 import Onboarding from "./src/components/Onboarding";
 import { loadProfile, saveProfile } from "./src/services/profile";
-import { newProfile, type Profile } from "./src/personality";
+import { productivityGuide, newProfile, type Profile } from "./src/personality";
 import DraftReview from "./src/components/DraftReview";
 import {
   processVoiceNote,
@@ -50,7 +54,7 @@ import {
   type ChooseCalendar,
 } from "./src/services/calendar";
 
-type Screen = "Today" | "My mind" | "Library";
+type Screen = "Today" | "My mind" | "Library" | "Profile";
 const C = {
   paper: "#F6F7FA",
   ink: "#142138",
@@ -145,6 +149,7 @@ function Flow() {
   const [captureVisible, setCaptureVisible] = useState(false);
   const [organizing, setOrganizing] = useState(false);
   const captureId = useRef("");
+  const captureDirection = useRef<DirectionContext | undefined>(undefined);
   const pendingDraft = useRef<string | null>(null);
   function finishSheetTransition() {
     if (pendingDraft.current) {
@@ -177,7 +182,7 @@ function Flow() {
       refresh(),
       loadProfile().then((p) => {
         setProfile(p);
-        setOnboarding(!p.completed);
+        setOnboarding(!p.completed && p.stage === "intro");
       }),
     ])
       .then(() => {
@@ -213,7 +218,10 @@ function Flow() {
     mode: "text" | "voice",
     draftId: string | null = null,
     topic = "",
+    direction?: DirectionContext,
   ) {
+    captureDirection.current =
+      direction ?? drafts.find((d) => d.id === draftId)?.direction;
     setCaptureTopic(topic);
     setVoiceResult(null);
     setProcessingError("");
@@ -231,6 +239,7 @@ function Flow() {
       const id = captureId.current || randomUUID();
       const n: Note = {
         id,
+        direction: captureDirection.current,
         title: text.slice(0, 80),
         text,
         createdAt: new Date().toISOString(),
@@ -239,7 +248,7 @@ function Flow() {
       const prior = drafts.find((d) => d.id === refining);
       const d = prior
         ? refineDraft(prior, text)
-        : await createThoughtDraft(id, text);
+        : await createThoughtDraft(id, text, n.direction);
       await saveDraft(d);
       revealDraftAfterSheet(d.id);
       setComposer(null);
@@ -255,6 +264,7 @@ function Flow() {
     // Registration alone decides whether recording saved successfully.
     await registerVoiceNote({
       ...v,
+      direction: captureDirection.current,
       id: v.audioUri,
       createdAt: new Date().toISOString(),
     });
@@ -286,12 +296,62 @@ function Flow() {
   function recordingCompleted(saved: SavedVoiceNote) {
     const entry: Note = {
       ...saved,
+      direction: captureDirection.current,
       id: saved.audioUri,
       createdAt: new Date().toISOString(),
     };
     setVoiceBusy(false);
     setVoiceResult(entry);
     void processRecording(entry, "capture");
+  }
+  const journey = journeyState(profile, notes, drafts, tasks);
+  const next = journey.next;
+  const suggestedStarter = next.direction ? starterFor(next.direction) : null;
+  const nextTask =
+    next.kind === "task" ? tasks.find((t) => t.id === next.id) : undefined;
+  async function updateProfile(p: Profile) {
+    await saveProfile(p);
+    setProfile(p);
+  }
+  function continueJourney() {
+    navigate("Today");
+    if (next.kind === "setup") {
+      setOnboarding(true);
+      return;
+    }
+    if (next.kind === "draft") {
+      setSelected(next.id!);
+      return;
+    }
+    if (next.kind === "process") {
+      const n = notes.find((n) => n.id === next.id);
+      if (n) {
+        setNote(n);
+        setProcessingError("");
+      }
+      return;
+    }
+  }
+  async function useStarter(direction: DirectionContext) {
+    await run(async () => {
+      const id = starterDraft(direction).id;
+      const d = drafts.find((d) => d.id === id) ?? starterDraft(direction);
+      await saveDraft(d);
+      await acceptStep(d, d.steps[0]);
+      await updateProfile({ ...profile, completed: true });
+      setOnboarding(false);
+      navigate("Today");
+      setNotice("Your first action is ready. Everything else stays saved.");
+    });
+  }
+  function guidedCapture(direction: DirectionContext) {
+    setOnboarding(false);
+    capture(
+      "voice",
+      null,
+      `What is already happening with ${direction.choice.toLowerCase()}? Mention any actual date or person involved.`,
+      direction,
+    );
   }
   const current = drafts.find((d) => d.id === selected);
   const activeDrafts = drafts.filter((d) => d.state === "draft");
@@ -339,7 +399,9 @@ function Flow() {
   async function add(d: ThoughtDraft, step: DraftStep) {
     await run(async () => {
       await acceptStep(d, step);
-      setNotice("Added to today. One useful step is enough.");
+      setSelected(null);
+      navigate("Today");
+      setNotice("Your chosen action is ready below.");
     });
   }
   async function organizeCurrent(draft: ThoughtDraft) {
@@ -348,6 +410,7 @@ function Flow() {
       const shaped = await organizeThought(
         draft.id,
         [draft.source, ...draft.updates].join("\n\n"),
+        draft.direction,
       );
       const preserved = draft.steps.filter(
         (step) => step.accepted || step.deferred,
@@ -457,9 +520,24 @@ function Flow() {
           }}
           onClose={() => setOnboarding(false)}
           onCapture={(topic) => {
-            setOnboarding(false);
-            capture("voice", null, topic);
+            const d = directionOptions(profile).find((d) => d.title === topic);
+            if (d) guidedCapture(d);
           }}
+          onStart={(topic) => {
+            const d = directionOptions(profile).find((d) => d.title === topic);
+            if (d) void useStarter(d);
+          }}
+          onContinue={() => {
+            setOnboarding(false);
+            navigate("Today");
+          }}
+          externalBusy={busy}
+          externalError={error}
+          existingWork={
+            notes.length > 0 ||
+            drafts.some((d) => !d.example) ||
+            tasks.length > 0
+          }
         />
       </SafeAreaView>
     );
@@ -496,7 +574,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 07</Text>
+          <Text style={s.test}>TEST BUILD · 08</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
@@ -551,83 +629,102 @@ function Flow() {
                   </Text>
                 </View>
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Capture a thought"
-                onPress={() => capture("text")}
-                style={({ pressed }) => [s.hero, pressed && { opacity: 0.9 }]}
-              >
-                <View style={s.heroTop}>
-                  <Text style={s.heroKicker}>A PLACE TO UNLOAD</Text>
-                  <Text style={s.heroArrow}>↗</Text>
-                </View>
-                <Text style={s.heroTitle}>What’s on{"\n"}your mind?</Text>
-                <View style={s.heroBottom}>
-                  <Text style={s.heroSub}>
-                    Messy is a perfectly good start.
-                  </Text>
-                  <Wave />
-                </View>
-              </Pressable>
+              <View style={s.hero}>
+                <Text style={s.heroKicker}>
+                  {next.direction?.choice.toUpperCase() ?? "YOUR NEXT STEP"}
+                </Text>
+                <Text style={s.heroTitle}>
+                  {next.kind === "starter"
+                    ? suggestedStarter?.title
+                    : next.kind === "task"
+                      ? nextTask?.title
+                      : next.title}
+                </Text>
+                <Text style={s.heroSub}>
+                  {next.kind === "starter"
+                    ? suggestedStarter?.why
+                    : next.kind === "process"
+                      ? "Your saved words come first. Resume processing below; no need to repeat yourself."
+                      : next.kind === "draft"
+                        ? "Your draft is saved. Choose its first useful action."
+                        : next.kind === "task"
+                          ? "This is the action you chose. Finish it before opening another direction."
+                          : next.kind === "complete"
+                            ? journey.milestones.some(
+                                (m) =>
+                                  m.label === "First action completed" &&
+                                  m.done,
+                              )
+                              ? "Your chosen action is complete. Your profile keeps the progress."
+                              : "Your life areas are reviewed. You can add an interest in Profile when you need it."
+                            : "We’ll use your saved answers and build a first plan."}
+                </Text>
+                {next.kind === "starter" && next.direction && (
+                  <Tap
+                    label="Use this first step"
+                    onPress={() => void useStarter(next.direction!)}
+                    disabled={busy}
+                    primary
+                  />
+                )}
+                {next.kind === "task" && nextTask && (
+                  <Tap
+                    label="I’ve done this"
+                    onPress={() =>
+                      void run(async () => {
+                        await saveTask({ ...nextTask, done: true });
+                        setNotice(
+                          "First action complete. Your progress is saved in Profile.",
+                        );
+                      })
+                    }
+                    disabled={busy}
+                    primary
+                  />
+                )}
+                {["setup", "draft", "process"].includes(next.kind) && (
+                  <Tap
+                    label={
+                      next.kind === "draft"
+                        ? "Review my saved draft"
+                        : next.kind === "process"
+                          ? "Resume my saved thought"
+                          : "Continue my setup"
+                    }
+                    onPress={continueJourney}
+                    disabled={busy}
+                    primary
+                  />
+                )}
+                {next.kind === "complete" && (
+                  <Tap
+                    label="See my progress"
+                    onPress={() => navigate("Profile")}
+                    primary
+                  />
+                )}
+              </View>
+              {next.kind === "starter" && next.direction && (
+                <Tap
+                  label="Use my own details instead"
+                  onPress={() => guidedCapture(next.direction!)}
+                  disabled={busy}
+                />
+              )}
+              {next.kind === "task" && nextTask && (
+                <Tap
+                  label="Add this action to Calendar"
+                  onPress={() => void calendar(nextTask)}
+                  disabled={busy}
+                />
+              )}
               <View style={s.captureRow}>
                 <Tap
-                  label="●  Speak a thought"
+                  label="Capture another thought"
                   onPress={() => capture("voice")}
-                  primary
                 />
-                <Tap label="＋  Write it out" onPress={() => capture("text")} />
+                <Tap label="My profile" onPress={() => navigate("Profile")} />
               </View>
-              <View style={s.sectionHead}>
-                <Text style={s.sectionTitle}>A little clarity</Text>
-                <Text style={s.meta}>
-                  {activeDrafts.length
-                    ? `${activeDrafts.length} draft${activeDrafts.length === 1 ? "" : "s"}`
-                    : "Start anywhere"}
-                </Text>
-              </View>
-              {activeDrafts.length ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setSelected(activeDrafts[0].id)}
-                  style={s.draftCard}
-                >
-                  <View style={s.rowBetween}>
-                    <Label>
-                      {activeDrafts[0].example
-                        ? "EXAMPLE DRAFT"
-                        : activeDrafts[0].topic.toUpperCase() + " · DRAFT"}
-                    </Label>
-                    <Text style={s.arrow}>↗</Text>
-                  </View>
-                  <Text style={s.cardTitle}>{activeDrafts[0].title}</Text>
-                  <View style={s.miniBranch}>
-                    <View style={s.branchDot} />
-                    <Text style={s.body}>
-                      {activeDrafts[0].steps.find(
-                        (x) => !x.accepted && !x.deferred,
-                      )?.title || "Room to think. No action required."}
-                    </Text>
-                  </View>
-                  <Text style={s.smallLink}>Open & shape this thought</Text>
-                </Pressable>
-              ) : (
-                <View style={s.emptyCard}>
-                  <View style={s.rowBetween}>
-                    <Text style={s.cardTitle}>
-                      A thought can become{"\n"}a direction.
-                    </Text>
-                    <Text style={s.emptySymbol}>⌁</Text>
-                  </View>
-                  <Text style={s.body}>
-                    See how a messy idea turns into a small, visual plan.
-                  </Text>
-                  <Tap
-                    label="Explore an example  ↗"
-                    onPress={() => void explore()}
-                    disabled={busy}
-                  />
-                </View>
-              )}
               <View style={s.sectionHead}>
                 <Text style={s.sectionTitle}>Within reach today</Text>
                 <Text style={s.meta}>
@@ -651,37 +748,40 @@ function Flow() {
                   </Pressable>
                 ))}
               </View>
-              {day.slice(0, 3).map((t) => (
-                <View key={t.id} style={s.task}>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: t.done }}
-                    accessibilityLabel={`Complete ${t.title}`}
-                    disabled={busy}
-                    onPress={() =>
-                      void run(async () => {
-                        await saveTask({ ...t, done: true });
-                        setNotice("Done. A little more space.");
-                      })
-                    }
-                    style={s.check}
-                  >
-                    <Text style={{ color: C.blue }}>○</Text>
-                  </Pressable>
-                  <View style={{ flex: 1, gap: 5 }}>
-                    <Text style={s.taskTitle}>{t.title}</Text>
-                    <Text style={s.meta}>
-                      {t.minutes} min · {t.topic}
-                    </Text>
+              {day
+                .filter((t) => t.id !== nextTask?.id)
+                .slice(0, 3)
+                .map((t) => (
+                  <View key={t.id} style={s.task}>
                     <Pressable
-                      accessibilityRole="button"
-                      onPress={() => void calendar(t)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: t.done }}
+                      accessibilityLabel={`Complete ${t.title}`}
+                      disabled={busy}
+                      onPress={() =>
+                        void run(async () => {
+                          await saveTask({ ...t, done: true });
+                          setNotice("Done. A little more space.");
+                        })
+                      }
+                      style={s.check}
                     >
-                      <Text style={s.smallLink}>Add to Calendar ↗</Text>
+                      <Text style={{ color: C.blue }}>○</Text>
                     </Pressable>
+                    <View style={{ flex: 1, gap: 5 }}>
+                      <Text style={s.taskTitle}>{t.title}</Text>
+                      <Text style={s.meta}>
+                        {t.minutes} min · {t.topic}
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => void calendar(t)}
+                      >
+                        <Text style={s.smallLink}>Add to Calendar ↗</Text>
+                      </Pressable>
+                    </View>
                   </View>
-                </View>
-              ))}
+                ))}
               {!day.length && (
                 <View style={s.quiet}>
                   <Text style={s.body}>
@@ -698,6 +798,59 @@ function Flow() {
                 </Pressable>
               )}
             </>
+          )}
+          {screen === "Profile" && (
+            <ProfileView
+              profile={profile}
+              notes={notes}
+              drafts={drafts}
+              tasks={tasks}
+              busy={busy}
+              onContinue={continueJourney}
+              onEditAreas={() =>
+                void run(async () => {
+                  await updateProfile({
+                    ...profile,
+                    stage: "areas",
+                    areaIndex: 0,
+                  });
+                  setOnboarding(true);
+                })
+              }
+              onAssessment={() =>
+                void run(async () => {
+                  await updateProfile({
+                    ...profile,
+                    stage:
+                      profile.answers.length === 20 ? "results" : "assessment",
+                  });
+                  setOnboarding(true);
+                })
+              }
+              onPreference={() =>
+                void run(async () => {
+                  await updateProfile({
+                    ...profile,
+                    presentation:
+                      productivityGuide(profile.answers, profile.presentation)
+                        .presentation === "sequence"
+                        ? "small"
+                        : "sequence",
+                  });
+                  setNotice("Guidance style updated.");
+                })
+              }
+              onFocus={(title) =>
+                void run(async () => {
+                  await updateProfile({
+                    ...profile,
+                    focus: title,
+                    focusExplicit: true,
+                  });
+                  navigate("Today");
+                })
+              }
+            />
           )}
           {screen === "My mind" && (
             <>
@@ -845,27 +998,29 @@ function Flow() {
         </ScrollView>
       </Animated.View>
       <View style={s.nav}>
-        {(["Today", "My mind", "Library"] as Screen[]).map((t, i) => (
-          <Pressable
-            key={t}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: screen === t }}
-            onPress={() => navigate(t)}
-            style={s.navItem}
-          >
-            <Text style={[s.navIcon, screen === t && { color: C.blue }]}>
-              {["◉", "⌘", "▤"][i]}
-            </Text>
-            <Text
-              style={[
-                s.navText,
-                screen === t && { color: C.ink, fontWeight: "700" },
-              ]}
+        {(["Today", "My mind", "Library", "Profile"] as Screen[]).map(
+          (t, i) => (
+            <Pressable
+              key={t}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: screen === t }}
+              onPress={() => navigate(t)}
+              style={s.navItem}
             >
-              {t}
-            </Text>
-          </Pressable>
-        ))}
+              <Text style={[s.navIcon, screen === t && { color: C.blue }]}>
+                {["◉", "⌘", "▤", "◎"][i]}
+              </Text>
+              <Text
+                style={[
+                  s.navText,
+                  screen === t && { color: C.ink, fontWeight: "700" },
+                ]}
+              >
+                {t}
+              </Text>
+            </Pressable>
+          ),
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Capture a thought"
@@ -938,10 +1093,7 @@ function Flow() {
                     <>
                       <View>
                         {!!captureTopic && (
-                          <Text style={s.body}>
-                            Tell Flow about {captureTopic.toLowerCase()}. What
-                            is happening, and what needs to happen next?
-                          </Text>
+                          <Text style={s.body}>{captureTopic}</Text>
                         )}
                       </View>
                       <VoiceCapture
@@ -1105,22 +1257,16 @@ function Flow() {
               )}
               {!!note.text && (
                 <Tap
-                  label="Open as a visual draft"
+                  label={processing ? "Organizing…" : "Open as a visual draft"}
                   primary
-                  onPress={() =>
-                    void run(async () => {
-                      let d = drafts.find((x) => x.id === note.id);
-                      if (!d) {
-                        d = suggestDraft(note.id, note.text);
-                        await saveDraft(d);
-                      }
-                      revealDraftAfterSheet(d.id);
-                      setNote(null);
-                    })
-                  }
-                  disabled={busy}
+                  onPress={() => void processRecording(note, "library")}
+                  disabled={busy || processing}
                 />
               )}
+              {!!note.text && !!processingError && (
+                <Text style={s.error}>{processingError}</Text>
+              )}
+
               <Text style={s.meta}>Saved on this device</Text>
             </ScrollView>
           )}
@@ -1142,7 +1288,7 @@ function Flow() {
               label="My profile & life map"
               onPress={() => {
                 setSettings(false);
-                setOnboarding(true);
+                navigate("Profile");
               }}
             />
             <Text style={s.sheetTitle}>A quieter kind{"\n"}of assistant.</Text>
