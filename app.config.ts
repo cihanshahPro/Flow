@@ -17,7 +17,7 @@ const config: ExpoConfig = {
     package: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#102E2C",
+      backgroundColor: "#142138",
     },
     blockedPermissions: [
       "android.permission.READ_CALENDAR",
