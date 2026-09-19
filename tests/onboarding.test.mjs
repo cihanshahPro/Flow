@@ -55,9 +55,10 @@ test("assessment advances through exact 20 answers, then choices build a map and
   assert.ok(captured.startsWith("Work & making: Build something"));
   await tap("Back to my starting point");
   assert.notEqual(profile.completed, true);
+  const savedPresentation = profile.presentation;
   await tap("Remove personality answers");
   assert.deepEqual(profile.answers, []);
-  assert.equal(profile.presentation, undefined);
+  assert.equal(profile.presentation, savedPresentation);
   await act(async () => view.unmount());
 });
 test("saving failure stays on current question and offers retry", async () => {
@@ -86,5 +87,133 @@ test("saving failure stays on current question and offers retry", async () => {
   assert.ok(
     JSON.stringify(view.toJSON()).includes("Am the life of the party."),
   );
+  await act(async () => view.unmount());
+});
+
+test("targeted assessment completion returns to Profile and leaves life areas untouched", async () => {
+  let profile = {
+    ...newProfile(),
+    answers: Array(19).fill(3),
+    stage: "assessment",
+    areas: { work: ["Build something"] },
+  };
+  let view,
+    closed = 0;
+  const props = () => ({
+    profile,
+    sectionMode: "assessment",
+    onSave: async (p) => {
+      profile = p;
+      view.update(React.createElement(Onboarding, props()));
+    },
+    onClose() {
+      closed++;
+    },
+    onCapture() {
+      throw Error("unexpected capture");
+    },
+    onStart() {
+      throw Error("unexpected start");
+    },
+    onContinue() {
+      throw Error("unexpected funnel");
+    },
+  });
+  await act(async () => {
+    view = renderer.create(React.createElement(Onboarding, props()));
+  });
+  await act(async () => {
+    await view.root
+      .findAllByType("Pressable")
+      .find((b) => b.props.accessibilityLabel === "Very accurate")
+      .props.onPress();
+  });
+  assert.equal(closed, 1);
+  assert.equal(profile.answers.length, 20);
+  assert.deepEqual(profile.areas, { work: ["Build something"] });
+  await act(async () => view.unmount());
+});
+test("targeted last missing area returns directly to Profile without the map or recorder", async () => {
+  let profile = {
+    ...newProfile(),
+    stage: "areas",
+    areaIndex: 5,
+    areas: {
+      work: "Nothing current",
+      people: "Nothing current",
+      admin: "Nothing current",
+      home: "Nothing current",
+      health: "Nothing current",
+      dates: "Later",
+    },
+  };
+  let view,
+    closed = 0;
+  const props = () => ({
+    profile,
+    sectionMode: "areas",
+    onSave: async (p) => {
+      profile = p;
+      view.update(React.createElement(Onboarding, props()));
+    },
+    onClose() {
+      closed++;
+    },
+    onCapture() {
+      throw Error("unexpected capture");
+    },
+    onStart() {},
+    onContinue() {},
+  });
+  await act(async () => {
+    view = renderer.create(React.createElement(Onboarding, props()));
+  });
+  await act(async () => {
+    await view.root
+      .findAllByType("Pressable")
+      .find((b) => b.props.accessibilityLabel === "Nothing current")
+      .props.onPress();
+  });
+  assert.equal(closed, 1);
+  assert.equal(profile.areas.dates, "Nothing current");
+  await act(async () => view.unmount());
+});
+
+test("retaking assessment preserves confirmed focus, guidance and available time", async () => {
+  let profile = {
+    ...newProfile(),
+    answers: Array(20).fill(3),
+    stage: "map",
+    areas: { work: ["Build something"] },
+    focus: "Work & making: Build something",
+    focusExplicit: true,
+    presentation: "sequence",
+    preferredMinutes: 10,
+  };
+  let view;
+  const props = () => ({
+    profile,
+    onSave: async (p) => {
+      profile = p;
+      view.update(React.createElement(Onboarding, props()));
+    },
+    onClose() {},
+    onCapture() {},
+    onStart() {},
+    onContinue() {},
+  });
+  await act(async () => {
+    view = renderer.create(React.createElement(Onboarding, props()));
+  });
+  await act(async () => {
+    await view.root
+      .findAllByType("Pressable")
+      .find((b) => b.props.accessibilityLabel === "Retake assessment")
+      .props.onPress();
+  });
+  assert.deepEqual(profile.answers, []);
+  assert.equal(profile.preferredMinutes, 10);
+  assert.equal(profile.presentation, "sequence");
+  assert.equal(profile.focusExplicit, true);
   await act(async () => view.unmount());
 });
