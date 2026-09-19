@@ -38,7 +38,6 @@ import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar"
 import { newProfile, FUNNEL_VERSION, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
-import { streakDays } from "./src/streak";
 import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
 import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
@@ -527,7 +526,6 @@ function Flow() {
             nextThread={nextThread}
             levelLabel={level.level ? level.level.title : type ? type.name : "Level"}
             timeWindow={profile.plate?.timeWindow}
-            streak={streakDays(tasks)}
             celebrate={celebrate}
             suggestion={suggestion}
             busy={busy}
@@ -549,7 +547,7 @@ function Flow() {
         {screen === "threads" && (
           <Threads threads={threads} tasks={tasks} busy={busy} onOpenThread={openThread} onNew={() => startCapture("voice", null, "thought", suggestion.prompt)} />
         )}
-        {screen === "progress" && <Progress progress={progress} threads={threads} streak={streakDays(tasks)} />}
+        {screen === "progress" && <Progress progress={progress} threads={threads} />}
         {screen === "profile" && (
           <Profile
             profile={profile}

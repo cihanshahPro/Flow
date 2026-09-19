@@ -5,8 +5,8 @@ import { levelForProgress, type ProgressRecord } from "../progress.ts";
 import { repeatedPattern } from "../thread.ts";
 import { C } from "./theme.ts";
 
-/** The ladder, what counts, and Flow's recent gas-ups. Nothing expires. */
-export default function Progress({ progress, threads, streak = 0 }: { progress: ProgressRecord; threads: ThoughtDraft[]; streak?: number }) {
+/** The ladder, what counts, and Flow's recent gas-ups. No streaks, nothing expires. */
+export default function Progress({ progress, threads }: { progress: ProgressRecord; threads: ThoughtDraft[] }) {
   const level = levelForProgress(progress);
   const real = threads.filter((t) => !t.example);
   const pattern = repeatedPattern(real);
@@ -29,7 +29,7 @@ export default function Progress({ progress, threads, streak = 0 }: { progress: 
               <View style={[s.fill, { width: `${Math.min(100, Math.round((level.completedCount / level.next.threshold) * 100))}%` }]} />
             </View>
             <Text style={s.body}>
-              {level.next.remaining} more to {level.next.title}. Nothing expires.
+              {level.next.remaining} more to {level.next.title}. No streaks, nothing expires.
             </Text>
           </>
         ) : (
@@ -37,10 +37,9 @@ export default function Progress({ progress, threads, streak = 0 }: { progress: 
         )}
       </View>
       <View style={s.stats}>
-        <Stat n={streak} label={streak === 1 ? "day streak" : "day streak"} />
         <Stat n={level.movesDone} label="moves done" />
-        <Stat n={level.threadsUnderstood} label="understood" />
-        <Stat n={level.checkIns} label="check-ins" />
+        <Stat n={level.threadsUnderstood} label="threads understood" />
+        <Stat n={level.checkIns} label="check-ins kept" />
       </View>
       <View style={s.card}>
         <Text style={s.kicker}>THE LADDER</Text>

@@ -33,7 +33,7 @@ export type ProgressSummary = {
   milestones: ProgressMilestone[];
 };
 
-// Small and encouraging. Streaks only celebrate; nothing is lost, penalised or spent.
+// Small and encouraging. No streaks, no penalties, no currency.
 const milestones = [
   { number: 1, title: "Starting point", threshold: 0 },
   { number: 2, title: "Building", threshold: 1 },
