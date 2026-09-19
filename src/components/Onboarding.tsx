@@ -226,6 +226,8 @@ export default function Onboarding({
       {profile.stage === "results" && (
         <>
           <Text style={s.kicker}>YOUR PERSONALITY, IN PLAIN WORDS</Text>
+          {guide.type && <Text style={s.title}>{guide.type.code} · {guide.type.name}</Text>}
+          {guide.type && <Text style={s.body}>{guide.type.description}</Text>}
           <Text style={s.title}>{guide.title}</Text>
           <Text style={s.body}>{guide.reason}</Text>
           <View style={s.card}>
@@ -286,10 +288,8 @@ export default function Onboarding({
                 </Text>
               ))}
               <Text style={s.small}>
-                Your Mini-IPIP answers describe five traits, not a fixed type.
-                Flow’s routine is a starting recommendation to try, not a proven
-                best method for your personality. Interpretations use response
-                ranges, not population percentiles. You can change the route.
+                This is a working-style estimate, not a diagnosis. Flow uses it
+                to shape the route and keeps the original answers editable.
               </Text>
             </View>
           )}

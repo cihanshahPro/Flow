@@ -72,6 +72,12 @@ export default function ProfileView({
       {!progress.unlockedAt && <ProgressCard progress={progress} />}
       <View style={s.card}>
         <Text style={s.kicker}>YOUR CURRENT APPROACH</Text>
+        {guide.type && (
+          <>
+            <Text style={s.heading}>{guide.type.code} · {guide.type.name}</Text>
+            <Text style={s.body}>{guide.type.description}</Text>
+          </>
+        )}
         <Text style={s.heading}>{guide.title}</Text>
         <Text style={s.body}>{guide.reason}</Text>
         {guide.tips.map((t) => (
@@ -119,8 +125,8 @@ export default function ProfileView({
             </Text>
           )}
           <Text style={s.small}>
-            Mini-IPIP describes five traits, not a fixed type. Guidance is an
-            adjustable starting recommendation.
+            This is a working-style estimate, not a diagnosis. Flow uses it to
+            shape the questions and pacing, and you can change the guidance.
           </Text>
           {button(
             profile.answers.length === 20
