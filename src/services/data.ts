@@ -18,7 +18,7 @@ export async function exportAllData(): Promise<string> {
   const threads = (await tableExists("flow_drafts"))
     ? (await db.getAllAsync<{ payload: string }>("SELECT payload FROM flow_drafts")).map((r) => JSON.parse(r.payload))
     : [];
-  return JSON.stringify({ app: "Flow", exportedAt: new Date().toISOString(), records, threads }, null, 2);
+  return JSON.stringify({ app: "Flowthread", exportedAt: new Date().toISOString(), records, threads }, null, 2);
 }
 
 /** Permanently removes every record, thread, recording file and scheduled reminder. */

@@ -1,20 +1,20 @@
 import type { ExpoConfig } from "expo/config";
 
 const config: ExpoConfig = {
-  name: "Flow",
-  slug: "anchor-mobile",
+  name: "Flowthread",
+  slug: "flowthread",
   version: "0.1.0",
   orientation: "portrait",
-  scheme: "anchor",
+  scheme: "flowthread",
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
   ios: {
     supportsTablet: true,
-    bundleIdentifier: process.env.APP_BUNDLE_ID || "com.example.anchor",
+    bundleIdentifier: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
     infoPlist: { ITSAppUsesNonExemptEncryption: false },
   },
   android: {
-    package: process.env.APP_BUNDLE_ID || "com.example.anchor",
+    package: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#102E2C",
@@ -30,7 +30,7 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission:
-          "Flow records a voice note only when you tap Record.",
+          "Flowthread records a voice note only when you tap Record.",
         enableBackgroundRecording: false,
       },
     ],
@@ -39,7 +39,7 @@ const config: ExpoConfig = {
       "expo-calendar",
       {
         calendarPermission:
-          "Flow saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
+          "Flowthread saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
       },
     ],
   ],

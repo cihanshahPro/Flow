@@ -38,7 +38,7 @@ export function planReminders(
       // Something is already waiting; one gentle nudge tomorrow morning.
       planned.push({
         id: `${PREFIX}${thread.id}-pending`,
-        title: "Flow",
+        title: "Flowthread",
         body: `Something is waiting on you in “${thread.title}”.`,
         at: at(today),
       });
@@ -54,7 +54,7 @@ export function planReminders(
     if (!next) continue;
     planned.push({
       id: `${PREFIX}${thread.id}-${next}`,
-      title: "Flow",
+      title: "Flowthread",
       body: `Quick check-in on “${thread.title}” when you have a second.`,
       at: at(next),
     });
@@ -78,7 +78,7 @@ export function planMorning(headline: string | undefined, time: string | undefin
   const { hour, minute } = parseMorning(time);
   let at = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
   if (at.getTime() <= now.getTime()) at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hour, minute, 0);
-  return { id: MORNING_ID, title: "Flow", body: `Today's one move is ready: ${headline}`, at: at.toISOString() };
+  return { id: MORNING_ID, title: "Flowthread", body: `Today's one move is ready: ${headline}`, at: at.toISOString() };
 }
 
 let configured = false;

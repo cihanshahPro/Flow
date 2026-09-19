@@ -7,7 +7,7 @@ import { flowType } from "../flow-voice.ts";
 import { peopleMentioned } from "../thread.ts";
 import { C } from "./theme.ts";
 
-export const PRIVACY_URL = "https://kodavena.com/flow/privacy";
+export const PRIVACY_URL = "https://kodavena.com/flowthread/privacy";
 
 /** Profile: who Flow thinks you are and what it knows — a living thing you can edit, not a one-time quiz. */
 /** "08:30" moved by `delta` minutes, wrapping around midnight. */
@@ -183,7 +183,7 @@ export default function Profile({
         <Pressable accessibilityRole="button" accessibilityLabel="Delete all my data" onPress={onDeleteAll} disabled={busy} hitSlop={8}>
           <Text style={[s.link, { color: C.danger }]}>Delete all my data</Text>
         </Pressable>
-        {!!version && <Text style={s.small}>Flow {version}</Text>}
+        {!!version && <Text style={s.small}>Flowthread {version}</Text>}
       </View>
     </ScrollView>
   );
