@@ -33,7 +33,7 @@ import { newProfile, FUNNEL_VERSION, type Profile } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask } from "./src/task-flow";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, evaluateThread, noteLevelUp, noteMoveDone, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
+import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
 import type { ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
@@ -108,7 +108,8 @@ function Flow() {
     const data = source ?? { tasks: (await loadWorkspace()).tasks, threads: await loadDrafts() };
     let changed = false;
     for (const thread of data.threads) {
-      const next = evaluateThread(thread, data.tasks, { mode });
+      // Threads from older builds get their conversation first, then the usual check-ins.
+      const next = evaluateThread(backfillConversation(thread, { mode, plate: profile.plate }), data.tasks, { mode });
       if (next !== thread) {
         await saveDraft(next);
         changed = true;

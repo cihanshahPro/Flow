@@ -775,6 +775,25 @@ export function suggestPrompt(
   return { title: "Anything new?", prompt: "Something new since last time, or something that's been nagging at you. One thing at a time." };
 }
 
+/**
+ * A thread saved by an older build has words but no conversation. Flow opens
+ * one from the saved source so it reads like every other thread; the note id
+ * is the draft's own id, which is what older builds used for the recording.
+ */
+export function backfillConversation(thread: ThoughtDraft, options: { mode?: Mode; plate?: Plate; now?: Date } = {}): ThoughtDraft {
+  if (thread.example || (thread.messages ?? []).length || !thread.source?.trim()) return thread;
+  let next = respondToRecording(
+    { ...thread, threadPoints: undefined, missingPoints: undefined },
+    thread.sourceNoteIds?.[0] ?? thread.id,
+    thread.source,
+    { mode: options.mode, plate: options.plate, now: options.now ?? new Date(thread.createdAt) },
+  );
+  for (const [i, update] of thread.updates.entries()) {
+    next = respondToRecording(next, `${thread.id}:update:${i}`, update, { mode: options.mode, plate: options.plate, now: options.now ?? new Date(thread.createdAt) });
+  }
+  return next;
+}
+
 /** People Flow has heard about across threads, for the Me screen. */
 export function peopleMentioned(threads: ThoughtDraft[]): string[] {
   const names = new Map<string, number>();

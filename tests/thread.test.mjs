@@ -280,3 +280,15 @@ test("Flow types come from the Big Five answers and never expose a four-letter c
   assert.equal(t.name, "Coordinator");
   assert.doesNotMatch(JSON.stringify(t), /[EI][NS][FT][JP]/);
 });
+
+test("a thread saved by an older build gets Flow's conversation backfilled from its saved words, once", async () => {
+  const { backfillConversation } = await import("../src/thread.ts");
+  const legacy = { ...suggestDraft("old", rich, now), messages: undefined, threadPoints: undefined, updates: ["Also Dad can lend the trailer."] };
+  const filled = backfillConversation(legacy, { now });
+  const kinds = filled.messages.map((m) => m.kind);
+  assert.equal(kinds.filter((k) => k === "transcript").length, 2);
+  assert.equal(filled.messages[0].text, rich);
+  assert.ok(filled.threadPoints.length === 7);
+  assert.equal(backfillConversation(filled, { now }), filled, "already has a conversation");
+  assert.equal(backfillConversation({ ...legacy, example: true }, { now }).messages, undefined);
+});
