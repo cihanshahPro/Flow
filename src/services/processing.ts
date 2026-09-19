@@ -2,16 +2,28 @@ import { File } from "expo-file-system";
 import { fetch } from "expo/fetch";
 import { saveNote, loadWorkspace } from "./storage";
 import { loadDrafts, saveDraft } from "./drafts";
-import { suggestDraft, shapedDraft } from "../drafts";
+import {
+  suggestDraft,
+  shapedDraft,
+  appendPlanUpdate,
+  type ThoughtDraft,
+} from "../drafts";
 import type { DirectionContext, Note } from "../model";
 
-export async function processVoiceNote(note: Note) {
-  const existing = (await loadDrafts()).find((d) => d.id === note.id);
-  if (existing) return existing;
-  note = (await loadWorkspace()).notes.find((n) => n.id === note.id) ?? note;
+export type CapturedNoteResult =
+  { kind: "draft"; draft: ThoughtDraft } | { kind: "note"; note: Note };
+
+async function savedNote(note: Note): Promise<Note> {
+  return (await loadWorkspace()).notes.find((n) => n.id === note.id) ?? note;
+}
+
+/** All capture kinds share the same saved audio and transcription retry path. */
+async function transcribeNote(
+  note: Note,
+): Promise<{ note: Note; shape?: unknown }> {
   let text = note.text;
   let shape: unknown;
-  if (!text) {
+  if (!text.trim()) {
     if (!note.audioUri)
       throw new Error("This note has no recording to process.");
     const url = process.env.EXPO_PUBLIC_PROCESSOR_URL;
@@ -63,8 +75,40 @@ export async function processVoiceNote(note: Note) {
       clearTimeout(timeout);
     }
   }
-  // Store transcription before shaping. If the draft write fails, retry reuses text.
-  await saveNote({ ...note, text });
+  // Commit the transcript before any planning. A later retry reuses saved text.
+  const transcribed = { ...note, text };
+  await saveNote(transcribed);
+  return { note: transcribed, shape };
+}
+
+/** Saved kind wins over a stale caller: notes and feedback never become plans. */
+export async function processCapturedNote(
+  note: Note,
+): Promise<CapturedNoteResult> {
+  const stored = await savedNote(note);
+  if (stored.captureKind === "note" || stored.captureKind === "feedback") {
+    const result = await transcribeNote(stored);
+    return { kind: "note", note: result.note };
+  }
+  return { kind: "draft", draft: await processThoughtNote(stored) };
+}
+
+/** Compatibility entry point for callers that explicitly need a thought draft. */
+export async function processVoiceNote(note: Note): Promise<ThoughtDraft> {
+  return processThoughtNote(await savedNote(note));
+}
+
+async function processThoughtNote(note: Note): Promise<ThoughtDraft> {
+  if (note.captureKind === "note" || note.captureKind === "feedback")
+    throw new Error(
+      "This capture is kept as a note, not a plan. Open it in Library.",
+    );
+  const existing = (await loadDrafts()).find(
+    (d) => d.id === note.id || d.sourceNoteIds?.includes(note.id),
+  );
+  if (existing) return existing;
+  const { note: transcribed, shape } = await transcribeNote(note);
+  const text = transcribed.text;
   let draft = suggestDraft(note.id, text);
   if (shape) {
     try {
@@ -80,6 +124,18 @@ export async function processVoiceNote(note: Note) {
     }
   }
   if (note.direction) draft = { ...draft, direction: note.direction };
+  // A recording is a saved thread first. It does not become an active goal
+  // until the user returns and explicitly develops it.
+  draft = {
+    ...draft,
+    threadStatus: draft.threadStatus ?? "dumped",
+    goalsReady: draft.goalsReady ?? false,
+    missingPoints: draft.missingPoints ?? [],
+  };
+  if (note.planId) {
+    const plan = (await loadDrafts()).find((d) => d.id === note.planId);
+    if (plan) draft = appendPlanUpdate(plan, draft);
+  }
   await saveDraft(draft);
   return draft;
 }

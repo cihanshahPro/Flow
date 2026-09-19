@@ -1,5 +1,13 @@
 # Validation record — September 18, 2026
 
+## Final thread-flow test build
+
+- Strict typecheck passed on the Mac mini runtime.
+- `npm run verify` passed: 158 tests, 0 failures.
+- iOS, Android, and web exports passed with Expo SDK 57.
+- Browser QA confirmed that a dumped thread stays in understanding, shows one generated missing question, exposes only `Record the answer`, and withholds goal development until the thread is ready.
+- Testing server restarted at `10.0.0.152:8082`. No production or App Store deployment was performed.
+
 Completed on Node 22.22.1 / macOS:
 
 - TypeScript strict typecheck passed.

@@ -43,6 +43,9 @@ export const Pressable = "Pressable",
   Text = "Text",
   TextInput = "TextInput",
   View = "View";
+export const SafeAreaView = "SafeAreaView",
+  KeyboardAvoidingView = "KeyboardAvoidingView",
+  Modal = "Modal";
 export const RecordingPresets = { HIGH_QUALITY: {} };
 export async function requestRecordingPermissionsAsync() {
   if (harness.permissionDialog) {

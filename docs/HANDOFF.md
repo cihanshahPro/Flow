@@ -1,4 +1,35 @@
-# Anchor mobile — developer handoff
+# Flow mobile — developer handoff
+
+## Start here (current testing build)
+
+Repository: https://github.com/cihanshahPro/Flow
+
+The handoff branch is `codex/final-thread-flow`. It contains the recording-first thread flow and is the branch to review before any release work. The protected baseline is `testing`; production/main is outside this handoff.
+
+Clone and create a personal working branch from the handoff branch:
+
+```bash
+git clone https://github.com/cihanshahPro/Flow.git
+cd Flow
+git fetch origin codex/final-thread-flow
+git switch -c handoff/<your-name> --track origin/codex/final-thread-flow
+npm ci
+npm run verify
+```
+
+Work only on `handoff/<your-name>`. Push it and open a pull request into `codex/final-thread-flow`; do not push directly to `testing` or `main`. The owner can review and merge that PR after the testing build is checked. After merge, the owner promotes the reviewed commit to `testing` and runs the device checks below. Keep release/App Store work in a separate PR from product changes.
+
+The current user path is intentionally narrow: profile fingerprint → record a full dump → Flow transcribes and forms a thread → Flow asks one focused missing question → record the answer → only a ready thread can become goals. Do not reintroduce task lists, “mark done” steps, or open-ended classification during the dump/understanding stages. Read [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md) before changing routing or capture behavior.
+
+Useful commands:
+
+```bash
+npm run verify
+npx expo start --go --lan --port 8082
+npx expo export --platform all --output-dir /tmp/flow-export
+```
+
+The test Expo server is on the Mac mini at `10.0.0.152:8082`; use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only. Do not submit a build or merge into `main` as part of routine feature work.
 
 ## Scope and boundary
 
@@ -8,9 +39,7 @@ The existing web implementation's authentication, cloud records/audio, browser t
 
 ## SDK decision to review before release
 
-The dependency baseline is **Expo SDK 54 (`expo ~54.0.36`), React Native 0.81.5, React 19.1.0**. This is intentional for physical-iPhone testing in App Store Expo Go. [Expo currently documents](https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/) that its App Store Expo Go build stops at SDK 54.
-
-Before upgrading, review the current Expo Go/testing route, library compatibility, and migration notes together; update the lockfile and repeat the device checklist. A development build becomes the preferred route when adding custom native modules. SDK 54 itself is not the current upload blocker: Expo says its default EAS image meets the Xcode 26/iOS 26 build requirement. Recheck that [build-image guidance](https://expo.dev/blog/app-store-connect-minimum-sdk-26) for the actual release date.
+The current testing branch is on **Expo SDK 57**. Use the matching Expo Go build for the QR test server, and do not downgrade the lockfile to SDK 54. Before a store build, verify the current Expo Go/device compatibility, native module compatibility, signing setup, and EAS build image together; repeat the device checklist after any SDK change.
 
 ## Build and TestFlight ownership
 

@@ -1,10 +1,22 @@
 import { AREAS, areaSelections, type Profile } from "./personality.ts";
 import type { DirectionContext, Note, Task } from "./model.ts";
+import { localDate } from "./model.ts";
 import type { ThoughtDraft } from "./drafts.ts";
+import { taskIsDue, taskState } from "./task-flow.ts";
 
 export type DirectionOption = DirectionContext & { title: string };
 export type JourneyNext = {
-  kind: "setup" | "process" | "draft" | "task" | "starter" | "complete";
+  kind:
+    | "setup"
+    | "process"
+    | "draft"
+    | "task"
+    | "starter"
+    | "check-in"
+    | "follow-up"
+    | "scheduled"
+    | "paused"
+    | "complete";
   direction?: DirectionContext;
   title: string;
   id?: string;
@@ -37,6 +49,7 @@ export function journeyState(
   notes: Note[],
   drafts: ThoughtDraft[],
   tasks: Task[],
+  today = localDate(),
 ): JourneyState {
   const options = directionOptions(profile);
   const focused = options.find((option) => option.title === profile.focus);
@@ -75,8 +88,12 @@ export function journeyState(
   );
   const unprocessedNotes = notes.filter(
     (note) =>
+      (!note.captureKind || note.captureKind === "thought") &&
       (note.audioUri || note.text.trim()) &&
-      !drafts.some((draft) => draft.id === note.id),
+      !drafts.some(
+        (draft) =>
+          draft.id === note.id || draft.sourceNoteIds?.includes(note.id),
+      ),
   );
   const newest = <T extends { createdAt: string }>(items: T[]): T | undefined =>
     [...items].sort((a, b) => timestamp(b) - timestamp(a))[0];
@@ -84,12 +101,64 @@ export function journeyState(
     item: { direction?: DirectionContext },
     direction: DirectionContext,
   ) => item.direction?.directionId === direction.directionId;
+  const nextForTask = (
+    task: Task,
+    kind: "task" | "check-in" | "follow-up" | "scheduled",
+  ): JourneyNext => ({
+    kind,
+    id: task.id,
+    title: task.title,
+    ...(task.direction ? { direction: task.direction } : {}),
+  });
+  // Due work comes first, then steps that fit the saved time preference.
+  // Stable ordering prevents new captures from repeatedly replacing older work.
+  const readyRank = (task: Task) =>
+    task.deadline && task.deadline <= today
+      ? 0
+      : task.plannedDate && task.plannedDate <= today
+        ? 1
+        : 2;
+  const preferredMinutes =
+    typeof profile.preferredMinutes === "number"
+      ? profile.preferredMinutes
+      : 10;
+  const timeFit = (task: Task) => Number(task.minutes > preferredMinutes);
+  const byReadyPriority = (a: Task, b: Task) =>
+    readyRank(a) - readyRank(b) ||
+    timeFit(a) - timeFit(b) ||
+    (a.deadline || "9999").localeCompare(b.deadline || "9999") ||
+    (a.plannedDate || "9999").localeCompare(b.plannedDate || "9999") ||
+    timestamp(a) - timestamp(b) ||
+    a.id.localeCompare(b.id);
+  const readyTasks = realTasks
+    .filter((task) => taskState(task, today) === "ready")
+    .sort(byReadyPriority);
+  const focusRank = (task: Task) =>
+    focused && sameDirection(task, focused) ? 0 : 1;
+  const checkIn = realTasks
+    .filter((task) => taskState(task, today) === "check-in")
+    .sort(
+      (a, b) =>
+        (b.completedAt ?? "").localeCompare(a.completedAt ?? "") ||
+        a.id.localeCompare(b.id),
+    )[0];
+  const dueFollowUp = realTasks
+    .filter((task) => {
+      const state = taskState(task, today);
+      return (
+        (state === "waiting" || state === "blocked") && taskIsDue(task, today)
+      );
+    })
+    .sort(
+      (a, b) =>
+        a.chaseDate.localeCompare(b.chaseDate) ||
+        focusRank(a) - focusRank(b) ||
+        byReadyPriority(a, b),
+    )[0];
+  const activeTask = realTasks.find((task) => task.id === profile.activeTaskId);
   function pending(direction: DirectionContext): JourneyNext | undefined {
-    const task = newest(
-      realTasks.filter((item) => !item.done && sameDirection(item, direction)),
-    );
-    if (task)
-      return { kind: "task", direction, title: task.title, id: task.id };
+    const task = readyTasks.find((item) => sameDirection(item, direction));
+    if (task) return nextForTask(task, "task");
     const draft = newest(
       actionableDrafts.filter((item) => sameDirection(item, direction)),
     );
@@ -107,12 +176,29 @@ export function journeyState(
       };
   }
 
-  let next: JourneyNext | undefined;
-  if (focused && profile.focusExplicit === true) {
+  // Finish the current conversation before switching plans. A check-in means
+  // one action ended, not that its interest or larger goal has been achieved.
+  let next: JourneyNext | undefined = checkIn
+    ? nextForTask(checkIn, "check-in")
+    : dueFollowUp
+      ? nextForTask(dueFollowUp, "follow-up")
+      : undefined;
+  if (!next && activeTask) {
+    if (activeTask.done && activeTask.reviewedAt)
+      next = {
+        ...nextForTask(activeTask, "task"),
+        kind: "paused",
+        title: "A good place to pause",
+      };
+    else if (taskState(activeTask, today) === "ready")
+      next = nextForTask(activeTask, "task");
+  }
+  if (!next && focused && profile.focusExplicit === true) {
     next = pending(focused);
     if (
       !next &&
-      !realTasks.some((task) => task.done && sameDirection(task, focused))
+      (!activeTask || activeTask.done) &&
+      !realTasks.some((task) => sameDirection(task, focused))
     )
       next = { kind: "starter", direction: focused, title: focused.choice };
   }
@@ -129,8 +215,9 @@ export function journeyState(
     const outsideSelected = (item: { direction?: DirectionContext }) =>
       !item.direction || !selectedIds.has(item.direction.directionId);
     const remaining: Array<{ next: JourneyNext; createdAt: string }> = [
-      ...realTasks
-        .filter((task) => outsideSelected(task) && !task.done)
+      ...readyTasks
+        .filter(outsideSelected)
+        .slice(0, 1)
         .map((task) => ({
           createdAt: task.createdAt,
           next: {
@@ -162,9 +249,26 @@ export function journeyState(
     next = newest(remaining)?.next;
   }
   if (!next) {
+    const held = realTasks
+      .filter((task) => {
+        const state = taskState(task, today);
+        return state === "later" || state === "waiting" || state === "blocked";
+      })
+      .sort(
+        (a, b) =>
+          Number(b.id === activeTask?.id) - Number(a.id === activeTask?.id) ||
+          focusRank(a) - focusRank(b) ||
+          (a.chaseDate || a.plannedDate || "9999").localeCompare(
+            b.chaseDate || b.plannedDate || "9999",
+          ) ||
+          timestamp(a) - timestamp(b) ||
+          a.id.localeCompare(b.id),
+      )[0];
+    if (held) next = nextForTask(held, "scheduled");
+  }
+  if (!next) {
     const unfinished = ordered.find(
-      (direction) =>
-        !realTasks.some((task) => task.done && sameDirection(task, direction)),
+      (direction) => !realTasks.some((task) => sameDirection(task, direction)),
     );
     if (unfinished)
       next = {

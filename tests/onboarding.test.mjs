@@ -56,11 +56,12 @@ test("assessment advances through exact 20 answers, then choices build a map and
   assert.equal(profile.focusExplicit, true);
   await tap("10 minutes");
   assert.equal(profileCompletion(profile).percent, 100);
-  await tap("Use my own details instead");
+  await tap("Shape my first plan");
   assert.ok(captured.startsWith("Work & making: Build something"));
   await tap("Back to my starting point");
   assert.notEqual(profile.completed, true);
   const savedPresentation = profile.presentation;
+  await tap("Edit saved setup");
   await tap("Remove personality answers");
   assert.deepEqual(profile.answers, []);
   assert.equal(profile.presentation, savedPresentation);
@@ -209,6 +210,9 @@ test("retaking assessment preserves confirmed focus, guidance and available time
   });
   await act(async () => {
     view = renderer.create(React.createElement(Onboarding, props()));
+  });
+  await act(async () => {
+    await view.root.findAllByType("Pressable").find(b => b.props.accessibilityLabel === "Edit saved setup").props.onPress();
   });
   await act(async () => {
     await view.root

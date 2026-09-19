@@ -73,6 +73,7 @@ test("failed metadata registration keeps audio and recovers using the same URI",
   harness.reset();
   let fail = true;
   const attempts = [];
+  const recoveredKinds = [];
   let root;
   await act(async () => {
     root = create(
@@ -80,6 +81,7 @@ test("failed metadata registration keeps audio and recovers using the same URI",
         autoStart: true,
         onSaved: async (n) => {
           attempts.push(n.audioUri);
+          recoveredKinds.push(n.captureKind);
           if (fail) throw Error("storage busy");
         },
       }),
@@ -92,6 +94,7 @@ test("failed metadata registration keeps audio and recovers using the same URI",
   await act(async () => button(root, "Retry recovery").props.onPress());
   assert.equal(new Set(attempts).size, 1);
   assert.equal(attempts.length, 2);
+  assert.deepEqual(recoveredKinds, [undefined, "note"], "unknown recovered audio is kept in Library, never assigned to the current plan/feedback");
   assert.ok(text(root.toJSON()).includes("Ready when you are"));
   await act(async () => root.unmount());
 });

@@ -28,6 +28,8 @@ import { File, Paths } from "expo-file-system";
 import { waitForRecordingForeground } from "../recording-lifecycle";
 
 export type SavedVoiceNote = {
+  // Recovery cannot infer the original destination from an orphan audio file.
+  captureKind?: "note";
   title: string;
   text: string;
   audioUri: string;
@@ -236,7 +238,7 @@ export default function VoiceCapture({
           );
       }
       for (const note of candidates.values()) {
-        await saveRef.current(note);
+        await saveRef.current({ ...note, captureKind: "note" });
         reconciled += 1;
       }
       // Keep unreadable metadata for inspection, but don't let it permanently

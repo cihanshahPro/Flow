@@ -26,8 +26,13 @@ export type Task = {
   timeZone?: string;
   reminderMinutes?: number | null;
   direction?: DirectionContext;
+  followUp?: "waiting" | "blocked";
+  completedAt?: string;
+  reviewedAt?: string;
 };
 export type Note = {
+  captureKind?: "thought" | "note" | "feedback";
+  planId?: string;
   id: string;
   title: string;
   text: string;
