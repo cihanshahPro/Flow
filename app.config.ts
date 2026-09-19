@@ -3,7 +3,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "Flowthread",
   slug: "flowthread",
-  version: "0.1.0",
+  version: "1.0.0",
   orientation: "portrait",
   scheme: "flowthread",
   userInterfaceStyle: "automatic",
