@@ -55,7 +55,8 @@ TestFlight needs the owner's/friend's Expo account, paid Apple Developer members
 Run these on a real iPhone; automated checks or a JavaScript bundle alone do not verify microphone and calendar behavior. Record the device, iOS version, Expo Go/build version, and results.
 
 - [ ] Install dependencies, run typechecking and tests, then open the app through the documented Expo Go route.
-- [ ] Take the quiz (and separately, skip it). Confirm the named Flow type appears without a four-letter code and Home shows only the Record button.
+- [ ] Go through the funnel: the twenty-statement test (no skip), the reveal without a four-letter code, the five profile questions, then the prompted first thread. Confirm `TEST 12` is visible.
+- [ ] Confirm Home shows a "Flow suggests" prompt from your profile, not a blank record button.
 - [ ] Record a dump. Confirm the thread opens with your transcript, Flow's reply and one question; the meter shows n/7; the recording plays back.
 - [ ] Record the answer. Confirm the meter rises, the celebration and emoji shower appear once, and one move is offered with exactly two chips.
 - [ ] Do this → Next card on Home. Done → Flow's note in the thread and the level pill changes. Confirm "Resolved / There's more" appears after the last move.
