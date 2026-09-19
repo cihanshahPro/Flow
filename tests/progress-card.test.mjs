@@ -52,22 +52,22 @@ test("unlocked progress shows actual accomplishments and the next milestone with
     );
   });
   const text = textOf(view);
-  assert.match(text, /LEVEL 2 · FIRST WIN/);
+  assert.match(text, /LEVEL 2 · BUILDING/);
   assert.match(text, /2 actions completed/);
-  assert.match(text, /1 more action to Level 3 — Building momentum/);
+  assert.match(text, /1 more action to Level 3 — Momentum/);
   const bar = view.root.findAllByType("View").find((v) =>
     v.props.accessibilityRole === "progressbar");
   assert.deepEqual(bar.props.accessibilityValue, {
     min: 0,
     max: 3,
     now: 2,
-    text: "1 more action to Level 3 — Building momentum.",
+    text: "1 more action to Level 3 — Momentum.",
   });
   assert.equal(view.root.findAllByType("Pressable").length, 0);
   await act(async () => view.unmount());
 });
 
-test("newly unlocked profile starts at Ready without inventing an accomplishment", async () => {
+test("newly unlocked profile starts at Starting point without inventing an accomplishment", async () => {
   let view;
   await act(async () => {
     view = renderer.create(
@@ -80,8 +80,8 @@ test("newly unlocked profile starts at Ready without inventing an accomplishment
     );
   });
   const text = textOf(view);
-  assert.match(text, /LEVEL 1 · READY/);
+  assert.match(text, /LEVEL 1 · STARTING POINT/);
   assert.match(text, /0 actions completed/);
-  assert.match(text, /1 more action to Level 2 — First win/);
+  assert.match(text, /1 more action to Level 2 — Building/);
   await act(async () => view.unmount());
 });

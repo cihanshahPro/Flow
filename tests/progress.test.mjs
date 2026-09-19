@@ -51,12 +51,16 @@ test("incomplete profiles stay locked even with completed tasks and old setup fl
     unlocked: false,
     level: null,
     completedCount: 0,
+    movesDone: 0,
+    threadsUnderstood: 0,
+    checkIns: 0,
     next: null,
     milestones: levelForProgress(progress).milestones.map((milestone) => ({
       ...milestone,
       reached: false,
     })),
   });
+  // Finishing the quiz is the unlock; the time preference is no longer required.
   assert.equal(
     reconcileProgress(
       undefined,
@@ -65,17 +69,21 @@ test("incomplete profiles stay locked even with completed tasks and old setup fl
       [],
       now,
     ).unlockedAt,
+    now,
+  );
+  assert.equal(
+    reconcileProgress(undefined, full({ answers: Array(19).fill(3) }), [task("a")], [], now).unlockedAt,
     undefined,
   );
 });
 
-test("100 percent unlocks Ready with no completion reward for the assessment itself", () => {
+test("a finished quiz unlocks Starting point with no reward for the quiz itself", () => {
   const progress = reconcileProgress(undefined, full(), [], [], now);
   assert.equal(progress.unlockedAt, now);
   assert.deepEqual(progress.completedTaskIds, []);
   assert.deepEqual(levelForProgress(progress).level, {
     number: 1,
-    title: "Ready",
+    title: "Starting point",
   });
   assert.equal(levelForProgress(progress).next.remaining, 1);
 });
@@ -98,7 +106,7 @@ test("existing completed work is recognized at unlock, excluding incomplete and 
   assert.deepEqual(progress.completedTaskIds, ["a"]);
   assert.deepEqual(levelForProgress(progress).level, {
     number: 2,
-    title: "First win",
+    title: "Building",
   });
 });
 
@@ -191,8 +199,8 @@ test("SQLite reconciliation adds one progress record without changing existing d
   );
 });
 
-test("SQLite sync migrates an existing incomplete profile only when the final preference is saved", async () => {
-  seed(full({ preferredMinutes: undefined }));
+test("SQLite sync migrates an existing incomplete profile only when the quiz is finished", async () => {
+  seed(full({ answers: [] }));
   harness.saveRecord("a", "task", task("a"));
   assert.deepEqual(await syncProgress(), newProgress());
   harness.saveRecord("flow-profile-v1", "profile", full());
