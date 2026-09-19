@@ -1,24 +1,27 @@
 import type { ExpoConfig } from "expo/config";
 
 const config: ExpoConfig = {
-  name: "Anchor",
-  slug: "anchor-mobile",
+  name: "Flowthread",
+  slug: "flowthread",
   version: "0.1.0",
   orientation: "portrait",
-  scheme: "anchor",
-  userInterfaceStyle: "light",
-  newArchEnabled: true,
+  scheme: "flowthread",
+  userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
   ios: {
     supportsTablet: true,
-    bundleIdentifier: process.env.APP_BUNDLE_ID || "com.example.anchor",
-    infoPlist: { ITSAppUsesNonExemptEncryption: false },
+    bundleIdentifier: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      NSSpeechRecognitionUsageDescription:
+        "Flowthread turns your voice note into text on your iPhone. Audio never leaves your device.",
+    },
   },
   android: {
-    package: process.env.APP_BUNDLE_ID || "com.example.anchor",
+    package: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#102E2C",
+      backgroundColor: "#142138",
     },
     blockedPermissions: [
       "android.permission.READ_CALENDAR",
@@ -27,11 +30,12 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-asset",
+    "./plugins/with-ios-scene",
     [
       "expo-audio",
       {
         microphonePermission:
-          "Anchor records a voice note only when you tap Record.",
+          "Flowthread records a voice note only when you tap Record.",
         enableBackgroundRecording: false,
       },
     ],
@@ -40,7 +44,7 @@ const config: ExpoConfig = {
       "expo-calendar",
       {
         calendarPermission:
-          "Anchor lets you add an action through the calendar editor.",
+          "Flowthread saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
       },
     ],
   ],

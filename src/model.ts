@@ -1,5 +1,10 @@
 export const TOPICS = ["Life", "Work", "Ideas"] as const;
 export type Topic = (typeof TOPICS)[number];
+export type DirectionContext = {
+  directionId: string;
+  areaId: string;
+  choice: string;
+};
 export type Task = {
   id: string;
   title: string;
@@ -13,14 +18,28 @@ export type Task = {
   chaseDate: string;
   notes: string;
   createdAt: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  location?: string;
+  meetingUrl?: string;
+  timeZone?: string;
+  reminderMinutes?: number | null;
+  direction?: DirectionContext;
+  followUp?: "waiting" | "blocked";
+  completedAt?: string;
+  reviewedAt?: string;
 };
 export type Note = {
+  captureKind?: "thought" | "note" | "feedback";
+  planId?: string;
   id: string;
   title: string;
   text: string;
   audioUri?: string;
   durationMs?: number;
   createdAt: string;
+  direction?: DirectionContext;
 };
 export function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -50,26 +69,57 @@ export function validateTask(task: Task): void {
     throw new Error("Use a time in 24-hour HH:mm format.");
   if (task.plannedTime && !task.plannedDate)
     throw new Error("Add a planned date for this time.");
+  for (const [label, value, max] of [
+    ["Contact name", task.contactName, 300],
+    ["Phone", task.phone, 100],
+    ["Email", task.email, 254],
+    ["Location", task.location, 1000],
+    ["Meeting link", task.meetingUrl, 2000],
+    ["Time zone", task.timeZone, 100],
+  ] as const) {
+    if (
+      value !== undefined &&
+      (typeof value !== "string" ||
+        value.length > max ||
+        /[\r\n\u0000]/.test(value))
+    )
+      throw new Error(`${label} is too long or contains a line break.`);
+  }
+  if (
+    task.email?.trim() &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(task.email.trim())
+  )
+    throw new Error("Use a complete email address.");
+  if (task.meetingUrl?.trim()) {
+    try {
+      const url = new URL(task.meetingUrl.trim());
+      if (
+        !["https:", "http:"].includes(url.protocol) ||
+        url.username ||
+        url.password
+      )
+        throw new Error();
+    } catch {
+      throw new Error(
+        "Use a meeting or website link starting with https:// or http://, without a password.",
+      );
+    }
+  }
+  if (task.timeZone) {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: task.timeZone }).format();
+    } catch {
+      throw new Error("Choose a valid time zone, such as America/New_York.");
+    }
+  }
+  if (
+    task.reminderMinutes !== undefined &&
+    task.reminderMinutes !== null &&
+    ![0, 5, 15, 30, 60, 1440].includes(task.reminderMinutes)
+  )
+    throw new Error("Choose one of the available calendar alerts.");
   if (task.notes.length > 20000 || task.waitingOn.length > 300)
     throw new Error("This note or contact is too long.");
-}
-export function calendarDraft(task: Task) {
-  validateTask(task);
-  if (!task.plannedDate || !task.plannedTime)
-    throw new Error("Edit this action and add a planned date and time first.");
-  const [y, m, d] = task.plannedDate.split("-").map(Number);
-  const [h, min] = task.plannedTime.split(":").map(Number);
-  const startDate = new Date(y, m - 1, d, h, min);
-  if (startDate.getHours() !== h || startDate.getMinutes() !== min)
-    throw new Error(
-      "This time does not exist because of a daylight-saving change. Choose another time.",
-    );
-  return {
-    title: task.title,
-    startDate,
-    endDate: new Date(startDate.getTime() + task.minutes * 60000),
-    notes: task.notes,
-  };
 }
 export function todayTasks(
   tasks: Task[],

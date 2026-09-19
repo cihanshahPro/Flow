@@ -1,8 +1,8 @@
+import { eventDraft as calendarDraft } from '../src/calendar-model.ts';
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
   validDate,
-  calendarDraft,
   todayTasks,
   validateTask,
 } from "../src/model.ts";
@@ -30,7 +30,8 @@ test("calendar draft preserves wall time and duration", () => {
   assert.equal(event.startDate.getHours(), 9);
   assert.equal(event.startDate.getMinutes(), 30);
   assert.equal(event.endDate - event.startDate, 30 * 60000);
-  assert.equal(event.notes, "My context");
+  assert.match(event.notes, /My context/);
+  assert.match(event.notes, /Anchor reference: 1/);
 });
 test("calendar requires explicit scheduling", () =>
   assert.throws(

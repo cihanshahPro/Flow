@@ -25,14 +25,24 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import { File, Paths } from "expo-file-system";
+import { waitForRecordingForeground } from "../recording-lifecycle";
 
 export type SavedVoiceNote = {
+  // Recovery cannot infer the original destination from an orphan audio file.
+  captureKind?: "note";
   title: string;
   text: string;
   audioUri: string;
   durationMs: number;
 };
-type Props = { onSaved: (note: SavedVoiceNote) => Promise<void> };
+type Props = {
+  onSaved: (note: SavedVoiceNote) => Promise<void>;
+  compact?: boolean;
+  autoStart?: boolean;
+  onActivityChange?: (active: boolean) => void;
+  onOpenSaved?: (note: SavedVoiceNote) => void;
+  onComplete?: (note: SavedVoiceNote) => void;
+};
 type Phase =
   | "recovering"
   | "recovery-error"
@@ -128,45 +138,27 @@ function scanVoiceRecordings(): SavedVoiceNote[] {
     }));
 }
 
-function writePendingJournal(item: PendingRecording) {
-  const journal = new File(Paths.document, JOURNAL_FILENAME);
-  if (journal.exists) {
-    if (readPendingJournal(journal).note.audioUri !== item.note.audioUri)
-      throw new Error("Another recording is awaiting recovery.");
-    return;
-  }
-  const temporary = new File(Paths.document, JOURNAL_TEMP_FILENAME);
-  if (temporary.exists) {
-    if (readPendingJournal(temporary).note.audioUri !== item.note.audioUri)
-      throw new Error("Another recording has an unfinished recovery file.");
-  } else {
-    temporary.create();
-    temporary.write(
-      JSON.stringify({ version: 1, filename: item.filename, note: item.note }),
-    );
-  }
-  if (readPendingJournal(temporary).note.audioUri !== item.note.audioUri)
-    throw new Error("Could not verify the recovery copy.");
-  // Rename within the same document directory only after a complete, verified write.
-  // An interrupted temporary write is reconciled by the document scan on recovery.
-  if (journal.exists)
-    throw new Error("The recovery file changed. Please retry recovery.");
-  temporary.move(journal);
-  if (readPendingJournal(journal).note.audioUri !== item.note.audioUri)
-    throw new Error("Could not verify the saved recovery file.");
-}
-
 /** Foreground recording. The original audio is saved before note metadata is committed. */
-export default function VoiceCapture({ onSaved }: Props) {
+export default function VoiceCapture({
+  onSaved,
+  compact = false,
+  autoStart = false,
+  onActivityChange,
+  onOpenSaved,
+  onComplete,
+}: Props) {
   const [phase, setPhase] = useState<Phase>("recovering");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [needsSettings, setNeedsSettings] = useState(false);
+  const [saved, setSaved] = useState<SavedVoiceNote | null>(null);
   const mounted = useRef(true);
   const phaseRef = useRef<Phase>("recovering");
   const preparationCancelled = useRef(false);
   const saveRef = useRef(onSaved);
+  const completeRef = useRef(onComplete);
+  completeRef.current = onComplete;
   const titleRef = useRef(title);
   const pending = useRef<PendingRecording | null>(null);
   const startedAt = useRef(0);
@@ -246,7 +238,7 @@ export default function VoiceCapture({ onSaved }: Props) {
           );
       }
       for (const note of candidates.values()) {
-        await saveRef.current(note);
+        await saveRef.current({ ...note, captureKind: "note" });
         reconciled += 1;
       }
       // Keep unreadable metadata for inspection, but don't let it permanently
@@ -274,6 +266,10 @@ export default function VoiceCapture({ onSaved }: Props) {
       updatePhase("idle");
       if (mounted.current) {
         setTitle("");
+        if (current?.copied) {
+          setSaved(current.note);
+          completeRef.current?.(current.note);
+        }
         const damaged = journals.some((entry) => !entry.valid);
         if (damaged)
           setNotice(
@@ -319,24 +315,20 @@ export default function VoiceCapture({ onSaved }: Props) {
         item.note.audioUri = destination.uri;
         item.copied = true;
       }
-      writePendingJournal(item);
       await saveRef.current(item.note);
-      const journal = new File(Paths.document, JOURNAL_FILENAME);
-      // The callback uses audioUri as its id, so replay after a crash is idempotent.
-      if (
-        !journal.exists ||
-        readPendingJournal(journal).note.audioUri !== item.note.audioUri
-      ) {
-        throw new Error("The note was added, but its recovery file changed.");
-      }
-      journal.delete();
       pending.current = null;
       updatePhase("idle");
       if (mounted.current) {
         setTitle("");
-        setNotice("Voice note saved. You can listen or organize it later.");
+        setSaved(item.note);
+        setNotice("Recording saved on this device.");
+        completeRef.current?.(item.note);
       }
     } catch (failure) {
+      console.warn(
+        "[Flow voice] save or registration failed",
+        message(failure),
+      );
       updatePhase(item.copied ? "recovery-error" : "retry");
       if (mounted.current)
         setError(
@@ -441,6 +433,7 @@ export default function VoiceCapture({ onSaved }: Props) {
     setError("");
     setNotice("");
     setNeedsSettings(false);
+    setSaved(null);
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
@@ -454,40 +447,25 @@ export default function VoiceCapture({ onSaved }: Props) {
         updatePhase("idle");
         return;
       }
-      if (
-        !mounted.current ||
-        preparationCancelled.current ||
-        AppState.currentState !== "active"
-      ) {
-        await cancelPreparation();
-        updatePhase("idle");
-        return;
-      }
+      await waitForRecordingForeground(
+        AppState,
+        () => !mounted.current || preparationCancelled.current,
+      );
       await setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
         shouldPlayInBackground: false,
         allowsBackgroundRecording: false,
       });
-      if (
-        !mounted.current ||
-        preparationCancelled.current ||
-        AppState.currentState !== "active"
-      ) {
-        await cancelPreparation();
-        updatePhase("idle");
-        return;
-      }
+      await waitForRecordingForeground(
+        AppState,
+        () => !mounted.current || preparationCancelled.current,
+      );
       await recorder.prepareToRecordAsync();
-      if (
-        !mounted.current ||
-        preparationCancelled.current ||
-        AppState.currentState !== "active"
-      ) {
-        await cancelPreparation();
-        updatePhase("idle");
-        return;
-      }
+      await waitForRecordingForeground(
+        AppState,
+        () => !mounted.current || preparationCancelled.current,
+      );
       durationRef.current = 0;
       startedAt.current = Date.now();
       recorder.record({ forDuration: MAX_SECONDS });
@@ -543,25 +521,46 @@ export default function VoiceCapture({ onSaved }: Props) {
     }
   }, [recorderState.mediaServicesDidReset, recorderState.url]);
 
+  const didAutoStart = useRef(false);
+  useEffect(() => {
+    onActivityChange?.(
+      ["recording", "preparing", "saving", "recovering"].includes(phase),
+    );
+    if (autoStart && phase === "idle" && !didAutoStart.current) {
+      didAutoStart.current = true;
+      void start();
+    }
+  }, [phase, autoStart, onActivityChange]);
   const working =
     phase === "recovering" || phase === "preparing" || phase === "saving";
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        compact && {
+          backgroundColor: "#FFFFFF",
+          borderColor: "#E2E6ED",
+          borderRadius: 24,
+        },
+      ]}
+    >
       <Text style={styles.eyebrow}>VOICE INBOX</Text>
       <Text style={styles.heading}>Get it off your mind.</Text>
       <Text style={styles.body}>
-        Record now. Listen and organize later. Audio stays on this device.
+        No title needed. Your recording saves when you stop.
       </Text>
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        editable={phase === "idle"}
-        placeholder="Give this thought a name (optional)"
-        placeholderTextColor="#6D8781"
-        accessibilityLabel="Voice note title"
-        style={styles.input}
-        maxLength={120}
-      />
+      {!compact && (
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          editable={phase === "idle"}
+          placeholder="Give this thought a name (optional)"
+          placeholderTextColor="#6D8781"
+          accessibilityLabel="Voice note title"
+          style={styles.input}
+          maxLength={120}
+        />
+      )}
       <View style={styles.statusRow}>
         <View style={[styles.dot, phase === "recording" && styles.liveDot]} />
         <Text accessibilityLiveRegion="polite" style={styles.status}>
@@ -603,6 +602,7 @@ export default function VoiceCapture({ onSaved }: Props) {
         }
         style={({ pressed }) => [
           styles.button,
+          compact && { backgroundColor: "#345BEE" },
           phase === "recording" && styles.stopButton,
           (working || pressed) && styles.dim,
         ]}
@@ -620,7 +620,7 @@ export default function VoiceCapture({ onSaved }: Props) {
         </Text>
       </Pressable>
       <Text style={styles.hint}>
-        Up to 10 minutes. Keep this app open. No automatic transcription yet.
+        Up to 10 minutes. Keep this app open while recording.
       </Text>
       {!!error && (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -638,6 +638,19 @@ export default function VoiceCapture({ onSaved }: Props) {
         >
           <Text style={styles.link}>Open microphone settings</Text>
         </Pressable>
+      )}
+      {saved && phase === "idle" && (
+        <View>
+          <AudioPlayback uri={saved.audioUri} />
+          {onOpenSaved && (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onOpenSaved(saved)}
+            >
+              <Text style={styles.link}>Open saved note in Library</Text>
+            </Pressable>
+          )}
+        </View>
       )}
       {!!notice && (
         <Text accessibilityLiveRegion="polite" style={styles.notice}>

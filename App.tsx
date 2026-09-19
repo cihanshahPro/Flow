@@ -1,960 +1,737 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
   View,
-  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { randomUUID } from "expo-crypto";
-import * as Sharing from "expo-sharing";
-import { File, Paths } from "expo-file-system";
-import VoiceCapture, {
-  AudioPlayback,
-  type SavedVoiceNote,
-} from "./src/components/VoiceCapture";
-import {
-  TOPICS,
-  localDate,
-  todayTasks,
-  type Task,
-  type Note,
-} from "./src/model";
-import {
-  loadWorkspace,
-  saveTask,
-  saveNote,
-  registerVoiceNote,
-  removeTask,
-} from "./src/services/storage";
-import { addTaskToCalendar } from "./src/services/calendar";
-import { capabilities } from "./src/services/capabilities";
+import VoiceCapture, { AudioPlayback, type SavedVoiceNote } from "./src/components/VoiceCapture";
+import Today from "./src/components/Today";
+import Threads from "./src/components/Threads";
+import Progress from "./src/components/Progress";
+import Profile from "./src/components/Profile";
+import TabBar, { type Tab } from "./src/components/TabBar";
+import ThreadChat from "./src/components/ThreadChat";
+import Thinking from "./src/components/Thinking";
+import Funnel, { type FunnelStep } from "./src/components/Funnel";
+import { C } from "./src/components/theme";
+import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/services/storage";
+import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
+import { loadProfile, saveProfile } from "./src/services/profile";
+import { syncProgress } from "./src/services/progress";
+import { processCapturedNote } from "./src/services/processing";
+import { capabilities } from "./src/services/processors";
+import { loadAiState, setCloudConsent } from "./src/services/ai-state";
+import type { Consent } from "./src/ai-policy";
+import { syncReminders } from "./src/services/reminders";
+import { exportAllData, deleteAllData } from "./src/services/data";
+import Constants from "expo-constants";
+import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
+import { newProfile, needsFunnel, shouldInviteAssessment, type Profile as ProfileModel } from "./src/personality";
+import { newProgress, levelForProgress } from "./src/progress";
+import { completeTask, pickNextTask } from "./src/task-flow";
+import * as Haptics from "expo-haptics";
+import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
+import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
+import type { ThoughtDraft } from "./src/drafts";
+import type { Note, Task } from "./src/model";
 
-type Tab = "Today" | "Capture" | "Inbox" | "Settings";
-const BusyContext = React.createContext(false);
-function Button({
-  title,
-  onPress,
-  secondary = false,
-  disabled = false,
-}: {
-  title: string;
-  onPress: () => void;
-  secondary?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={[
-        s.button,
-        secondary && s.secondary,
-        disabled && { opacity: 0.45 },
-      ]}
-    >
-      <Text style={[s.buttonText, secondary && { color: "#123D38" }]}>
-        {title}
-      </Text>
-    </Pressable>
-  );
-}
-function Field({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-}) {
-  const busy = React.useContext(BusyContext);
-  return (
-    <View style={s.field}>
-      <Text style={s.label}>{label}</Text>
-      <TextInput
-        editable={!busy}
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#768782"
-        multiline={multiline}
-        style={[
-          s.input,
-          multiline && { height: 100, textAlignVertical: "top" },
-        ]}
-        autoCorrect={multiline}
-      />
-    </View>
-  );
-}
-const blankTask = (): Task => ({
-  id: randomUUID(),
-  title: "",
-  topic: "Life",
-  minutes: 15,
-  done: false,
-  plannedDate: "",
-  plannedTime: "",
-  deadline: "",
-  waitingOn: "",
-  chaseDate: "",
-  notes: "",
-  createdAt: new Date().toISOString(),
-});
-const errorText = (error: unknown) =>
-  error instanceof Error
-    ? error.message
-    : "Something went wrong. Please try again.";
+type Screen = Tab | "thread";
+type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback"; prompt?: string };
+const EVALUATE_EVERY_MS = 15 * 60 * 1000;
+
 export default function App() {
   return (
     <SafeAreaProvider>
-      <Desk />
+      <Flow />
     </SafeAreaProvider>
   );
 }
-function Desk() {
-  const [tab, setTab] = useState<Tab>("Today");
-  const [tasks, setTasks] = useState<Task[]>([]),
-    [notes, setNotes] = useState<Note[]>([]);
-  const [ready, setReady] = useState(false),
-    [loadError, setLoadError] = useState("");
-  const [minutes, setMinutes] = useState(30),
-    [all, setAll] = useState(false);
-  const [message, setMessage] = useState(""),
-    [busy, setBusy] = useState(false);
+
+function pendingQuestion(thread: ThoughtDraft): string | undefined {
+  const open = [...(thread.messages ?? [])].reverse().find((m) => m.from === "flow" && !m.answered && m.kind === "question");
+  return open ? `Flow asked: ${open.text}` : undefined;
+}
+
+function Flow() {
+  const [ready, setReady] = useState(false);
+  const [profile, setProfile] = useState<ProfileModel>(newProfile());
+  const [progress, setProgress] = useState(newProgress());
+  const [threads, setThreads] = useState<ThoughtDraft[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [screen, setScreen] = useState<Screen>("today");
+  const [lastTab, setLastTab] = useState<Tab>("today");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [funnel, setFunnel] = useState(false);
+  const [funnelStep, setFunnelStep] = useState<FunnelStep>("intro");
+  const [capture, setCapture] = useState<Capture | null>(null);
+  const [captureVisible, setCaptureVisible] = useState(false);
+  const [input, setInput] = useState("");
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceResult, setVoiceResult] = useState<Note | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [processingError, setProcessingError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [celebrate, setCelebrate] = useState(0);
+  // Plan D: older iPhones ask once before any note text goes to the cloud shaper.
+  const [consentAsk, setConsentAsk] = useState<((allowed: boolean) => void) | null>(null);
+  const [cloudConsent, setCloudConsentState] = useState<Consent>(undefined);
+  const [onDeviceAi, setOnDeviceAi] = useState(false);
   const lock = useRef(false);
-  const [capture, setCapture] = useState("");
-  const [editing, setEditing] = useState<Task | null>(null),
-    [noteEdit, setNoteEdit] = useState<Note | null>(null);
-  const [estimate, setEstimate] = useState("15");
-  const refresh = useCallback(async () => {
-    const data = await loadWorkspace();
-    setTasks(data.tasks);
-    setNotes(data.notes);
-  }, []);
-  const boot = useCallback(async () => {
+  const processingLock = useRef(false);
+  const captureId = useRef("");
+  const revealAfterSheet = useRef<string | null>(null);
+  const shapingAbort = useRef<AbortController | null>(null);
+  const captureOpen = useRef(false);
+  captureOpen.current = !!capture;
+
+  const mode = modeFor(profile.answers) ?? DEFAULT_MODE;
+  const current = threads.find((t) => t.id === openId);
+  const level = levelForProgress(progress);
+  const type = flowType(profile.answers);
+  const nextTask = pickNextTask(tasks, profile.activeTaskId);
+  const nextThread = nextTask ? threads.find((t) => nextTask.id.startsWith(`flow:${t.id}:`)) : undefined;
+
+  /** Thread reminders plus the morning "today's one move" nudge, from the freshly saved data. */
+  function syncAll(data: { tasks: Task[]; threads: ThoughtDraft[] }, p: ProfileModel, ask = false) {
+    const next = pickNextTask(data.tasks, p.activeTaskId);
+    return syncReminders(data.threads, data.tasks, new Date(), {
+      ask,
+      enabled: !p.notificationsOff,
+      morning: { headline: next ? moveHeadline(next, p.plate?.timeWindow) : undefined, time: p.morningTime, off: p.morningOff },
+    }).catch(() => 0);
+  }
+
+  async function refresh() {
+    const [w, d] = await Promise.all([loadWorkspace(), loadDrafts()]);
+    setTasks(w.tasks);
+    setNotes(w.notes);
+    setThreads(d);
     try {
-      setLoadError("");
-      await refresh();
-      setReady(true);
-    } catch (e) {
-      setLoadError(errorText(e));
+      setProgress(await syncProgress());
+    } catch {
+      /* Levels catch up on the next sync; nothing else is blocked. */
     }
-  }, [refresh]);
+    return { tasks: w.tasks, threads: d };
+  }
+
+  /** Flow re-reads every open thread and adds a check-in where one is due. */
+  async function evaluateAll(source?: { tasks: Task[]; threads: ThoughtDraft[] }) {
+    // Always read what is saved, never a possibly stale render snapshot.
+    const data = source ?? { tasks: (await loadWorkspace()).tasks, threads: await loadDrafts() };
+    let changed = false;
+    for (const thread of data.threads) {
+      // Threads from older builds get their conversation first, then the usual check-ins.
+      const next = evaluateThread(backfillConversation(thread, { mode, plate: profile.plate }), data.tasks, { mode });
+      if (next !== thread) {
+        await saveDraft(next);
+        changed = true;
+      }
+    }
+    if (changed) await refresh();
+    void syncAll(data, profile);
+  }
+
   useEffect(() => {
-    void boot();
-  }, [boot]);
-  async function act(operation: () => Promise<void>) {
+    void capabilities().then((c) => setOnDeviceAi(c.llm));
+    void loadAiState()
+      .then((a) => setCloudConsentState(a.consent))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    Promise.all([refresh(), loadProfile()])
+      .then(async ([data, p]) => {
+        setProfile(p);
+        // New (and pre-build-12) profiles get welcome → first thought. Anyone who finished the test-first funnel keeps their flow.
+        setFunnel(needsFunnel(p));
+        setFunnelStep("intro");
+        await evaluateAll(data);
+        setReady(true);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Flow could not open its saved data.");
+        setReady(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void evaluateAll().catch(() => {});
+    });
+    const timer = setInterval(() => void evaluateAll().catch(() => {}), EVALUATE_EVERY_MS);
+    return () => {
+      sub.remove();
+      clearInterval(timer);
+    };
+  }, [ready, mode]);
+
+  async function run(fn: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
-    setMessage("");
+    setError("");
     try {
-      await operation();
+      await fn();
     } catch (e) {
-      setMessage(errorText(e));
+      setError(e instanceof Error ? e.message : "Something went wrong. Your saved thoughts are safe.");
     } finally {
       lock.current = false;
       setBusy(false);
     }
   }
-  function edit(task: Task) {
-    if (lock.current) return;
-    setMessage("");
-    setEditing({ ...task });
-    setEstimate(String(task.minutes));
+
+  async function updateProfile(p: ProfileModel) {
+    await saveProfile(p);
+    setProfile(p);
   }
-  const savedVoice = useCallback(
-    async (note: SavedVoiceNote) => {
-      // Reusing the recording URI makes retry after a refresh failure idempotent.
-      await registerVoiceNote({
-        ...note,
-        id: note.audioUri,
-        createdAt: new Date().toISOString(),
-      });
+
+  /** Levels are announced inside the thread that earned them. */
+  async function announceLevel(threadId: string | undefined, before: number) {
+    const after = await syncProgress().catch(() => null);
+    if (!after) return;
+    setProgress(after);
+    const summary = levelForProgress(after);
+    if (!threadId || !summary.level || summary.level.number <= before) return;
+    const thread = (await loadDrafts()).find((t) => t.id === threadId);
+    if (!thread) return;
+    const next = noteLevelUp(thread, summary.level.title, mode);
+    if (next !== thread) {
+      await saveDraft(next);
       await refresh();
-      setMessage("Voice note saved to your inbox.");
-    },
-    [refresh],
-  );
-  const due = tasks
-    .filter((t) => !t.done && t.deadline)
-    .sort((a, b) => a.deadline.localeCompare(b.deadline));
-  const visible = all ? tasks : todayTasks(tasks, minutes);
-  function remove(task: Task) {
-    Alert.alert("Delete this action?", task.title, [
-      { text: "Keep", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () =>
-          void act(async () => {
-            await removeTask(task.id);
-            setEditing(null);
-            await refresh();
-          }),
-      },
-    ]);
+    }
   }
-  async function exportText() {
-    if (!(await Sharing.isAvailableAsync()))
-      throw new Error("Sharing is not available on this device.");
-    const file = new File(Paths.cache, "anchor-text-export.json");
-    file.write(
-      JSON.stringify(
-        {
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          tasks,
-          notes: notes.map(({ audioUri, id, ...n }) => ({
-            ...n,
-            id: audioUri ? undefined : id,
-            hasAudio: !!audioUri,
-          })),
-        },
-        null,
-        2,
-      ),
+
+  function openThread(id: string) {
+    setOpenId(id);
+    setScreen("thread");
+    setNotice("");
+    setError("");
+    setProcessingError("");
+    void evaluateAll().catch(() => {});
+  }
+  function closeThread() {
+    setScreen(lastTab);
+    setOpenId(null);
+  }
+  function selectTab(tab: Tab) {
+    setLastTab(tab);
+    setScreen(tab);
+    setNotice("");
+    setError("");
+  }
+
+  function startCapture(
+    mode: "voice" | "text",
+    threadId: string | null,
+    kind: "thought" | "feedback" = "thought",
+    prompt?: string,
+  ) {
+    captureId.current = randomUUID();
+    setInput("");
+    setVoiceResult(null);
+    setProcessingError("");
+    setCaptureVisible(false);
+    setNotice("");
+    setCapture({ mode, threadId, kind, prompt });
+  }
+  function askCloudConsent() {
+    return new Promise<boolean>((resolve) =>
+      setConsentAsk(() => (allowed: boolean) => {
+        setConsentAsk(null);
+        setCloudConsentState(allowed ? "allowed" : "declined");
+        resolve(allowed);
+      }),
     );
-    await Sharing.shareAsync(file.uri, {
-      mimeType: "application/json",
-      dialogTitle: "Export Anchor notes and actions",
+  }
+  function closeCapture() {
+    if (!voiceBusy && !busy && !processing) setCapture(null);
+  }
+  function finishSheetTransition() {
+    if (revealAfterSheet.current) {
+      openThread(revealAfterSheet.current);
+      revealAfterSheet.current = null;
+    }
+  }
+  function reveal(id: string) {
+    if (Platform.OS === "ios" && capture) revealAfterSheet.current = id;
+    else openThread(id);
+  }
+
+  async function voiceSaved(v: SavedVoiceNote) {
+    await registerVoiceNote({
+      ...v,
+      planId: capture?.kind === "thought" ? capture.threadId ?? undefined : undefined,
+      captureKind: capture?.kind === "feedback" ? "feedback" : v.captureKind ?? "thought",
+      id: v.audioUri,
+      createdAt: new Date().toISOString(),
     });
   }
+  function recordingCompleted(saved: SavedVoiceNote) {
+    const entry: Note = {
+      ...saved,
+      planId: capture?.kind === "thought" ? capture.threadId ?? undefined : undefined,
+      captureKind: capture?.kind === "feedback" ? "feedback" : "thought",
+      id: saved.audioUri,
+      createdAt: new Date().toISOString(),
+    };
+    setVoiceBusy(false);
+    setVoiceResult(entry);
+    void processRecording(entry);
+  }
+  /** Stop waiting for the AI: the thread is still made, from the basic template. */
+  function cancelShaping() {
+    shapingAbort.current?.abort();
+  }
+  /** Leave the capture sheet while Flow keeps thinking; the thread lands in the list. */
+  function continueInBackground() {
+    setCapture(null);
+    selectTab(lastTab);
+  }
+  async function processRecording(entry: Note) {
+    if (processingLock.current) return;
+    processingLock.current = true;
+    const abort = new AbortController();
+    shapingAbort.current = abort;
+    setProcessing(true);
+    setProcessingError("");
+    const before = level.level?.number ?? 0;
+    try {
+      const result = await processCapturedNote(entry, { askCloudConsent, signal: abort.signal });
+      const data = await refresh();
+      if (result.kind === "note") {
+        setCapture(null);
+        setNotice("Saved. Thank you — it stays on this phone.");
+        return;
+      }
+      const stayedHere = captureOpen.current;
+      setCapture(null);
+      // Someone who walked away is not pulled into the thread; it is simply in their list.
+      if (!stayedHere) setNotice(`Flow shaped “${result.draft.title}”. It's in your threads.`);
+      else if (openId !== result.draft.id) reveal(result.draft.id);
+      await evaluateAll(data);
+      await announceLevel(result.draft.id, before);
+    } catch (failure) {
+      setProcessingError(failure instanceof Error ? failure.message : "Processing paused. Your recording is saved.");
+      await refresh().catch(() => {});
+    } finally {
+      shapingAbort.current = null;
+      processingLock.current = false;
+      setProcessing(false);
+    }
+  }
+  async function submitText() {
+    const text = input.trim();
+    if (!text || !capture) return;
+    await run(async () => {
+      const id = captureId.current || randomUUID();
+      const n: Note = {
+        id,
+        planId: capture.kind === "thought" ? capture.threadId ?? undefined : undefined,
+        captureKind: capture.kind,
+        title: text.slice(0, 80),
+        text,
+        createdAt: new Date().toISOString(),
+      };
+      await saveNote(n);
+      setInput("");
+      // Not awaited: the sheet can be left while Flow thinks, and Today stays usable.
+      void processRecording(n);
+    });
+  }
+
+  function chip(messageId: string, chipId: string) {
+    if (!current) return;
+    void run(async () => {
+      const before = level.level?.number ?? 0;
+      const { thread, effects } = answerChip(current, messageId, chipId, { mode, plate: profile.plate });
+      await saveDraft(thread);
+      for (const effect of effects) {
+        if (effect.type === "accept") {
+          const step = thread.steps.find((s) => s.id === effect.stepId);
+          if (step) {
+            await acceptStep(thread, step);
+            // The move is an if-then plan: it lands on the day the person said they have time.
+            const id = `flow:${thread.id}:${step.id}`;
+            const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
+            if (saved) await saveTask({ ...saved, plannedDate: plannedDateFor(profile.plate?.timeWindow) });
+            await updateProfile({ ...profile, activeTaskId: id });
+          }
+        } else if (effect.type === "complete") {
+          const task = tasks.find((t) => t.id === effect.taskId);
+          if (task && !task.done) await saveTask(completeTask(task));
+        }
+      }
+      const data = await refresh();
+      // Confirming a move is the moment a reminder makes sense, so this is when permission is requested.
+      if (effects.some((e) => e.type === "accept") && !profile.notificationsOff)
+        void syncAll(data, profile, true);
+      await announceLevel(thread.id, before);
+    });
+  }
+
+  function doneNext() {
+    if (!nextTask) return;
+    void run(async () => {
+      const before = level.level?.number ?? 0;
+      await saveTask(completeTask(nextTask));
+      const thread = nextThread ? (await loadDrafts()).find((t) => t.id === nextThread.id) : undefined;
+      if (thread) await saveDraft(noteMoveDone(thread, nextTask, { mode, plate: profile.plate }));
+      if (profile.activeTaskId === nextTask.id) await updateProfile({ ...profile, activeTaskId: undefined });
+      const data = await refresh();
+      void syncAll(data, { ...profile, activeTaskId: undefined });
+      setCelebrate((n) => n + 1);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      await announceLevel(thread?.id, before);
+      setNotice(thread ? `Done. Flow left you a note in “${thread.title}”.` : "Done.");
+    });
+  }
+  const choose: ChooseCalendar = (options, preferred) =>
+    new Promise((resolve) =>
+      Alert.alert(
+        "Choose your calendar",
+        "Flow remembers this for next time.",
+        [
+          ...options.map((c) => ({ text: c.title + (c.id === preferred ? " · default" : ""), onPress: () => resolve(c.id) })),
+          { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
+        ],
+        { cancelable: false },
+      ),
+    );
+  function calendarNext() {
+    if (!nextTask) return;
+    void run(async () => {
+      const message = await addTaskToCalendar(nextTask, choose);
+      setNotice(message);
+    });
+  }
+
+  const captureTitle =
+    capture?.kind === "feedback"
+      ? "Tell Flow something"
+      : capture?.threadId
+        ? current?.title ?? "Add to this thread"
+        : capture?.prompt
+          ? "Flow is listening"
+          : "What's on your mind?";
+  const captureHint =
+    capture?.kind === "feedback"
+      ? "About Flow itself. It stays here and never becomes a thread."
+      : capture?.prompt ?? (capture?.threadId ? "Just answer or add. Flow keeps the thread." : "Say everything about one thing. Don't organise it.");
+  const captureSheet = (
+      <Modal
+        visible={capture !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeCapture}
+        onShow={() => setCaptureVisible(true)}
+        onDismiss={finishSheetTransition}
+      >
+        <SafeAreaView style={s.sheet}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+            <View style={s.sheetHead}>
+              <Text style={s.kicker} numberOfLines={1}>
+                {capture?.kind === "feedback" ? "FEEDBACK" : capture?.threadId ? "THIS THREAD" : "NEW"}
+              </Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeCapture} disabled={voiceBusy || busy || processing} hitSlop={12}>
+                <Text style={s.link}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={s.sheetBody} keyboardShouldPersistTaps="handled">
+              <Text style={s.sheetTitle}>{captureTitle}</Text>
+              <Text style={s.body}>{captureHint}</Text>
+              {consentAsk && (
+                <View style={s.card}>
+                  <View style={{ gap: 10 }}>
+                    <Text style={s.body}>
+                      Your iPhone can't run Apple's on-device AI. Flowthread can send the text of your note (never the audio) to a secure server to shape it. Nothing is stored.
+                    </Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Allow" onPress={() => consentAsk(true)} style={s.primary}>
+                      <Text style={s.primaryText}>Allow</Text>
+                    </Pressable>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Keep it basic" onPress={() => consentAsk(false)} hitSlop={8} style={{ alignSelf: "center" }}>
+                      <Text style={s.link}>Keep it basic</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+              {capture?.mode === "voice" ? (
+                <>
+                  {voiceResult ? (
+                    <View style={s.card}>
+                      <Text style={s.cardTitle}>{processing ? "Saved." : "Recording saved."}</Text>
+                      {processing ? <Thinking onBackground={continueInBackground} onCancel={cancelShaping} /> : <AudioPlayback uri={voiceResult.audioUri!} />}
+                      {!processing && <Text style={s.body}>{processingError}</Text>}
+                      {!processing && (
+                        <Pressable accessibilityRole="button" accessibilityLabel="Retry processing" onPress={() => void processRecording(voiceResult)} style={s.primary}>
+                          <Text style={s.primaryText}>Retry</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  ) : (
+                    <VoiceCapture compact autoStart={captureVisible} onActivityChange={setVoiceBusy} onSaved={voiceSaved} onComplete={recordingCompleted} />
+                  )}
+                  {!voiceBusy && !voiceResult && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Write instead" onPress={() => setCapture({ ...capture, mode: "text" })} hitSlop={8} style={{ alignSelf: "center" }}>
+                      <Text style={s.link}>or write it down</Text>
+                    </Pressable>
+                  )}
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    autoFocus
+                    multiline
+                    maxLength={20000}
+                    value={input}
+                    onChangeText={setInput}
+                    editable={!busy && !processing}
+                    placeholder={capture?.kind === "feedback" ? "What were you trying to do? What felt confusing or useful?" : "Your words are enough."}
+                    placeholderTextColor={C.faint}
+                    accessibilityLabel={capture?.kind === "feedback" ? "Your feedback" : "Your thought"}
+                    style={s.input}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={capture?.kind === "feedback" ? "Save feedback" : "Send to Flow"}
+                    onPress={() => void submitText()}
+                    disabled={busy || processing || !input.trim()}
+                    style={({ pressed }) => [s.primary, (pressed || busy || processing || !input.trim()) && { opacity: 0.55 }]}
+                  >
+                    <Text style={s.primaryText}>{processing ? "Flow is reading…" : capture?.kind === "feedback" ? "Save feedback" : "Send to Flow"}</Text>
+                  </Pressable>
+                  {processing && <Thinking onBackground={continueInBackground} onCancel={cancelShaping} />}
+                  {!!processingError && <Text style={s.error}>{processingError}</Text>}
+                  {!processing && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Speak instead" onPress={() => capture && setCapture({ ...capture, mode: "voice" })} hitSlop={8} style={{ alignSelf: "center" }}>
+                      <Text style={s.link}>or record instead</Text>
+                    </Pressable>
+                  )}
+                </>
+              )}
+              {!!error && <Text style={s.error}>{error}</Text>}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+  );
+
   if (!ready)
     return (
-      <SafeAreaView style={s.shell}>
-        <View style={s.center}>
-          <Text style={s.logo}>⚓ Anchor</Text>
-          {loadError ? (
-            <>
-              <Text style={s.body}>
-                Could not open your saved workspace: {loadError}
-              </Text>
-              <Button title="Retry" onPress={() => void boot()} />
-            </>
-          ) : (
-            <ActivityIndicator color="#176C5F" />
-          )}
+      <SafeAreaView style={s.safe}>
+        <View style={s.loading}>
+          <Text style={s.brand}>flow.</Text>
+          {error ? <Text style={s.error}>{error}</Text> : <ActivityIndicator color={C.blue} />}
         </View>
       </SafeAreaView>
     );
-  return (
-    <BusyContext.Provider value={busy}>
-      <SafeAreaView style={s.shell} edges={["top", "bottom"]}>
-        <StatusBar style="dark" />
-        <View style={s.header}>
-          <View>
-            <Text style={s.logo}>⚓ Anchor</Text>
-            <Text style={s.small}>One next step.</Text>
-          </View>
-          <View style={s.badge}>
-            <Text style={s.badgeText}>ON THIS DEVICE</Text>
-          </View>
-        </View>
-        {!!message && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss message"
-            onPress={() => setMessage("")}
-            style={s.notice}
-          >
-            <Text accessibilityLiveRegion="polite" style={s.noticeText}>
-              {message}
-            </Text>
-          </Pressable>
-        )}
-        <View style={[s.screen, tab !== "Today" && s.hidden]}>
-          <ScrollView
-            contentContainerStyle={s.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={s.eyebrow}>
-              {new Date().toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "short",
-                day: "numeric",
-              })}
-            </Text>
-            <Text style={s.h1}>Make room for{"\n"}what matters.</Text>
-            <Text style={s.body}>
-              Choose the time you have. Start with one action.
-            </Text>
-            <View style={s.focus}>
-              <Text style={s.sectionTitle}>I have a moment</Text>
-              <View style={s.row}>
-                {[15, 30, 60, 120].map((m) => (
-                  <Pressable
-                    key={m}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: minutes === m }}
-                    onPress={() => {
-                      setMinutes(m);
-                      setAll(false);
-                    }}
-                    style={[s.chip, minutes === m && s.chipSelected]}
-                  >
-                    <Text
-                      style={[s.chipText, minutes === m && s.chipTextSelected]}
-                    >
-                      {m === 120 ? "2 hr" : m + " min"}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={s.small}>
-                Each action fits your window; this is not an automatic schedule.
-              </Text>
-            </View>
-            {due.length > 0 && (
-              <View style={s.deadlines}>
-                <Text style={s.sectionTitle}>Hard deadlines</Text>
-                {due.map((t) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={t.id}
-                    onPress={() => edit(t)}
-                    style={{ paddingVertical: 7 }}
-                  >
-                    <Text style={s.label}>
-                      {t.deadline} · {t.title}
-                    </Text>
-                    <Text style={s.small}>
-                      {t.deadline < localDate()
-                        ? "Overdue"
-                        : t.deadline === localDate()
-                          ? "Due today"
-                          : "Keep this date in view"}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            <View style={s.split}>
-              <Text style={s.sectionTitle}>
-                {all ? "All actions" : "Your next actions"}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setAll(!all)}
-              >
-                <Text style={s.link}>{all ? "Show today" : "View all"}</Text>
-              </Pressable>
-            </View>
-            {visible.length === 0 && (
-              <View style={s.card}>
-                <Text style={s.sectionTitle}>
-                  {tasks.length
-                    ? "Nothing fits this window."
-                    : "A little less in your head."}
-                </Text>
-                <Text style={s.body}>
-                  {tasks.length
-                    ? "Try a larger window or view all your actions."
-                    : "Add one small action or capture a thought for later."}
-                </Text>
-              </View>
-            )}
-            {visible.map((t) => (
-              <View key={t.id} style={[s.card, t.done && { opacity: 0.6 }]}>
-                <View style={s.split}>
-                  <Text style={s.topic}>
-                    {t.topic} · {t.minutes} min
-                  </Text>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityLabel={"Complete " + t.title}
-                    accessibilityState={{ checked: t.done }}
-                    disabled={busy}
-                    onPress={() =>
-                      void act(async () => {
-                        await saveTask({ ...t, done: !t.done });
-                        await refresh();
-                      })
-                    }
-                    style={s.check}
-                  >
-                    <Text style={s.checkText}>{t.done ? "✓" : "○"}</Text>
-                  </Pressable>
-                </View>
-                <Pressable accessibilityRole="button" onPress={() => edit(t)}>
-                  <Text style={s.taskTitle}>{t.title}</Text>
-                  {!!t.notes && (
-                    <Text numberOfLines={2} style={s.body}>
-                      {t.notes}
-                    </Text>
-                  )}
-                </Pressable>
-                {!!t.plannedDate && (
-                  <Text style={s.small}>
-                    Planned {t.plannedDate}
-                    {t.plannedTime ? " at " + t.plannedTime : ""}
-                  </Text>
-                )}
-                {!!t.waitingOn && (
-                  <Text style={s.small}>
-                    Waiting on {t.waitingOn}
-                    {t.chaseDate ? " · follow up " + t.chaseDate : ""}
-                  </Text>
-                )}
-                <View style={s.split}>
-                  <Pressable accessibilityRole="button" onPress={() => edit(t)}>
-                    <Text style={s.link}>Edit action</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busy}
-                    onPress={() =>
-                      void act(async () =>
-                        setMessage(await addTaskToCalendar(t)),
-                      )
-                    }
-                  >
-                    <Text style={s.link}>Add to calendar ↗</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-            <Button
-              title="＋ Add an action"
-              onPress={() => edit(blankTask())}
-            />
-          </ScrollView>
-        </View>
-        <View style={[s.screen, tab !== "Capture" && s.hidden]}>
-          <ScrollView
-            contentContainerStyle={s.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={s.eyebrow}>CAPTURE FIRST · ORGANIZE LATER</Text>
-            <Text style={s.h1}>Let it out.</Text>
-            <Text style={s.body}>A thought doesn't need a plan yet.</Text>
-            <View style={s.card}>
-              <Field
-                label="What's on your mind?"
-                value={capture}
-                onChangeText={setCapture}
-                placeholder="An idea, a thing to chase, something to remember…"
-                multiline
-              />
-              <Button
-                title="Save thought"
-                disabled={busy || !capture.trim()}
-                onPress={() =>
-                  void act(async () => {
-                    await saveNote({
-                      id: randomUUID(),
-                      title: capture.trim().split("\n")[0].slice(0, 100),
-                      text: capture.trim(),
-                      createdAt: new Date().toISOString(),
-                    });
-                    setCapture("");
-                    await refresh();
-                    setMessage("Thought saved. You can organize it later.");
-                  })
-                }
-              />
-            </View>
-            <VoiceCapture onSaved={savedVoice} />
-          </ScrollView>
-        </View>
-        <View style={[s.screen, tab !== "Inbox" && s.hidden]}>
-          <ScrollView contentContainerStyle={s.content}>
-            <Text style={s.eyebrow}>YOUR THOUGHT INBOX</Text>
-            <Text style={s.h1}>Nothing lost.</Text>
-            <Text style={s.body}>
-              Review a thought and decide on one next step.
-            </Text>
-            {notes.length === 0 && (
-              <View style={s.card}>
-                <Text style={s.sectionTitle}>Room for your ideas.</Text>
-                <Text style={s.body}>
-                  Your saved voice and text notes will appear here.
-                </Text>
-                <Button
-                  title="Capture a thought"
-                  onPress={() => setTab("Capture")}
-                />
-              </View>
-            )}
-            {notes.map((n) => (
-              <View key={n.id} style={s.card}>
-                <Text style={s.small}>
-                  {new Date(n.createdAt).toLocaleString()}
-                </Text>
-                <Text style={s.taskTitle}>{n.title}</Text>
-                {!!n.text && <Text style={s.body}>{n.text}</Text>}
-                {!!n.audioUri && (
-                  <>
-                    <AudioPlayback uri={n.audioUri} />
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={busy}
-                      onPress={() =>
-                        void act(async () => {
-                          if (!(await Sharing.isAvailableAsync()))
-                            throw new Error("Sharing is not available.");
-                          await Sharing.shareAsync(n.audioUri!);
-                        })
-                      }
-                    >
-                      <Text style={s.link}>Share original audio ↗</Text>
-                    </Pressable>
-                  </>
-                )}
-                <View style={s.split}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busy}
-                    onPress={() => {
-                      setMessage("");
-                      setNoteEdit({ ...n });
-                    }}
-                  >
-                    <Text style={s.link}>Edit note</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() =>
-                      edit({ ...blankTask(), title: n.title, notes: n.text })
-                    }
-                  >
-                    <Text style={s.link}>Create an action →</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-        <View style={[s.screen, tab !== "Settings" && s.hidden]}>
-          <ScrollView contentContainerStyle={s.content}>
-            <Text style={s.eyebrow}>A FOUNDATION TO BUILD ON</Text>
-            <Text style={s.h1}>Your space.</Text>
-            <View style={s.card}>
-              <Text style={s.sectionTitle}>Mobile starter · 0.1.0</Text>
-              <Text style={s.body}>{capabilities.cloudSync.reason}</Text>
-              <Text style={s.body}>
-                Deleting the app removes its local workspace. Export text and
-                share original recordings to keep copies.
-              </Text>
-              <Button
-                title="Export notes & actions"
-                secondary
-                disabled={busy}
-                onPress={() => void act(exportText)}
-              />
-              <Text style={s.small}>
-                The JSON export excludes audio files. Share each recording from
-                your inbox.
-              </Text>
-            </View>
-            <View style={s.card}>
-              <Text style={s.sectionTitle}>Calendar</Text>
-              <Text style={s.body}>
-                Add an action through your phone's calendar editor. You choose
-                where it goes and confirm saving. Changes are not synchronized
-                back to Anchor.
-              </Text>
-            </View>
-            <View style={s.card}>
-              <Text style={s.sectionTitle}>Future connections</Text>
-              <Text style={s.body}>{capabilities.transcription.reason}</Text>
-              <Text style={s.body}>{capabilities.purchases.reason}</Text>
-              <Text style={s.small}>
-                No account, subscription, background listening, or automatic
-                reminders are enabled.
-              </Text>
-            </View>
-          </ScrollView>
-        </View>
-        <View style={s.nav}>
-          {(["Today", "Capture", "Inbox", "Settings"] as Tab[]).map(
-            (name, i) => (
-              <Pressable
-                accessibilityRole="tab"
-                accessibilityState={{ selected: tab === name }}
-                accessibilityLabel={name}
-                key={name}
-                onPress={() => setTab(name)}
-                style={s.navItem}
-              >
-                <Text style={[s.navIcon, tab === name && s.active]}>
-                  {["◉", "＋", "▤", "⚙"][i]}
-                </Text>
-                <Text style={[s.navText, tab === name && s.active]}>
-                  {name}
-                </Text>
-              </Pressable>
-            ),
-          )}
-        </View>
-        <Modal
-          visible={!!editing}
-          animationType="slide"
-          onRequestClose={() => !busy && setEditing(null)}
-          presentationStyle="pageSheet"
-        >
-          <SafeAreaView style={s.shell}>
-            <KeyboardAvoidingView
-              style={{ flex: 1 }}
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-            >
-              <ScrollView
-                contentContainerStyle={s.content}
-                keyboardShouldPersistTaps="handled"
-              >
-                <Text style={s.h1}>One next step.</Text>
-                {editing && (
-                  <>
-                    <Field
-                      label="Action"
-                      value={editing.title}
-                      onChangeText={(title) =>
-                        setEditing({ ...editing, title })
-                      }
-                      placeholder="Start with a verb"
-                    />
-                    <View style={s.row}>
-                      {TOPICS.map((topic) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityState={{
-                            selected: editing.topic === topic,
-                          }}
-                          key={topic}
-                          disabled={busy}
-                          style={[
-                            s.chip,
-                            editing.topic === topic && s.chipSelected,
-                          ]}
-                          onPress={() => setEditing({ ...editing, topic })}
-                        >
-                          <Text
-                            style={[
-                              s.chipText,
-                              editing.topic === topic && s.chipTextSelected,
-                            ]}
-                          >
-                            {topic}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                    <Field
-                      label="Minutes needed"
-                      value={estimate}
-                      onChangeText={setEstimate}
-                    />
-                    <Field
-                      label="Plan to work on (optional)"
-                      value={editing.plannedDate}
-                      onChangeText={(plannedDate) =>
-                        setEditing({ ...editing, plannedDate })
-                      }
-                      placeholder="YYYY-MM-DD"
-                    />
-                    <Field
-                      label="Planned time (optional)"
-                      value={editing.plannedTime}
-                      onChangeText={(plannedTime) =>
-                        setEditing({ ...editing, plannedTime })
-                      }
-                      placeholder="HH:mm · 24-hour time"
-                    />
-                    <Field
-                      label="Hard deadline (optional)"
-                      value={editing.deadline}
-                      onChangeText={(deadline) =>
-                        setEditing({ ...editing, deadline })
-                      }
-                      placeholder="YYYY-MM-DD"
-                    />
-                    <Field
-                      label="Waiting on (optional)"
-                      value={editing.waitingOn}
-                      onChangeText={(waitingOn) =>
-                        setEditing({ ...editing, waitingOn })
-                      }
-                    />
-                    <Field
-                      label="Follow-up date (optional)"
-                      value={editing.chaseDate}
-                      onChangeText={(chaseDate) =>
-                        setEditing({ ...editing, chaseDate })
-                      }
-                      placeholder="YYYY-MM-DD"
-                    />
-                    <Field
-                      label="Context"
-                      value={editing.notes}
-                      onChangeText={(notes) =>
-                        setEditing({ ...editing, notes })
-                      }
-                      multiline
-                    />
-                    {!!message && (
-                      <Text style={s.error} accessibilityLiveRegion="polite">
-                        {message}
-                      </Text>
-                    )}
-                    <Button
-                      title="Save action"
-                      disabled={busy}
-                      onPress={() =>
-                        void act(async () => {
-                          await saveTask({
-                            ...editing,
-                            title: editing.title.trim(),
-                            minutes: Number(estimate),
-                          });
-                          await refresh();
-                          setEditing(null);
-                          setMessage("Action saved.");
-                        })
-                      }
-                    />
-                    <Button
-                      title="Cancel"
-                      secondary
-                      disabled={busy}
-                      onPress={() => {
-                        setEditing(null);
-                        setMessage("");
-                      }}
-                    />
-                    {tasks.some((t) => t.id === editing.id) && (
-                      <Button
-                        title="Delete action"
-                        secondary
-                        disabled={busy}
-                        onPress={() => remove(editing)}
-                      />
-                    )}
-                  </>
-                )}
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        </Modal>
-        <Modal
-          visible={!!noteEdit}
-          animationType="slide"
-          onRequestClose={() => !busy && setNoteEdit(null)}
-          presentationStyle="pageSheet"
-        >
-          <SafeAreaView style={s.shell}>
-            <KeyboardAvoidingView
-              style={{ flex: 1 }}
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-            >
-              <ScrollView
-                contentContainerStyle={s.content}
-                keyboardShouldPersistTaps="handled"
-              >
-                <Text style={s.h1}>Keep the context.</Text>
-                {noteEdit && (
-                  <>
-                    <Field
-                      label="Title"
-                      value={noteEdit.title}
-                      onChangeText={(title) =>
-                        setNoteEdit({ ...noteEdit, title })
-                      }
-                    />
-                    <Field
-                      label="Text or transcript"
-                      value={noteEdit.text}
-                      onChangeText={(text) =>
-                        setNoteEdit({ ...noteEdit, text })
-                      }
-                      multiline
-                    />
-                    {!!message && <Text style={s.error}>{message}</Text>}
-                    <Button
-                      title="Save note"
-                      disabled={busy}
-                      onPress={() =>
-                        void act(async () => {
-                          await saveNote(noteEdit);
-                          await refresh();
-                          setNoteEdit(null);
-                        })
-                      }
-                    />
-                    <Button
-                      title="Cancel"
-                      secondary
-                      disabled={busy}
-                      onPress={() => setNoteEdit(null)}
-                    />
-                  </>
-                )}
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
-        </Modal>
+
+  if (funnel) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <StatusBar style="auto" />
+        <Funnel
+          profile={profile}
+          step={funnelStep}
+          onStep={setFunnelStep}
+          busy={busy}
+          error={error}
+          onSave={(p) => run(() => updateProfile(p))}
+          onFinish={(p) =>
+            run(async () => {
+              await updateProfile(p);
+              setProgress(await syncProgress().catch(() => progress));
+              setFunnel(false);
+              selectTab("today");
+            })
+          }
+          onRecordFirst={(prompt) => startCapture("voice", null, "thought", prompt)}
+          onWriteFirst={(prompt) => startCapture("text", null, "thought", prompt)}
+          onExit={needsFunnel(profile) ? undefined : () => void run(async () => { await updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() }); setFunnel(false); selectTab("today"); })}
+        />
+        {captureSheet}
       </SafeAreaView>
-    </BusyContext.Provider>
+    );
+  }
+
+  const suggestion = suggestPrompt(profile.plate, threads);
+
+  return (
+    <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+      <StatusBar style="auto" />
+      <View style={{ flex: 1 }}>
+        {screen === "today" && (
+          <Today
+            threads={threads}
+            tasks={tasks}
+            nextTask={nextTask}
+            nextThread={nextThread}
+            levelLabel={level.level ? level.level.title : type ? type.name : "Level"}
+            timeWindow={profile.plate?.timeWindow}
+            celebrate={celebrate}
+            suggestion={suggestion}
+            busy={busy}
+            processing={processing && !capture}
+            onCancelProcessing={cancelShaping}
+            invite={
+              shouldInviteAssessment(profile, threads.some((t) => !t.example))
+                ? {
+                    onStart: () => {
+                      setFunnelStep("test");
+                      setFunnel(true);
+                    },
+                    onLater: () => void run(() => updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() })),
+                  }
+                : null
+            }
+            notice={notice}
+            error={error}
+            onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}
+            onWrite={() => startCapture("text", null, "thought", suggestion.prompt)}
+            onRecordOther={() => startCapture("voice", null, "thought", "Something else that's on your mind. Say where it stands, what you'd want out of it, who's involved, what's in the way.")}
+            onOpenThread={openThread}
+            onDoneNext={doneNext}
+            onCalendarNext={calendarNext}
+            onOpenMe={() => selectTab("progress")}
+            onDismissNotice={() => {
+              setNotice("");
+              setError("");
+            }}
+          />
+        )}
+        {screen === "threads" && (
+          <Threads threads={threads} tasks={tasks} busy={busy} onOpenThread={openThread} onNew={() => startCapture("voice", null, "thought", suggestion.prompt)} />
+        )}
+        {screen === "progress" && <Progress progress={progress} threads={threads} />}
+        {screen === "profile" && (
+          <Profile
+            profile={profile}
+            threads={threads}
+            notes={notes}
+            busy={busy}
+            onRetake={() =>
+              void run(async () => {
+                await updateProfile({ ...profile, answers: [] });
+                setFunnelStep("test");
+                setFunnel(true);
+              })
+            }
+            onFeedback={(m) => startCapture(m, null, "feedback")}
+            onPlate={(plate) => void run(() => updateProfile({ ...profile, plate }))}
+            notificationsOn={!profile.notificationsOff}
+            morningOn={!profile.morningOff}
+            morningTime={profile.morningTime ?? "08:30"}
+            onMorning={(patch) =>
+              void run(async () => {
+                const next = { ...profile, ...patch };
+                await updateProfile(next);
+                await syncAll({ tasks, threads }, next, !next.morningOff);
+              })
+            }
+            version={Constants.expoConfig?.version ?? ""}
+            onDeviceAi={onDeviceAi}
+            cloudShaping={cloudConsent === "allowed"}
+            onCloudShaping={(on) =>
+              void run(async () => {
+                await setCloudConsent(on ? "allowed" : "declined");
+                setCloudConsentState(on ? "allowed" : "declined");
+              })
+            }
+            onToggleNotifications={(on) =>
+              void run(async () => {
+                await updateProfile({ ...profile, notificationsOff: on ? undefined : true });
+                const next = { ...profile, notificationsOff: on ? undefined : true };
+                if (on) await syncAll({ tasks, threads }, next, true);
+                else await syncReminders([], [], new Date(), { enabled: false });
+              })
+            }
+            onExport={() => void run(async () => void (await Share.share({ message: await exportAllData() })))}
+            onDeleteAll={() =>
+              Alert.alert("Delete all your data?", "Every thread, move, recording and setting on this phone will be erased. This cannot be undone.", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete everything",
+                  style: "destructive",
+                  onPress: () =>
+                    void run(async () => {
+                      await deleteAllData();
+                      setProfile(newProfile());
+                      setOpenId(null);
+                      setFunnelStep("intro");
+                      setFunnel(true);
+                      await refresh();
+                    }),
+                },
+              ])
+            }
+          />
+        )}
+        {screen === "thread" && current && (
+          <ThreadChat
+            thread={current}
+            tasks={tasks}
+            notes={notes}
+            mode={mode}
+            busy={busy}
+            processing={processing && !capture}
+            error={error || processingError}
+            onRecord={() => startCapture("voice", current.id, "thought", pendingQuestion(current))}
+            onWrite={() => startCapture("text", current.id, "thought", pendingQuestion(current))}
+            onChip={chip}
+            onClose={closeThread}
+          />
+        )}
+        {screen === "thread" && !current && (
+          <View style={s.loading}>
+            <Text style={s.body}>That thread is no longer here.</Text>
+            <Pressable accessibilityRole="button" onPress={closeThread}>
+              <Text style={s.link}>Back</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+      {screen !== "thread" && (
+        <TabBar
+          active={screen}
+          badge={threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt && pendingMessage(t)).length}
+          onSelect={selectTab}
+        />
+      )}
+      {captureSheet}
+    </SafeAreaView>
   );
 }
+
 const s = StyleSheet.create({
-  shell: { flex: 1, backgroundColor: "#F6F8F5" },
-  screen: { flex: 1 },
-  hidden: { display: "none" },
-  center: { flex: 1, justifyContent: "center", padding: 30, gap: 25 },
-  header: {
-    paddingHorizontal: 23,
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderColor: "#DFE7E1",
-  },
-  logo: {
-    fontSize: 25,
-    fontWeight: "800",
-    letterSpacing: -1,
-    color: "#143D36",
-  },
-  small: { fontSize: 12, lineHeight: 18, color: "#63796F" },
-  badge: { backgroundColor: "#E2EEE5", padding: 8, borderRadius: 20 },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#3D6957",
-    letterSpacing: 1,
-  },
-  content: { padding: 22, paddingBottom: 35, gap: 18 },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.8,
-    color: "#668272",
-    textTransform: "uppercase",
-  },
-  h1: {
-    fontSize: 35,
-    fontWeight: "700",
-    letterSpacing: -1.5,
-    color: "#153E36",
-    lineHeight: 40,
-  },
-  body: { fontSize: 15, lineHeight: 23, color: "#61746A" },
-  focus: { backgroundColor: "#E5F0DA", borderRadius: 22, padding: 20, gap: 14 },
-  row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: {
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    backgroundColor: "#EFF3EB",
-    borderWidth: 1,
-    borderColor: "#CDDCCB",
-  },
-  chipSelected: { backgroundColor: "#204D41", borderColor: "#204D41" },
-  chipText: { color: "#345948", fontSize: 13, fontWeight: "700" },
-  chipTextSelected: { color: "#fff" },
-  card: {
-    padding: 20,
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E0E8DF",
-    gap: 14,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: "700", color: "#24473B" },
-  split: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  link: {
-    fontSize: 13,
-    color: "#287363",
-    fontWeight: "700",
-    paddingVertical: 8,
-  },
-  topic: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#738576",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  taskTitle: {
-    fontSize: 20,
-    lineHeight: 27,
-    fontWeight: "600",
-    color: "#29493B",
-  },
-  check: {
-    padding: 5,
-    minWidth: 40,
-    minHeight: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkText: { fontSize: 27, color: "#368570" },
-  button: {
-    backgroundColor: "#1F6555",
-    borderRadius: 15,
-    padding: 16,
-    alignItems: "center",
-    minHeight: 50,
-  },
-  buttonText: { fontSize: 15, fontWeight: "700", color: "#fff" },
-  secondary: { backgroundColor: "#E7EDE5" },
-  field: { gap: 7 },
-  label: { fontSize: 13, fontWeight: "600", color: "#365446" },
-  input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#CDDBCF",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: "#203F32",
-    minHeight: 48,
-  },
-  nav: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderColor: "#DDE5DA",
-    backgroundColor: "#FAFCF8",
-    paddingTop: 8,
-    paddingBottom: 5,
-  },
-  navItem: { flex: 1, alignItems: "center", gap: 3, padding: 7, minHeight: 56 },
-  navText: { fontSize: 10, fontWeight: "600", color: "#7D8A7C" },
-  navIcon: { fontSize: 23, color: "#8C978A" },
-  active: { color: "#216D56" },
-  notice: {
-    backgroundColor: "#E0EDDA",
-    paddingHorizontal: 22,
-    paddingVertical: 13,
-  },
-  noticeText: { fontSize: 13, lineHeight: 19, color: "#295443" },
-  error: { fontSize: 14, color: "#AA403B" },
-  deadlines: {
-    backgroundColor: "#FBF0DE",
-    padding: 18,
-    borderRadius: 18,
-    gap: 4,
-  },
+  safe: { flex: 1, backgroundColor: C.paper },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14, padding: 24 },
+  brand: { fontSize: 34, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
+  sheet: { flex: 1, backgroundColor: C.paper },
+  sheetHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12 },
+  sheetBody: { paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
+  sheetTitle: { fontSize: 28, lineHeight: 34, fontWeight: "700", color: C.ink },
+  kicker: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.muted },
+  body: { fontSize: 15, lineHeight: 22, color: C.muted },
+  link: { color: C.blue, fontSize: 15, fontWeight: "700", paddingVertical: 6 },
+  card: { padding: 16, borderRadius: 18, backgroundColor: C.white, gap: 10 },
+  cardTitle: { fontSize: 17, fontWeight: "700", color: C.ink },
+  input: { minHeight: 160, padding: 16, borderRadius: 18, backgroundColor: C.white, fontSize: 17, lineHeight: 24, color: C.ink, textAlignVertical: "top" },
+  primary: { backgroundColor: C.blue, borderRadius: 16, paddingVertical: 15, alignItems: "center" },
+  primaryText: { color: C.white, fontSize: 16, fontWeight: "700" },
+  error: { color: C.red, fontSize: 14, lineHeight: 20 },
 });

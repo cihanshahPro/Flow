@@ -1,18 +1,26 @@
-# Anchor mobile
+# Flow — mobile testing build
 
 A small native planning app: capture a thought, choose an action that fits the time available, and keep the next date visible. This is a mobile starter for further development, separate from the existing Anchor web app.
+
+## Test build 12 — the Flow loop
+
+One button. Record (or write) what's on your mind; Flow works out what it's about in the background, asks one question at a time in a chat, and offers a move when it has enough. Accepting a move makes it your Next card. Done, check-ins and confirmations feed a small level system, and Flow gasses you up inside the thread when something real happens. There are no tabs, no task lists and nothing to classify. See [the Flow loop](docs/FLOW-LOOP.md) for the full description and [FINAL-PRODUCT-CONTRACT.md](docs/FINAL-PRODUCT-CONTRACT.md) for the boundaries.
+
+Voice notes are transcribed on the iPhone (Apple SpeechAnalyzer, or on-device SFSpeechRecognizer); audio never leaves the device. Flow's reply, question, grounded points and moves come from Apple Foundation Models on iPhones with Apple Intelligence, from a text-only cloud shaper (one-time consent, free monthly quota) on older iPhones, and otherwise from bounded local rules. The native side lives in `modules/flow-intelligence`; selection logic in `src/ai-policy.ts` and `src/services/processors.ts`. The earlier five-tab task app is kept as `ClassicFlow.tsx` but is not reachable.
 
 ## What this version covers
 
 | Area      | Mobile scope                                                       |
 | --------- | ------------------------------------------------------------------ |
-| Today     | Tasks and an available-time filter                                 |
-| Capture   | Text inbox and deliberate voice recording                          |
+| Home      | One Record button, the Next card, and the threads Flow made        |
+| Thread    | A chat with Flow: transcripts, replies, one question, two-chip moves and check-ins |
+| Me        | Flow type, level, what Flow knows, pattern notices, feedback        |
 | Storage   | SQLite records and audio files on the device                       |
-| Calendar  | Open a task in the native event editor; the user reviews and saves |
+| Calendar  | The Next card can be saved to Apple Calendar; repeated saves update the linked event |
+| Reminders | Local notifications the morning after a mentioned date (best effort) |
 | Purchases | Disabled capability interface; no payment or subscription flow     |
 
-There is no web-account sync, cloud backend, automatic transcription, or in-app purchasing. The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. The native calendar handoff is one-way: later changes in either app do not update the other. It uses Expo's [system calendar editor](https://docs.expo.dev/versions/v54.0.0/sdk/calendar/).
+There is no web-account sync, hosted cloud backend, or in-app purchasing. The old LAN voice processor still works in development builds only; see [processor setup](docs/VOICE_PROCESSING.md). The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. On iPhone, Calendar permission and a calendar choice enable direct saves through [Expo Calendar](https://docs.expo.dev/versions/v57.0.0/sdk/calendar/). Saving again updates the linked event; changes do not sync automatically or flow back from Calendar. Android uses the system event editor. See [calendar acceptance checks](docs/CALENDAR.md).
 
 ## Try it on an iPhone
 
@@ -25,7 +33,7 @@ npm start
 
 Install Expo Go from the iPhone App Store. Keep the phone and development computer on the same network, then scan the terminal's QR code with the iPhone camera. Leave the development server running. A Mac mini can host that server; the app's saved records still belong to the phone, not the Mac mini.
 
-**The project intentionally uses Expo SDK 54, React Native 0.81.5, and React 19.1.0.** As verified on September 18, 2026, the App Store version of Expo Go supports SDK 54; SDK 55 and newer require another testing route on a physical iPhone. See [Expo's version-mismatch guidance](https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/). Do not upgrade the SDK merely to clear a warning without reviewing this compatibility constraint.
+**The testing app now uses Expo SDK 57, React Native 0.86.3 and React 19.2.3**, matching the current iPhone Expo Go. Sign in to the same Expo account in Expo Go and on the development computer (`npx expo login --browser`). See [Expo’s September 3 update](https://expo.dev/changelog/expo-go-57-login). Older guidance saying the App Store stops at SDK 54 is outdated.
 
 The development bundle needs to load from the server. Once loaded, task, note, and recording data remain local and do not require an application backend. Deleting the app or clearing its storage can remove that data; cloud backup and cross-device recovery are not implemented.
 
@@ -43,6 +51,6 @@ The EAS development, preview, and production profiles are build scaffolding. The
 
 ## Toolchain verification
 
-The checked-in lockfile pins compatible SDK 54 modules, PostCSS 8.5.23, and the Metro 0.83.8 patch family. These build-tool overrides remove the high-severity audit findings observed in the original template and have passed both platform bundle exports. Do not remove them casually. The current audit still reports 13 moderate tooling/transitive findings; review them again before release. This is not an audit-clean or production-approved build.
+The lockfile pins the SDK 57-compatible module family. The obsolete SDK 54 Metro overrides have been removed. Both platform bundle exports and all 21 Expo Doctor checks pass. The dependency audit reports 0 high/critical and 11 moderate findings; review the remaining advisories before a production release.
 
 See [validation notes](docs/VALIDATION.md) for checks actually run and physical-device checks still pending.
