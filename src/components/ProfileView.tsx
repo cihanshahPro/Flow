@@ -1,3 +1,4 @@
+import { taskState } from "../task-flow.ts";
 import ProfileCompletion from "./ProfileCompletion";
 import ProgressCard from "./ProgressCard";
 import type { ProgressRecord } from "../progress.ts";
@@ -146,13 +147,15 @@ export default function ProfileView({
                 <Text style={s.heading}>{d.choice}</Text>
                 <Text style={s.small}>
                   {d.title.split(":")[0]} ·{" "}
-                  {related.some((t) => !t.done)
+                  {related.some((t) => taskState(t) === "ready")
                     ? "Action ready"
-                    : related.some((t) => t.done)
-                      ? "Action completed"
-                      : draft
-                        ? "Draft saved"
-                        : "Interest saved"}
+                    : related.some((t) => !t.done)
+                      ? "Steps saved for later or follow-up"
+                      : related.some((t) => t.done)
+                        ? "Action completed"
+                        : draft
+                          ? "Draft saved"
+                          : "Interest saved"}
                 </Text>
                 {button(`Focus on ${d.choice.toLowerCase()}`, () =>
                   onFocus(d.title),

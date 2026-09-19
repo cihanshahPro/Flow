@@ -8,10 +8,15 @@ import {
   View,
 } from "react-native";
 import type { ThoughtDraft, DraftStep } from "../drafts";
+import type { Task } from "../model.ts";
+import { taskState } from "../task-flow.ts";
+import PathRail from "./PathRail.tsx";
 
 type Props = {
   presentation?: "small" | "sequence";
   draft: ThoughtDraft;
+  tasks?: Task[];
+  onOpenTask?: (task: Task) => void;
   busy: boolean;
   organizing: boolean;
   onChoose: (step: DraftStep, small: boolean) => void;
@@ -59,6 +64,8 @@ function ChoiceButton({
 export default function DraftReview({
   presentation,
   draft,
+  tasks = [],
+  onOpenTask,
   busy,
   organizing,
   onChoose,
@@ -81,8 +88,27 @@ export default function DraftReview({
       setFocusedId(available[0]?.id ?? focused?.id);
   }, [draft]);
   const locked = busy || organizing;
+  const taskFor = (step: DraftStep) =>
+    tasks.find((task) => task.id === `flow:${draft.id}:${step.id}`);
+  const focusedTask = focused ? taskFor(focused) : undefined;
+  const titleFor = (step: DraftStep) =>
+    step.accepted
+      ? (taskFor(step)?.title ?? step.chosenTitle ?? step.title)
+      : (step.label ?? step.title);
+  const stateLabel = (task?: Task) =>
+    task
+      ? {
+          ready: "Ready to take",
+          later: `Planned ${task.plannedDate}`,
+          waiting: `Waiting · review ${task.chaseDate || "needed"}`,
+          blocked: `Blocked · review ${task.chaseDate || "needed"}`,
+          "check-in": "Finished · check in",
+          done: "Finished",
+        }[taskState(task)]
+      : "Chosen step";
   return (
     <ScrollView contentContainerStyle={s.page}>
+      <PathRail stage={1} compact />
       <Text style={s.eyebrow}>
         {presentation === "small"
           ? "ONE SMALL STEP IS ENOUGH"
@@ -122,7 +148,7 @@ export default function DraftReview({
               <View style={s.connector} />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Explore ${step.label ?? step.title}`}
+                accessibilityLabel={`Explore ${titleFor(step)}`}
                 accessibilityState={{ selected: focusedId === step.id }}
                 onPress={() => setFocusedId(step.id)}
                 style={[
@@ -140,11 +166,11 @@ export default function DraftReview({
                 </Text>
                 <View style={{ flex: 1 }}>
                   <Text numberOfLines={2} style={s.nodeTitle}>
-                    {step.label ?? step.title}
+                    {titleFor(step)}
                   </Text>
                   <Text style={s.nodeStatus}>
                     {step.accepted
-                      ? "Chosen for today"
+                      ? stateLabel(taskFor(step))
                       : step.deferred
                         ? "Kept for later"
                         : focusedId === step.id
@@ -199,7 +225,18 @@ export default function DraftReview({
               ? "A step you chose."
               : "Safe to leave for later."}
           </Text>
-          <Text style={s.detail}>{focused.chosenTitle ?? focused.title}</Text>
+          <Text style={s.detail}>
+            {focusedTask?.title ?? focused.chosenTitle ?? focused.title}
+          </Text>
+          {focusedTask && onOpenTask && (
+            <ChoiceButton
+              title="Open or edit this step"
+              detail={stateLabel(focusedTask)}
+              primary
+              onPress={() => onOpenTask(focusedTask)}
+              disabled={locked}
+            />
+          )}
           {!focused.accepted && (
             <ChoiceButton
               title="Bring this option back"
@@ -219,7 +256,7 @@ export default function DraftReview({
       {chosen > 0 && (
         <ChoiceButton
           title="That’s enough for now"
-          detail={`${chosen} ${chosen === 1 ? "step is" : "steps are"} in Today. The rest can wait.`}
+          detail={`${chosen} ${chosen === 1 ? "step" : "steps"} saved in your plan. Return to your path when ready.`}
           disabled={locked}
           onPress={onClose}
         />

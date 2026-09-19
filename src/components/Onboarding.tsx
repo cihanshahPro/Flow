@@ -1,4 +1,5 @@
 import { starterFor } from "../starters";
+import PathRail from "./PathRail.tsx";
 import { profileCompletion } from "../profile-completion";
 import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -58,6 +59,7 @@ export default function Onboarding({
   const [details, setDetails] = useState(false);
   const [alternatives, setAlternatives] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [editSetup, setEditSetup] = useState(false);
   const guide = productivityGuide(profile.answers, profile.presentation);
   async function save(p: Profile, after?: () => void) {
     if (lock.current) return;
@@ -152,17 +154,19 @@ export default function Onboarding({
         <Text style={s.kicker}>FLOW · YOUR STARTING POINT</Text>
         {button("Close", onClose)}
       </View>
+      <PathRail stage={profile.stage === "guide" ? 1 : 0} compact />
       {profile.stage === "intro" && (
         <>
-          <Text style={s.title}>A little understanding. A lighter day.</Text>
+          <Text style={s.title}>One clear path, from here.</Text>
           <Text style={s.body}>
             Start with the real, 20-question Mini-IPIP personality assessment.
             Tap how accurately each statement describes you generally—not just
             today.
           </Text>
           <Text style={s.body}>
-            Then we’ll make a first map of your life, one area at a time. Your
-            progress stays on this device.
+            Next: choose what matters, shape one plan from your words, and take
+            one step. We’ll check in afterward. Your place stays saved on this
+            device.
           </Text>
           {button(
             "Get to know me",
@@ -341,9 +345,9 @@ export default function Onboarding({
         <>
           <Text style={s.title}>Everything saved. One place to start.</Text>
           <Text style={s.body}>
-            {active.length} directions captured.{" "}
+            {active.length} {active.length === 1 ? "interest" : "interests"} saved.{" "}
             {focus
-              ? "We’ll start with the first direction you selected. This is a starting suggestion, not an urgency ranking."
+              ? "A starting point from your saved interests. The rest stays in your map."
               : "You can return to add directions whenever something comes up."}
           </Text>
           {focus && (
@@ -401,6 +405,8 @@ export default function Onboarding({
             </View>
           )}
           {!focus && button("Confirm no current focus", confirmDirection, true)}
+          {button(editSetup ? "Hide setup edits" : "Edit saved setup", () => setEditSetup(!editSetup))}
+          {editSetup && <>
           {button(
             "Review life areas",
             () => void save({ ...profile, stage: "areas", areaIndex: 0 }),
@@ -426,6 +432,7 @@ export default function Onboarding({
             "Remove personality answers",
             () => void save({ ...profile, answers: [] }),
           )}
+          </>}
         </>
       )}
       {profile.stage === "preferences" && (
@@ -517,16 +524,24 @@ export default function Onboarding({
             </>
           ) : (
             <>
-              <Text style={s.title}>{starterFor(focus.direction).title}</Text>
-              <Text style={s.body}>{starterFor(focus.direction).why}</Text>
+              <Text style={s.title}>Now make it about your life.</Text>
+              <Text style={s.body}>
+                We’ve saved your interests and how you like to work. Next, we’ll
+                shape a real plan for {focus.title.toLowerCase()}. Speak a few
+                details or use text; we’ll suggest the steps.
+              </Text>
+              {button(
+                "Shape my first plan",
+                () => onCapture(focus.topic),
+                true,
+              )}
+              <Text style={s.kicker}>NEED A STARTING POINT?</Text>
+              <Text style={s.body}>{starterFor(focus.direction).title}</Text>
               <Text style={s.small}>
                 Suggested from the interest you selected. Accept it only if it
                 fits; your existing details can replace it.
               </Text>
-              {button("Use this first step", () => onStart(focus.topic), true)}
-              {button("Use my own details instead", () =>
-                onCapture(focus.topic),
-              )}
+              {button("Use this suggested step", () => onStart(focus.topic))}
             </>
           )}
           {button(
