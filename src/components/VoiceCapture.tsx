@@ -310,8 +310,29 @@ export default function VoiceCapture({
           destination = new File(Paths.document, item.filename);
         }
         if (!destination.exists) source.copy(destination);
-        if (!destination.exists || destination.size === 0)
+        // Re-open: the original handle can report stale metadata right after a copy.
+        destination = new File(Paths.document, item.filename);
+        if (!destination.exists || destination.size === 0) {
+          // Native copy reported success without a file (seen on iOS 26): copy the bytes instead.
+          try {
+            const bytes = new Uint8Array(await source.arrayBuffer());
+            if (!destination.exists) destination.create();
+            destination.write(bytes);
+            destination = new File(Paths.document, item.filename);
+          } catch (fallbackError) {
+            console.warn("[Flow voice] byte-copy fallback failed", fallbackError);
+          }
+        }
+        if (!destination.exists || destination.size === 0) {
+          console.warn("[Flow voice] copy check", {
+            src: source.uri,
+            srcSize: source.size,
+            dst: destination.uri,
+            dstExists: destination.exists,
+            dstSize: destination.size,
+          });
           throw new Error("The recording could not be saved to this device.");
+        }
         item.note.audioUri = destination.uri;
         item.copied = true;
       }
