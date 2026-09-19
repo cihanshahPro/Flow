@@ -27,6 +27,9 @@ import {
   registerVoiceNote,
   saveTask,
 } from "./src/services/storage";
+import Onboarding from "./src/components/Onboarding";
+import { loadProfile, saveProfile } from "./src/services/profile";
+import { newProfile, type Profile } from "./src/personality";
 import DraftReview from "./src/components/DraftReview";
 import {
   processVoiceNote,
@@ -115,6 +118,9 @@ export default function App() {
 }
 function Flow() {
   const [screen, setScreen] = useState<Screen>("Today");
+  const [profile, setProfile] = useState<Profile>(newProfile());
+  const [onboarding, setOnboarding] = useState(false);
+  const [captureTopic, setCaptureTopic] = useState("");
   const [ready, setReady] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -167,7 +173,13 @@ function Flow() {
     setDrafts(d);
   }
   useEffect(() => {
-    refresh()
+    Promise.all([
+      refresh(),
+      loadProfile().then((p) => {
+        setProfile(p);
+        setOnboarding(!p.completed);
+      }),
+    ])
       .then(() => {
         setReady(true);
         Animated.timing(fade, {
@@ -197,7 +209,12 @@ function Flow() {
       setBusy(false);
     }
   }
-  function capture(mode: "text" | "voice", draftId: string | null = null) {
+  function capture(
+    mode: "text" | "voice",
+    draftId: string | null = null,
+    topic = "",
+  ) {
+    setCaptureTopic(topic);
     setVoiceResult(null);
     setProcessingError("");
     captureId.current = randomUUID();
@@ -429,6 +446,23 @@ function Flow() {
         </View>
       </SafeAreaView>
     );
+  if (ready && onboarding)
+    return (
+      <SafeAreaView style={s.safe}>
+        <Onboarding
+          profile={profile}
+          onSave={async (p) => {
+            await saveProfile(p);
+            setProfile(p);
+          }}
+          onClose={() => setOnboarding(false)}
+          onCapture={(topic) => {
+            setOnboarding(false);
+            capture("voice", null, topic);
+          }}
+        />
+      </SafeAreaView>
+    );
   if (!ready)
     return (
       <SafeAreaView style={s.safe}>
@@ -462,7 +496,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 05</Text>
+          <Text style={s.test}>TEST BUILD · 06</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
@@ -901,13 +935,23 @@ function Flow() {
                       )}
                     </View>
                   ) : (
-                    <VoiceCapture
-                      compact
-                      autoStart={captureVisible}
-                      onActivityChange={setVoiceBusy}
-                      onSaved={voiceSaved}
-                      onComplete={recordingCompleted}
-                    />
+                    <>
+                      <View>
+                        {!!captureTopic && (
+                          <Text style={s.body}>
+                            Tell Flow about {captureTopic.toLowerCase()}. What
+                            is happening, and what needs to happen next?
+                          </Text>
+                        )}
+                      </View>
+                      <VoiceCapture
+                        compact
+                        autoStart={captureVisible}
+                        onActivityChange={setVoiceBusy}
+                        onSaved={voiceSaved}
+                        onComplete={recordingCompleted}
+                      />
+                    </>
                   )}
                   <Text style={s.body}>
                     Stop once. We save the audio, transcribe it on your Mac
@@ -991,6 +1035,7 @@ function Flow() {
           </View>
           {current && (
             <DraftReview
+              presentation={profile.presentation}
               key={current.id}
               draft={current}
               busy={busy}
@@ -1093,6 +1138,13 @@ function Flow() {
             <Tap label="Done" onPress={() => setSettings(false)} />
           </View>
           <ScrollView contentContainerStyle={s.sheetBody}>
+            <Tap
+              label="My profile & life map"
+              onPress={() => {
+                setSettings(false);
+                setOnboarding(true);
+              }}
+            />
             <Text style={s.sheetTitle}>A quieter kind{"\n"}of assistant.</Text>
             <Text style={s.body}>
               This is an early testing build. Your existing notes, recordings,
