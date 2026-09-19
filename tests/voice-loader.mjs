@@ -8,6 +8,7 @@ export async function resolve(specifier, context, next) {
       "react-native-safe-area-context",
       "expo-audio",
       "expo-file-system",
+      "expo-notifications",
     ].includes(specifier)
   )
     return { url: mocks, shortCircuit: true };
@@ -18,6 +19,8 @@ export async function resolve(specifier, context, next) {
   if (["./ProfileCompletion", "./ProgressCard"].includes(specifier))
     return next(specifier + ".tsx", context);
   if (specifier === "../personality") return next("../personality.ts", context);
+  if (["../drafts", "../model", "../thread"].includes(specifier) && context.parentURL?.includes("/services/reminders.ts"))
+    return next(specifier + ".ts", context);
   if (specifier === "../recording-lifecycle")
     return next("../recording-lifecycle.ts", context);
   return next(specifier, context);

@@ -27,6 +27,7 @@ import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
 import { processCapturedNote } from "./src/services/processing";
+import { syncReminders } from "./src/services/reminders";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
 import { newProfile, type Profile } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
@@ -98,7 +99,8 @@ function Flow() {
 
   /** Flow re-reads every open thread and adds a check-in where one is due. */
   async function evaluateAll(source?: { tasks: Task[]; threads: ThoughtDraft[] }) {
-    const data = source ?? { tasks, threads };
+    // Always read what is saved, never a possibly stale render snapshot.
+    const data = source ?? { tasks: (await loadWorkspace()).tasks, threads: await loadDrafts() };
     let changed = false;
     for (const thread of data.threads) {
       const next = evaluateThread(thread, data.tasks, { mode });
@@ -108,6 +110,7 @@ function Flow() {
       }
     }
     if (changed) await refresh();
+    void syncReminders(data.threads, data.tasks).catch(() => {});
   }
 
   useEffect(() => {
@@ -134,7 +137,7 @@ function Flow() {
       sub.remove();
       clearInterval(timer);
     };
-  }, [ready, threads, tasks, mode]);
+  }, [ready, mode]);
 
   async function run(fn: () => Promise<void>) {
     if (lock.current) return;
@@ -178,8 +181,6 @@ function Flow() {
     setNotice("");
     setError("");
     setProcessingError("");
-    const thread = threads.find((t) => t.id === id);
-    if (thread && !thread.lastOpenedAt) void saveDraft({ ...thread, lastOpenedAt: new Date().toISOString() });
     void evaluateAll().catch(() => {});
   }
   function closeThread() {

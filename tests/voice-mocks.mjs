@@ -153,3 +153,11 @@ export const Animated = {
 export const Easing = { in: (f) => f, quad: (x) => x };
 export const Dimensions = { get: () => ({ width: 390, height: 844 }) };
 export const Alert = { alert() {} };
+// expo-notifications is never exercised in tests; the planner is pure.
+export const SchedulableTriggerInputTypes = { DATE: "date" };
+export function setNotificationHandler() {}
+export async function getAllScheduledNotificationsAsync() { return []; }
+export async function cancelScheduledNotificationAsync() {}
+export async function getPermissionsAsync() { return { granted: false, canAskAgain: false }; }
+export async function requestPermissionsAsync() { return { granted: false, canAskAgain: false }; }
+export async function scheduleNotificationAsync() {}
