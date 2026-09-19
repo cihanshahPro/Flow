@@ -296,11 +296,13 @@ export default function DraftReview({
         </View>
       )}
       <Text style={s.footnote}>
-        {draft.organizer
-          ? "Organized privately on your Mac mini. Suggestions stay possibilities until you choose."
+        {draft.organizer === "cloud"
+          ? "Shaped from your note's text on a secure server; nothing was stored. Suggestions stay possibilities until you choose."
+          : draft.organizer
+          ? "Organized privately on this iPhone. Suggestions stay possibilities until you choose."
           : draft.example
             ? "Example thought. Try the choices or organize it locally."
-            : "Basic draft. Local AI organization is available above."}
+            : "Basic draft. AI organization is available above."}
       </Text>
       {!!error && (
         <Text accessibilityRole="alert" style={s.error}>

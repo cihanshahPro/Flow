@@ -492,7 +492,7 @@ function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?
 /**
  * Flow's turn after a recording lands in this thread. `noteId` is the saved
  * recording; `text` is its transcript. The optional `reply` and `question`
- * come from the Mac mini shaper and win over templated wording.
+ * come from the shaper (on-device or cloud) and win over templated wording.
  */
 export function respondToRecording(
   thread: ThoughtDraft,

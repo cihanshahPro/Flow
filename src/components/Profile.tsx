@@ -33,6 +33,9 @@ export default function Profile({
   onMorning,
   onExport,
   onDeleteAll,
+  onDeviceAi = false,
+  cloudShaping = false,
+  onCloudShaping,
 }: {
   profile: Profile;
   threads: ThoughtDraft[];
@@ -49,6 +52,9 @@ export default function Profile({
   onMorning?: (patch: { morningOff?: boolean; morningTime?: string }) => void;
   onExport?: () => void;
   onDeleteAll?: () => void;
+  onDeviceAi?: boolean;
+  cloudShaping?: boolean;
+  onCloudShaping?: (on: boolean) => void;
 }) {
   const type = flowType(profile.answers);
   const plate = profile.plate ?? emptyPlate();
@@ -156,6 +162,17 @@ export default function Profile({
           <Text style={[s.body, { flex: 1 }]}>Reminders</Text>
           <Switch accessibilityLabel="Reminders" value={notificationsOn} onValueChange={(v) => onToggleNotifications?.(v)} disabled={busy} />
         </View>
+        {onDeviceAi ? (
+          <Text style={s.small}>Flow shapes your notes on this iPhone. Nothing leaves your device.</Text>
+        ) : (
+          <>
+            <View style={s.rowBetween}>
+              <Text style={[s.body, { flex: 1 }]}>Shape notes on a secure server</Text>
+              <Switch accessibilityLabel="Shape notes on a secure server" value={cloudShaping} onValueChange={(v) => onCloudShaping?.(v)} disabled={busy} />
+            </View>
+            <Text style={s.small}>Only the text is sent, never the audio. Nothing is stored. Off keeps basic drafts.</Text>
+          </>
+        )}
         <View style={s.rowBetween}>
           <Text style={[s.body, { flex: 1 }]}>Morning reminder</Text>
           <Switch accessibilityLabel="Morning reminder" value={morningOn} onValueChange={(v) => onMorning?.({ morningOff: v ? undefined : true })} disabled={busy || !notificationsOn} />

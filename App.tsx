@@ -31,6 +31,9 @@ import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
 import { processCapturedNote } from "./src/services/processing";
+import { capabilities } from "./src/services/processors";
+import { loadAiState, setCloudConsent } from "./src/services/ai-state";
+import type { Consent } from "./src/ai-policy";
 import { syncReminders } from "./src/services/reminders";
 import { exportAllData, deleteAllData } from "./src/services/data";
 import Constants from "expo-constants";
@@ -84,6 +87,10 @@ function Flow() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [celebrate, setCelebrate] = useState(0);
+  // Plan D: older iPhones ask once before any note text goes to the cloud shaper.
+  const [consentAsk, setConsentAsk] = useState<((allowed: boolean) => void) | null>(null);
+  const [cloudConsent, setCloudConsentState] = useState<Consent>(undefined);
+  const [onDeviceAi, setOnDeviceAi] = useState(false);
   const lock = useRef(false);
   const processingLock = useRef(false);
   const captureId = useRef("");
@@ -136,6 +143,12 @@ function Flow() {
     void syncAll(data, profile);
   }
 
+  useEffect(() => {
+    void capabilities().then((c) => setOnDeviceAi(c.llm));
+    void loadAiState()
+      .then((a) => setCloudConsentState(a.consent))
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     Promise.all([refresh(), loadProfile()])
       .then(async ([data, p]) => {
@@ -233,6 +246,15 @@ function Flow() {
     setNotice("");
     setCapture({ mode, threadId, kind, prompt });
   }
+  function askCloudConsent() {
+    return new Promise<boolean>((resolve) =>
+      setConsentAsk(() => (allowed: boolean) => {
+        setConsentAsk(null);
+        setCloudConsentState(allowed ? "allowed" : "declined");
+        resolve(allowed);
+      }),
+    );
+  }
   function closeCapture() {
     if (!voiceBusy && !busy && !processing) setCapture(null);
   }
@@ -275,7 +297,7 @@ function Flow() {
     setProcessingError("");
     const before = level.level?.number ?? 0;
     try {
-      const result = await processCapturedNote(entry);
+      const result = await processCapturedNote(entry, { askCloudConsent });
       const data = await refresh();
       if (result.kind === "note") {
         setCapture(null);
@@ -419,9 +441,23 @@ function Flow() {
                     <View style={s.card}>
                       <Text style={s.cardTitle}>{processing ? "Saved. Flow is listening back…" : "Recording saved."}</Text>
                       {processing ? <ActivityIndicator color={C.blue} /> : <AudioPlayback uri={voiceResult.audioUri!} />}
-                      <Text style={s.body}>
-                        {processing ? "Your audio is already safe on this phone. Transcribing on your Mac mini." : processingError}
-                      </Text>
+                      {consentAsk ? (
+                        <View style={{ gap: 10 }}>
+                          <Text style={s.body}>
+                            Your iPhone can't run Apple's on-device AI. Flowthread can send the text of your note (never the audio) to a secure server to shape it. Nothing is stored.
+                          </Text>
+                          <Pressable accessibilityRole="button" accessibilityLabel="Allow" onPress={() => consentAsk(true)} style={s.primary}>
+                            <Text style={s.primaryText}>Allow</Text>
+                          </Pressable>
+                          <Pressable accessibilityRole="button" accessibilityLabel="Keep it basic" onPress={() => consentAsk(false)} hitSlop={8} style={{ alignSelf: "center" }}>
+                            <Text style={s.link}>Keep it basic</Text>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <Text style={s.body}>
+                          {processing ? "Your audio stays on this phone. Turning it into text here." : processingError}
+                        </Text>
+                      )}
                       {!processing && (
                         <Pressable accessibilityRole="button" accessibilityLabel="Retry processing" onPress={() => void processRecording(voiceResult)} style={s.primary}>
                           <Text style={s.primaryText}>Retry</Text>
@@ -574,6 +610,14 @@ function Flow() {
               })
             }
             version={Constants.expoConfig?.version ?? ""}
+            onDeviceAi={onDeviceAi}
+            cloudShaping={cloudConsent === "allowed"}
+            onCloudShaping={(on) =>
+              void run(async () => {
+                await setCloudConsent(on ? "allowed" : "declined");
+                setCloudConsentState(on ? "allowed" : "declined");
+              })
+            }
             onToggleNotifications={(on) =>
               void run(async () => {
                 await updateProfile({ ...profile, notificationsOff: on ? undefined : true });

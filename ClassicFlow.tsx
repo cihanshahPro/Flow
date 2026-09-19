@@ -1404,7 +1404,7 @@ function Flow() {
                       )}
                       <Text style={s.body}>
                         {processing
-                          ? "Transcribing on your Mac mini. Your original audio is already safe on this phone."
+                          ? "Turning your audio into text on this phone. Your original audio stays here."
                           : processingError}
                       </Text>
                       {!processing && (
@@ -1437,7 +1437,7 @@ function Flow() {
                     {captureKind === "thought"
                       ? "Stop once. We save the audio, transcribe it, and open a draft here."
                       : `Stop once. Your recording and transcript stay in ${captureKind === "feedback" ? "Feedback" : "Library"}; no plan or task is created.`}{" "}
-                    Keep this device and your Mac mini on the same Wi-Fi.
+                    Your recording is saved on this phone.
                   </Text>
                   {!voiceBusy && !voiceResult && (
                     <Tap
@@ -1498,7 +1498,7 @@ function Flow() {
                   />
                   <Text style={s.previewHint}>
                     {captureKind === "thought"
-                      ? "Flow can organize this privately on your Mac mini. Your original words are always kept."
+                      ? "Flow can organize this for you. Your original words are always kept."
                       : `Saved in ${captureKind === "feedback" ? "Feedback" : "Library"}. This won’t create a task or change your plan.`}
                   </Text>
                   <Tap
