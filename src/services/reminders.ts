@@ -138,3 +138,22 @@ export async function syncReminders(
     return 0;
   }
 }
+
+/** Dev only: schedule one reminder a few seconds out to check delivery on a device. */
+export async function sendTestReminder(seconds = 5): Promise<boolean> {
+  if (Platform.OS === "web") return false;
+  try {
+    configure();
+    let permission = await Notifications.getPermissionsAsync();
+    if (!permission.granted && permission.canAskAgain) permission = await Notifications.requestPermissionsAsync();
+    if (!permission.granted) return false;
+    await Notifications.scheduleNotificationAsync({
+      identifier: PREFIX + "test",
+      content: { title: "Flowthread", body: "Test reminder: notifications work.", sound: false },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}

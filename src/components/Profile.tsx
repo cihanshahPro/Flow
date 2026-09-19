@@ -6,6 +6,7 @@ import { emptyPlate, OBSTACLES, PLATE_AREAS, PLATE_PEOPLE, TIME_WINDOWS, type Pl
 import { flowType } from "../flow-voice.ts";
 import { peopleMentioned } from "../thread.ts";
 import { C } from "./theme.ts";
+import { sendTestReminder } from "../services/reminders.ts";
 
 export const PRIVACY_URL = "https://kodavena.com/flowthread/privacy";
 
@@ -190,6 +191,11 @@ export default function Profile({
               </Pressable>
             </View>
           </View>
+        )}
+        {typeof __DEV__ !== "undefined" && __DEV__ && (
+          <Pressable accessibilityRole="button" accessibilityLabel="Send a test reminder" onPress={() => void sendTestReminder()} hitSlop={8}>
+            <Text style={s.link}>Send a test reminder (dev)</Text>
+          </Pressable>
         )}
         <Pressable accessibilityRole="button" accessibilityLabel="Export my data" onPress={onExport} disabled={busy} hitSlop={8}>
           <Text style={s.link}>Export my data</Text>
