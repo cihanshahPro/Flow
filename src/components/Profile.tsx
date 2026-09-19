@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Note } from "../model.ts";
 import { emptyPlate, OBSTACLES, PLATE_AREAS, PLATE_PEOPLE, TIME_WINDOWS, type Plate, type Profile } from "../personality.ts";
 import { flowType } from "../flow-voice.ts";
 import { peopleMentioned } from "../thread.ts";
 import { C } from "./theme.ts";
+
+export const PRIVACY_URL = "https://kodavena.com/privacy";
 
 /** Profile: who Flow thinks you are and what it knows — a living thing you can edit, not a one-time quiz. */
 export default function Profile({
@@ -16,6 +18,11 @@ export default function Profile({
   onRetake,
   onFeedback,
   onPlate,
+  notificationsOn = true,
+  version = "",
+  onToggleNotifications,
+  onExport,
+  onDeleteAll,
 }: {
   profile: Profile;
   threads: ThoughtDraft[];
@@ -24,6 +31,11 @@ export default function Profile({
   onRetake: () => void;
   onFeedback: (mode: "voice" | "text") => void;
   onPlate: (plate: Plate) => void;
+  notificationsOn?: boolean;
+  version?: string;
+  onToggleNotifications?: (on: boolean) => void;
+  onExport?: () => void;
+  onDeleteAll?: () => void;
 }) {
   const type = flowType(profile.answers);
   const plate = profile.plate ?? emptyPlate();
@@ -111,7 +123,7 @@ export default function Profile({
           </>
         )}
         <Text style={s.small}>
-          {real.length} {real.length === 1 ? "thread" : "threads"} on this phone. Nothing leaves it except audio to your own Mac mini.
+          {real.length} {real.length === 1 ? "thread" : "threads"} on this phone. Your data stays on this phone.
         </Text>
       </View>
       <View style={s.card}>
@@ -125,7 +137,23 @@ export default function Profile({
         </Pressable>
         {feedback > 0 && <Text style={s.small}>{feedback} saved so far. Not sent anywhere.</Text>}
       </View>
-      <Text style={s.small}>Testing build. Recordings and transcripts stay on this device.</Text>
+      <View style={s.card}>
+        <Text style={s.kicker}>SETTINGS</Text>
+        <View style={s.rowBetween}>
+          <Text style={[s.body, { flex: 1 }]}>Reminders</Text>
+          <Switch accessibilityLabel="Reminders" value={notificationsOn} onValueChange={(v) => onToggleNotifications?.(v)} disabled={busy} />
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Export my data" onPress={onExport} disabled={busy} hitSlop={8}>
+          <Text style={s.link}>Export my data</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Privacy policy" onPress={() => void Linking.openURL(PRIVACY_URL).catch(() => {})} hitSlop={8}>
+          <Text style={s.link}>Privacy policy</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Delete all my data" onPress={onDeleteAll} disabled={busy} hitSlop={8}>
+          <Text style={[s.link, { color: "#C0392B" }]}>Delete all my data</Text>
+        </Pressable>
+        {!!version && <Text style={s.small}>Flow {version}</Text>}
+      </View>
     </ScrollView>
   );
 }

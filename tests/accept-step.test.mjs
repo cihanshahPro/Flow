@@ -38,3 +38,11 @@ test("thread titles are short, move labels are never bare times", () => {
   assert.equal(concreteMove("Ask Ali for the numbers"), true);
   assert.equal(areaPhrase("Work project"), "your work project");
 });
+
+const { suggestPrompt } = await import("../src/thread.ts");
+test("Flow does not re-suggest the area of an open thread", () => {
+  const plate = { areas: ["Work project", "Health"], people: [], obstacles: [] };
+  const open = { ...exampleDraft("w"), example: false, title: "Quarterly numbers", source: "My boss wants numbers", updates: [] };
+  assert.equal(suggestPrompt(plate, []).area, "Work project");
+  assert.notEqual(suggestPrompt(plate, [open]).area, "Work project");
+});

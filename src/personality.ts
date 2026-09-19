@@ -152,6 +152,8 @@ export type Profile = {
   funnelVersion?: number;
   /** Guided profile: what is on the person's plate, in their own taps. Additive. */
   plate?: Plate;
+  /** Settings: reminders switched off by the person. Additive; absent means on. */
+  notificationsOff?: boolean;
 };
 export const FUNNEL_VERSION = 3;
 

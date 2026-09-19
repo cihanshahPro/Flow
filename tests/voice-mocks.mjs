@@ -35,14 +35,15 @@ export const AppState = {
   },
 };
 export const Platform = { OS: "ios" };
-export const Linking = { openSettings: async () => {} };
+export const Linking = { openSettings: async () => {}, openURL: async () => {} };
 export const StyleSheet = { create: (x) => x };
 export const ScrollView = "ScrollView",
   ActivityIndicator = "ActivityIndicator";
 export const Pressable = "Pressable",
   Text = "Text",
   TextInput = "TextInput",
-  View = "View";
+  View = "View",
+  Switch = "Switch";
 export const SafeAreaView = "SafeAreaView",
   KeyboardAvoidingView = "KeyboardAvoidingView",
   Modal = "Modal";

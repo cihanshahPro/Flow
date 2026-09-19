@@ -78,9 +78,15 @@ function configure() {
 
 /**
  * Replace Flow's scheduled reminders with the current plan. Permission is
- * requested only once there is something worth reminding about.
+ * requested only when the person has just confirmed a move or date (`ask`).
  */
-export async function syncReminders(threads: ThoughtDraft[], tasks: Task[], now = new Date()): Promise<number> {
+export async function syncReminders(
+  threads: ThoughtDraft[],
+  tasks: Task[],
+  now = new Date(),
+  /** `ask`: the person just confirmed a move or date, so this is the moment to request permission. `enabled`: the Settings switch. */
+  options: { ask?: boolean; enabled?: boolean } = {},
+): Promise<number> {
   if (Platform.OS === "web") return 0;
   const planned = planReminders(threads, tasks, now);
   try {
@@ -89,9 +95,9 @@ export async function syncReminders(threads: ThoughtDraft[], tasks: Task[], now 
     for (const n of existing) {
       if (n.identifier.startsWith(PREFIX)) await Notifications.cancelScheduledNotificationAsync(n.identifier);
     }
-    if (!planned.length) return 0;
+    if (!planned.length || options.enabled === false) return 0;
     let permission = await Notifications.getPermissionsAsync();
-    if (!permission.granted && permission.canAskAgain) permission = await Notifications.requestPermissionsAsync();
+    if (!permission.granted && options.ask && permission.canAskAgain) permission = await Notifications.requestPermissionsAsync();
     if (!permission.granted) return 0;
     let count = 0;
     for (const r of planned) {

@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -31,6 +32,8 @@ import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
 import { processCapturedNote } from "./src/services/processing";
 import { syncReminders } from "./src/services/reminders";
+import { exportAllData, deleteAllData } from "./src/services/data";
+import Constants from "expo-constants";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
 import { newProfile, FUNNEL_VERSION, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
@@ -120,7 +123,7 @@ function Flow() {
       }
     }
     if (changed) await refresh();
-    void syncReminders(data.threads, data.tasks).catch(() => {});
+    void syncReminders(data.threads, data.tasks, new Date(), { enabled: !profile.notificationsOff }).catch(() => {});
   }
 
   useEffect(() => {
@@ -322,7 +325,10 @@ function Flow() {
           if (task && !task.done) await saveTask(completeTask(task));
         }
       }
-      await refresh();
+      const data = await refresh();
+      // Confirming a move is the moment a reminder makes sense, so this is when permission is requested.
+      if (effects.some((e) => e.type === "accept") && !profile.notificationsOff)
+        void syncReminders(data.threads, data.tasks, new Date(), { ask: true }).catch(() => {});
       await announceLevel(thread.id, before);
     });
   }
@@ -542,6 +548,35 @@ function Flow() {
             }
             onFeedback={(m) => startCapture(m, null, "feedback")}
             onPlate={(plate) => void run(() => updateProfile({ ...profile, plate }))}
+            notificationsOn={!profile.notificationsOff}
+            version={Constants.expoConfig?.version ?? ""}
+            onToggleNotifications={(on) =>
+              void run(async () => {
+                await updateProfile({ ...profile, notificationsOff: on ? undefined : true });
+                const data = { tasks, threads };
+                if (on) await syncReminders(data.threads, data.tasks, new Date(), { ask: true });
+                else await syncReminders([], [], new Date(), { enabled: false });
+              })
+            }
+            onExport={() => void run(async () => void (await Share.share({ message: await exportAllData() })))}
+            onDeleteAll={() =>
+              Alert.alert("Delete all your data?", "Every thread, move, recording and setting on this phone will be erased. This cannot be undone.", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete everything",
+                  style: "destructive",
+                  onPress: () =>
+                    void run(async () => {
+                      await deleteAllData();
+                      setProfile(newProfile());
+                      setOpenId(null);
+                      setFunnelStep("intro");
+                      setFunnel(true);
+                      await refresh();
+                    }),
+                },
+              ])
+            }
           />
         )}
         {screen === "thread" && current && (
