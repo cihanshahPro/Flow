@@ -44,7 +44,7 @@ Thread points are the fingerprint features Flow is collecting: outcome, people, 
 
 ## Four interaction modes
 
-The 16-type result is shown as a best-fit orientation. The four MBTI preference pairs produce 16 combinations; Flow groups those combinations into four interaction modes for presentation only:
+The quiz is the Mini-IPIP (Big Five). Flow adapts the scores into four interaction modes and shows a named Flow type (Catalyst, Steward, Architect, Coordinator) without four-letter codes; this is a Flow adaptation, not a validated typology:
 
 - Explorer: record freely, connect later, delay interruption.
 - Builder: show a short sequence after the thread is ready.
@@ -66,6 +66,12 @@ All three use the same record-first surface. Starting from a section supplies th
 Goals appear only after a thread has enough context. Flow proposes a small number of goals; the user chooses whether to pursue one. Repeated patterns are detected in the background and later offered as a possible routine or reusable skill. The user never maintains a repetitive-task inventory.
 
 Progress belongs to the thread. A recording does not earn points. A goal is considered resolved from evidence in later recordings, linked calendar outcomes, or a user correction. Levels are small and encouraging: Starting point, Building, Momentum, Follow-through, and Mastery. Levels never pressure the user with streaks or punishments.
+
+## Conversation, moves and levels (test build 12)
+
+Each thread is a chat with Flow. Flow replies to every recording, asks one question at a time, and decides with two chips. A thread is ready at five of seven known points including the outcome. Flow then offers one move (Do this / Not now); an accepted move is the single Next card on Home. Finishing a move never closes a thread on its own; Flow asks whether the whole thing is resolved. Flow re-reads threads on open, on foreground and every fifteen minutes while open, adding at most one check-in per thread; a Yes is evidence.
+
+Levels count moves done, threads understood and confirmed check-ins, unlock when the quiz is finished, and are named Starting point, Building, Momentum, Follow-through and Mastery. Flow celebrates inside the thread, in the person's mode voice, with a short emoji shower; never a full-screen interruption, never streaks or penalties. Momentum unlocks pattern notices. See [FLOW-LOOP.md](FLOW-LOOP.md).
 
 ## Final scope for this release
 

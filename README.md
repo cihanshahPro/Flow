@@ -2,22 +2,22 @@
 
 A small native planning app: capture a thought, choose an action that fits the time available, and keep the next date visible. This is a mobile starter for further development, separate from the existing Anchor web app.
 
-## Capture-first testing experience
+## Test build 12 — the Flow loop
 
-Speak or write from Today. Voice or text becomes a small visual tree. Explore one direction at a time, choose a step, start smaller, or keep it for later. No form filling is required to review a draft. My mind separates active drafts from parked possibilities; Library retains original notes and recordings. Existing detailed task/calendar controls remain under Settings. No existing data is reset.
+One button. Record (or write) what's on your mind; Flow works out what it's about in the background, asks one question at a time in a chat, and offers a move when it has enough. Accepting a move makes it your Next card. Done, check-ins and confirmations feed a small level system, and Flow gasses you up inside the thread when something real happens. There are no tabs, no task lists and nothing to classify. See [the Flow loop](docs/FLOW-LOOP.md) for the full description and [FINAL-PRODUCT-CONTRACT.md](docs/FINAL-PRODUCT-CONTRACT.md) for the boundaries.
 
-Test build 05 runs audio transcription through the paired Mac mini using whisper.cpp, then uses Apple Foundation Models on that Mac for draft suggestions. Short previews must match the original words; ungrounded action evidence is rejected. Bounded local rules remain a labeled fallback when AI is unavailable. Goal connections across notes and reusable routines remain unfinished. The optional example is labeled as an example. Suggestions do not become tasks until selected.
-
-See [decision drafts and AI connection research](docs/DECISION_DRAFTS.md).
+Audio still goes to the paired Mac mini (whisper.cpp for transcription, Apple Foundation Models for Flow's reply, question, grounded points and moves); bounded local rules remain the labeled fallback. The earlier five-tab task app is kept as `ClassicFlow.tsx` but is not reachable.
 
 ## What this version covers
 
 | Area      | Mobile scope                                                       |
 | --------- | ------------------------------------------------------------------ |
-| Today     | Tasks and an available-time filter                                 |
-| Capture   | Text inbox and deliberate voice recording                          |
+| Home      | One Record button, the Next card, and the threads Flow made        |
+| Thread    | A chat with Flow: transcripts, replies, one question, two-chip moves and check-ins |
+| Me        | Flow type, level, what Flow knows, pattern notices, feedback        |
 | Storage   | SQLite records and audio files on the device                       |
-| Calendar  | Save details and an optional alert to Apple Calendar; repeated saves update the linked event |
+| Calendar  | The Next card can be saved to Apple Calendar; repeated saves update the linked event |
+| Reminders | Local notifications the morning after a mentioned date (best effort) |
 | Purchases | Disabled capability interface; no payment or subscription flow     |
 
 There is no web-account sync, hosted cloud backend, or in-app purchasing. The testing voice processor is local to the paired Mac mini; see [processor setup](docs/VOICE_PROCESSING.md). The starter contains generic data, with no private web account, personal case details, or embedded web-workspace URL. On iPhone, Calendar permission and a calendar choice enable direct saves through [Expo Calendar](https://docs.expo.dev/versions/v57.0.0/sdk/calendar/). Saving again updates the linked event; changes do not sync automatically or flow back from Calendar. Android uses the system event editor. See [calendar acceptance checks](docs/CALENDAR.md).

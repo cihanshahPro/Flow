@@ -1,5 +1,18 @@
 # Validation record — September 18, 2026
 
+## Test build 12 — the Flow loop
+
+Completed on this Mac (Node 22, macOS 26) on 2026-09-19:
+
+- Strict TypeScript typecheck and all 193 automated tests pass (`npm run verify`). New coverage: thread fingerprint, routing, Flow's turn, chips, check-ins, parking, resolved, patterns, modes, reminders planner, processing with shaper reply/question/evidence, and rendered Home / thread chat / quiz / Me asserting the rule of two.
+- Expo Doctor: 21/21 checks passed. iOS, Android and web bundles exported with Expo SDK 57.
+- Browser walkthrough at 390×844 (React Native Web): intro → twenty taps → "You're a Steward" → plate chips → Home with one Record button → written dump → transcript, reply and one question at 3/7 → written answer → 6/7, celebration, one move with two chips → Do this → Next card → Done → Flow's note and level pill "Building" → second unrelated dump created a separate thread → Me showed type, level counters, plate and unlock notice. State survived a page reload.
+- The extended Swift shaper compiled on the Mac mini (Swift 6.2, macOS 26.5) and returned reply, question, grounded points and choices for a sample input through Apple Foundation Models.
+
+Also corrected: the `testing` branch did not typecheck (a stray `src/processing.ts` from commit 8b57c1c) and the missing-question wiring had been dropped; both fixed in this build's first commit.
+
+Not verified: physical-iPhone microphone recording through the new capture sheet, audio playback inside chat bubbles, the emoji shower animation on device, local notification delivery, and Apple Calendar from the Next card. React Native Web checks do not establish those. Typed thoughts in the browser used the regex fallback because the browser cannot reach the Mac mini processor.
+
 ## Final thread-flow test build
 
 - Strict typecheck passed on the Mac mini runtime.
