@@ -129,7 +129,7 @@ test("consumed drafts and their source notes do not loop back into processing", 
   assert.equal(state.next.kind, "complete");
 });
 
-test("a finished direction advances to the next unopened selected direction", () => {
+test("a legacy completed action leaves the next unopened interest available", () => {
   const p = { ...selected(), focus: work.title };
   const state = journeyState(
     p,
@@ -237,4 +237,245 @@ test("unselected linked and legacy work share recency fallback without guessed l
   const next = journeyState(p, [orphan], [laterLegacy], []).next;
   assert.equal(next.kind, "draft");
   assert.equal(next.direction, undefined);
+});
+
+const today = "2026-09-18";
+const route = (p, tasks, drafts = []) =>
+  journeyState(p, [], drafts, tasks, today).next;
+
+test("a just-completed action stays in check-in before a new direction", () => {
+  const completed = task({
+    direction: work,
+    done: true,
+    completedAt: "2026-09-18T13:00:00Z",
+  });
+  const next = route(selected(), [completed]);
+  assert.equal(next.kind, "check-in");
+  assert.equal(next.id, completed.id);
+  assert.deepEqual(next.direction, work);
+  // The route is wholly recoverable from persisted records after reload.
+  assert.deepEqual(
+    route(selected(), JSON.parse(JSON.stringify([completed]))),
+    next,
+  );
+});
+
+test("check-in selects the latest completion and never invents reviews for legacy done tasks", () => {
+  const old = task({ id: "legacy", done: true, direction: work });
+  const first = task({
+    id: "first",
+    done: true,
+    completedAt: "2026-09-18T13:00:00Z",
+  });
+  const second = task({
+    id: "second",
+    done: true,
+    completedAt: "2026-09-18T14:00:00Z",
+  });
+  assert.equal(route(selected(), [old, first, second]).id, "second");
+  assert.notEqual(route(selected(), [old]).kind, "check-in");
+  assert.notEqual(
+    route(selected(), [{ ...first, reviewedAt: "2026-09-18T14:00:00Z" }]).kind,
+    "check-in",
+  );
+});
+
+test("check-in comes before a due follow-up and a due follow-up before ready work", () => {
+  const ready = task({ id: "ready", direction: work });
+  const waiting = task({
+    id: "waiting",
+    direction: health,
+    followUp: "waiting",
+    chaseDate: today,
+  });
+  const done = task({
+    id: "done",
+    done: true,
+    completedAt: "2026-09-18T14:00:00Z",
+  });
+  const p = { ...selected(), focus: work.title, focusExplicit: true };
+  assert.equal(route(p, [ready, waiting, done]).kind, "check-in");
+  const due = route(p, [ready, waiting]);
+  assert.equal(due.kind, "follow-up");
+  assert.equal(due.id, "waiting");
+});
+
+test("future and undated held actions remain visible without being demanded now", () => {
+  const p = { ...selected(), focus: work.title, focusExplicit: true };
+  for (const state of [
+    { plannedDate: "2026-09-19" },
+    { followUp: "waiting", chaseDate: "2026-09-20" },
+    { followUp: "blocked", chaseDate: "" },
+    { waitingOn: "A reply", chaseDate: "" },
+  ]) {
+    const held = task({ direction: work, ...state });
+    const next = route(p, [held]);
+    assert.equal(next.kind, "scheduled");
+    assert.equal(next.id, held.id);
+    assert.deepEqual(next.direction, work);
+    const ready = task({ id: "other", direction: health });
+    assert.equal(route(p, [held, ready]).id, ready.id);
+  }
+});
+
+test("saved drafts can continue while their other action is waiting", () => {
+  const p = { ...selected(), focus: work.title, focusExplicit: true };
+  const held = task({
+    direction: work,
+    followUp: "waiting",
+    chaseDate: "2026-09-20",
+  });
+  const saved = draft({ direction: work });
+  assert.equal(route(p, [held], [saved]).kind, "draft");
+});
+
+test("a moved action becomes ready on its saved date and a held action becomes a follow-up", () => {
+  const p = selected();
+  const moved = task({ direction: work, plannedDate: "2026-09-19" });
+  assert.equal(route(p, [moved]).kind, "scheduled");
+  assert.equal(
+    journeyState(p, [], [], [moved], "2026-09-19").next.kind,
+    "task",
+  );
+  const held = { ...moved, followUp: "blocked", chaseDate: "2026-09-20" };
+  assert.equal(
+    journeyState(p, [], [], [held], "2026-09-20").next.kind,
+    "follow-up",
+  );
+});
+
+test("ready actions use oldest stable order and actual urgency, not latest capture", () => {
+  const first = task({
+    id: "first",
+    direction: work,
+    createdAt: "2026-09-18T09:00:00Z",
+  });
+  const newer = task({
+    id: "newer",
+    direction: work,
+    createdAt: "2026-09-18T15:00:00Z",
+  });
+  assert.equal(route(selected(), [newer, first]).id, "first");
+  assert.equal(route(selected(), [first, newer]).id, "first");
+  assert.equal(
+    route(selected(), [first, { ...newer, deadline: today }]).id,
+    "newer",
+  );
+});
+
+test("an explicitly active ready action survives another task or a changed focus", () => {
+  const active = task({
+    id: "active",
+    direction: work,
+    createdAt: "2026-09-18T14:00:00Z",
+  });
+  const other = task({
+    id: "other",
+    direction: health,
+    createdAt: "2026-09-18T09:00:00Z",
+  });
+  const p = {
+    ...selected(),
+    focus: health.title,
+    focusExplicit: true,
+    activeTaskId: active.id,
+  };
+  assert.equal(route(p, [other, active]).id, active.id);
+});
+
+test("an active held task yields to available work and returns when there is none", () => {
+  const held = task({ id: "held", direction: work, plannedDate: "2026-09-20" });
+  const p = {
+    ...selected(),
+    focus: health.title,
+    focusExplicit: true,
+    activeTaskId: held.id,
+  };
+  assert.equal(route(p, [held]).kind, "scheduled");
+  assert.equal(route(p, [held]).id, held.id);
+  const ready = task({ id: "ready", direction: health });
+  assert.equal(route(p, [held, ready]).id, ready.id);
+});
+
+test("pause after check-in is durable until continuation clears the active pointer", () => {
+  const completed = task({
+    id: "completed",
+    direction: work,
+    done: true,
+    completedAt: "2026-09-18T13:00:00Z",
+    reviewedAt: "2026-09-18T13:01:00Z",
+  });
+  const p = { ...selected(), activeTaskId: completed.id };
+  const next = route(p, [completed]);
+  assert.equal(next.kind, "paused");
+  assert.equal(next.title, "A good place to pause");
+  assert.equal(next.id, completed.id);
+  assert.equal(
+    route({ ...p, activeTaskId: undefined }, [completed]).kind,
+    "starter",
+  );
+  const followUp = task({
+    id: "follow-up",
+    followUp: "waiting",
+    chaseDate: today,
+  });
+  assert.equal(route(p, [completed, followUp]).kind, "follow-up");
+});
+
+test("reviewed completion can continue the same saved plan without repeating intake", () => {
+  const completed = task({
+    direction: work,
+    done: true,
+    completedAt: "2026-09-18T13:00:00Z",
+    reviewedAt: "2026-09-18T13:01:00Z",
+  });
+  const saved = draft({ direction: work });
+  const next = route(
+    { ...selected(), focus: work.title },
+    [completed],
+    [saved],
+  );
+  assert.equal(next.kind, "draft");
+  assert.equal(next.id, saved.id);
+});
+
+test("example completions never interrupt with a real check-in", () => {
+  const example = draft({ id: "example", example: true });
+  const completed = task({
+    id: "flow:example:step",
+    done: true,
+    completedAt: "2026-09-18T13:00:00Z",
+  });
+  assert.notEqual(route(selected(), [completed], [example]).kind, "check-in");
+});
+
+test("usual time favors a fitting next action without hiding urgency or an active choice", () => {
+  const long = task({
+    id: "long",
+    direction: work,
+    minutes: 45,
+    createdAt: "2026-09-18T09:00:00Z",
+  });
+  const short = task({
+    id: "short",
+    direction: work,
+    minutes: 10,
+    createdAt: "2026-09-18T14:00:00Z",
+  });
+  const p = { ...selected(), preferredMinutes: 30 };
+  assert.equal(route(p, [long, short]).id, short.id);
+  assert.equal(
+    route({ ...p, preferredMinutes: 60 }, [long, short]).id,
+    long.id,
+  );
+  assert.equal(
+    route({ ...p, preferredMinutes: "varies" }, [long, short]).id,
+    short.id,
+  );
+  assert.equal(route(p, [{ ...long, deadline: today }, short]).id, long.id);
+  assert.equal(
+    route({ ...p, activeTaskId: long.id }, [long, short]).id,
+    long.id,
+  );
+  assert.equal(route(p, [long]).id, long.id);
 });

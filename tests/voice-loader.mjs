@@ -2,7 +2,14 @@ import ts from "typescript";
 import { readFile } from "node:fs/promises";
 const mocks = new URL("./voice-mocks.mjs", import.meta.url).href;
 export async function resolve(specifier, context, next) {
-  if (["react-native", "expo-audio", "expo-file-system"].includes(specifier))
+  if (
+    [
+      "react-native",
+      "react-native-safe-area-context",
+      "expo-audio",
+      "expo-file-system",
+    ].includes(specifier)
+  )
     return { url: mocks, shortCircuit: true };
   if (
     ["../starters", "../journey", "../profile-completion"].includes(specifier)
