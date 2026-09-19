@@ -99,7 +99,15 @@ export const AREAS = [
 export type Profile = {
   version: 1;
   answers: number[];
-  stage: "intro" | "assessment" | "results" | "areas" | "map" | "guide";
+  stage:
+    | "intro"
+    | "assessment"
+    | "results"
+    | "areas"
+    | "map"
+    | "preferences"
+    | "capacity"
+    | "guide";
   areaIndex: number;
   areas: Record<string, string | string[]>;
   focus?: string;

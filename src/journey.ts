@@ -12,7 +12,6 @@ export type JourneyNext = {
 export type JourneyState = {
   next: JourneyNext;
   coverage: { answered: number; reviewed: number; deferred: number };
-  level: { number: number; title: string };
   milestones: Array<{ label: string; done: boolean }>;
 };
 
@@ -47,8 +46,9 @@ export function journeyState(
   const coverage = {
     answered: profile.answers
       .slice(0, 20)
-      .filter((answer) => Number.isInteger(answer) && answer >= 1 && answer <= 5)
-      .length,
+      .filter(
+        (answer) => Number.isInteger(answer) && answer >= 1 && answer <= 5,
+      ).length,
     reviewed: 0,
     deferred: 0,
   };
@@ -88,7 +88,8 @@ export function journeyState(
     const task = newest(
       realTasks.filter((item) => !item.done && sameDirection(item, direction)),
     );
-    if (task) return { kind: "task", direction, title: task.title, id: task.id };
+    if (task)
+      return { kind: "task", direction, title: task.title, id: task.id };
     const draft = newest(
       actionableDrafts.filter((item) => sameDirection(item, direction)),
     );
@@ -139,28 +140,24 @@ export function journeyState(
             ...(task.direction ? { direction: task.direction } : {}),
           },
         })),
-      ...actionableDrafts
-        .filter(outsideSelected)
-        .map((draft) => ({
-          createdAt: draft.createdAt,
-          next: {
-            kind: "draft" as const,
-            title: "Continue your saved draft",
-            id: draft.id,
-            ...(draft.direction ? { direction: draft.direction } : {}),
-          },
-        })),
-      ...unprocessedNotes
-        .filter(outsideSelected)
-        .map((note) => ({
-          createdAt: note.createdAt,
-          next: {
-            kind: "process" as const,
-            title: "Continue your saved thought",
-            id: note.id,
-            ...(note.direction ? { direction: note.direction } : {}),
-          },
-        })),
+      ...actionableDrafts.filter(outsideSelected).map((draft) => ({
+        createdAt: draft.createdAt,
+        next: {
+          kind: "draft" as const,
+          title: "Continue your saved draft",
+          id: draft.id,
+          ...(draft.direction ? { direction: draft.direction } : {}),
+        },
+      })),
+      ...unprocessedNotes.filter(outsideSelected).map((note) => ({
+        createdAt: note.createdAt,
+        next: {
+          kind: "process" as const,
+          title: "Continue your saved thought",
+          id: note.id,
+          ...(note.direction ? { direction: note.direction } : {}),
+        },
+      })),
     ];
     next = newest(remaining)?.next;
   }
@@ -178,7 +175,9 @@ export function journeyState(
     else if (ordered.length || coverage.reviewed === AREAS.length)
       next = {
         kind: "complete",
-        title: ordered.length ? "Your next step is complete" : "Your life map is ready",
+        title: ordered.length
+          ? "Your saved steps are finished"
+          : "Room for whatever comes next",
       };
     else next = { kind: "setup", title: "Continue setting up your life map" };
   }
@@ -189,15 +188,11 @@ export function journeyState(
   return {
     next,
     coverage,
-    level: done
-      ? { number: 4, title: "In motion" }
-      : ready
-        ? { number: 3, title: "Ready to act" }
-        : mapped
-          ? { number: 2, title: "Mapped" }
-          : { number: 1, title: "Getting acquainted" },
     milestones: [
-      { label: "Personality assessment completed", done: coverage.answered === 20 },
+      {
+        label: "Personality assessment completed",
+        done: coverage.answered === 20,
+      },
       { label: "Life areas reviewed", done: mapped },
       { label: "First action chosen", done: ready },
       { label: "First action completed", done },
