@@ -40,6 +40,9 @@ export async function fetch(url, options) {
 export async function loadWorkspace() {
   return { notes: harness.notes, tasks: [] };
 }
+export async function loadProfile() {
+  return { version: 1, answers: [], stage: "intro", areaIndex: 0, areas: {} };
+}
 export async function saveNote(note) {
   harness.writes.push("transcript");
   harness.notes = [structuredClone(note)];

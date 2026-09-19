@@ -91,8 +91,16 @@ export function fingerprint(
   text: string,
   prior: ThreadPoint[] = [],
   noteId?: string,
+  extra: Partial<Record<PointId, string>> = {},
 ): ThreadPoint[] {
-  const detected = detectPoints(text);
+  const detected = { ...detectPoints(text) };
+  // Shaper evidence is accepted only when it is the person's own words.
+  const normalized = text.replace(/\s+/g, " ").toLowerCase();
+  for (const [id, evidence] of Object.entries(extra)) {
+    if (!evidence || !POINTS.some((p) => p.id === id)) continue;
+    const words = evidence.replace(/\s+/g, " ").trim();
+    if (words && normalized.includes(words.toLowerCase())) detected[id as PointId] = clip(words);
+  }
   return POINTS.map((point) => {
     const previous = prior.find((p) => p.id === point.id);
     if (previous?.state === "known") return previous;
@@ -322,7 +330,13 @@ export function respondToRecording(
   thread: ThoughtDraft,
   noteId: string,
   text: string,
-  options: { mode?: Mode; now?: Date; reply?: string; question?: string } = {},
+  options: {
+    mode?: Mode;
+    now?: Date;
+    reply?: string;
+    question?: string;
+    evidence?: Partial<Record<PointId, string>>;
+  } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
   const at = (options.now ?? new Date()).toISOString();
@@ -344,7 +358,7 @@ export function respondToRecording(
     return built;
   };
   push({ from: "you", kind: "transcript", text, noteId });
-  const points = fingerprint(text, thread.threadPoints, noteId);
+  const points = fingerprint(text, thread.threadPoints, noteId, options.evidence);
   const hints = extractDueHints(text, options.now);
   next = {
     ...next,

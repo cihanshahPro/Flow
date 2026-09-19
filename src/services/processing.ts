@@ -5,11 +5,14 @@ import { loadDrafts, saveDraft } from "./drafts";
 import {
   suggestDraft,
   shapedDraft,
+  shapedVoice,
   appendPlanUpdate,
-  missingThreadPoints,
   type ThoughtDraft,
 } from "../drafts";
 import type { DirectionContext, Note } from "../model";
+import { loadProfile } from "./profile";
+import { modeFor, DEFAULT_MODE } from "../flow-voice";
+import { respondToRecording, routeRecording } from "../thread";
 
 export type CapturedNoteResult =
   { kind: "draft"; draft: ThoughtDraft } | { kind: "note"; note: Note };
@@ -108,44 +111,48 @@ async function processThoughtNote(note: Note): Promise<ThoughtDraft> {
     (d) => d.id === note.id || d.sourceNoteIds?.includes(note.id),
   );
   if (existing) return existing;
-  const { note: transcribed, shape } = await transcribeNote(note);
+  const { note: transcribed, shape: audioShape } = await transcribeNote(note);
   const text = transcribed.text;
   let draft = suggestDraft(note.id, text);
+  let shape = audioShape;
+  if (!shape && note.text) {
+    try {
+      shape = await fetchShape(text);
+    } catch {
+      /* Transcript remains usable in a basic draft. */
+    }
+  }
   if (shape) {
     try {
       draft = shapedDraft(note.id, text, shape);
     } catch {
       console.warn("[Flow] organizer output could not be grounded");
     }
-  } else if (note.text) {
-    try {
-      draft = await organizeThought(note.id, text, note.direction);
-    } catch {
-      /* Transcript remains usable in a basic draft. */
-    }
   }
+  const flow = shapedVoice(shape, text);
   if (note.direction) draft = { ...draft, direction: note.direction };
-  // A recording is a saved thread first. It does not become an active goal
-  // until the user returns and explicitly develops it.
-  draft = {
-    ...draft,
-    threadStatus: draft.threadStatus ?? "dumped",
-    goalsReady: draft.goalsReady ?? false,
-    missingPoints: draft.missingPoints ?? missingThreadPoints(draft.source),
-  };
-  if (note.planId) {
-    const plan = (await loadDrafts()).find((d) => d.id === note.planId);
-    if (plan) draft = appendPlanUpdate(plan, draft);
-  }
+  // A recording joins the thread it belongs to, then Flow replies. Nothing
+  // becomes a goal until the person accepts a move Flow offers.
+  const [profile, workspace, threads] = await Promise.all([
+    loadProfile().catch(() => null),
+    loadWorkspace().catch(() => ({ tasks: [], notes: [] })),
+    loadDrafts(),
+  ]);
+  const mode = modeFor(profile?.answers) ?? DEFAULT_MODE;
+  const targetId = note.planId ?? routeRecording(text, threads, workspace.tasks);
+  const plan = targetId ? threads.find((d) => d.id === targetId) : undefined;
+  if (plan) draft = appendPlanUpdate(plan, draft);
+  draft = respondToRecording(draft, note.id, text, {
+    mode,
+    reply: flow.reply,
+    question: flow.question,
+    evidence: flow.evidence,
+  });
   await saveDraft(draft);
   return draft;
 }
 
-export async function organizeThought(
-  id: string,
-  text: string,
-  direction?: DirectionContext,
-) {
+async function fetchShape(text: string): Promise<unknown> {
   const url = process.env.EXPO_PUBLIC_PROCESSOR_URL,
     token = process.env.EXPO_PUBLIC_PROCESSOR_TOKEN;
   if (!url || !token)
@@ -176,11 +183,19 @@ export async function organizeThought(
       throw new Error(
         "Local AI is unavailable right now. Your thought is saved; try again shortly.",
       );
-    const draft = shapedDraft(id, text, result.shape);
-    return direction ? { ...draft, direction } : draft;
+    return result.shape;
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function organizeThought(
+  id: string,
+  text: string,
+  direction?: DirectionContext,
+) {
+  const draft = shapedDraft(id, text, await fetchShape(text));
+  return direction ? { ...draft, direction } : draft;
 }
 export async function createThoughtDraft(
   id: string,

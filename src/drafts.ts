@@ -287,6 +287,36 @@ export function shapedDraft(
   };
 }
 
+/** Flow's own words from the shaper: a short reply, one question, and grounded evidence per point. */
+export type ShapedVoice = {
+  reply?: string;
+  question?: string;
+  evidence: Partial<Record<string, string>>;
+};
+export function shapedVoice(value: unknown, source: string): ShapedVoice {
+  const out: ShapedVoice = { evidence: {} };
+  if (!value || typeof value !== "object") return out;
+  const plan = value as Record<string, unknown>;
+  const bounded = (v: unknown, max: number) =>
+    typeof v === "string" && v.trim().length > 0 && v.trim().length <= max ? v.trim() : "";
+  const reply = bounded(plan.reply, 200);
+  const question = bounded(plan.question, 160);
+  // A reply must not smuggle in advice or facts: keep it short and free of URLs.
+  if (reply && !/https?:\/\//i.test(reply)) out.reply = reply;
+  if (question && /\?$/.test(question)) out.question = question;
+  const normalized = source.replace(/\s+/g, " ").toLowerCase();
+  if (Array.isArray(plan.points)) {
+    for (const raw of plan.points.slice(0, 7)) {
+      if (!raw || typeof raw !== "object") continue;
+      const id = bounded((raw as Record<string, unknown>).id, 20).toLowerCase();
+      const evidence = bounded((raw as Record<string, unknown>).evidence, 200).replace(/^["“]|["”]$/g, "");
+      if (id && evidence && normalized.includes(evidence.replace(/\s+/g, " ").toLowerCase()))
+        out.evidence[id] = evidence;
+    }
+  }
+  return out;
+}
+
 /** Attach a saved update to its existing plan without changing original words or chosen IDs. */
 export function appendPlanUpdate(
   plan: ThoughtDraft,
