@@ -1,5 +1,8 @@
 import type { ExpoConfig } from "expo/config";
 
+const PHOTO_LIBRARY_PURPOSE =
+  "Flowthread doesn't access your photo library. This permission is only requested if you choose to save or share an export.";
+
 const config: ExpoConfig = {
   name: "Flowthread",
   slug: "flowthread",
@@ -15,6 +18,10 @@ const config: ExpoConfig = {
       ITSAppUsesNonExemptEncryption: false,
       NSSpeechRecognitionUsageDescription:
         "Flowthread turns your voice note into text on your iPhone. Audio never leaves your device.",
+      // Required by App Store processing (ITMS-90683): expo-file-system links Photos for its legacy
+      // asset-library API. Flowthread itself never reads or writes the photo library.
+      NSPhotoLibraryUsageDescription: PHOTO_LIBRARY_PURPOSE,
+      NSPhotoLibraryAddUsageDescription: PHOTO_LIBRARY_PURPOSE,
     },
   },
   android: {
