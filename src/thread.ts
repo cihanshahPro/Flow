@@ -375,6 +375,13 @@ export function respondToRecording(
     kind: "ack",
     text: options.reply?.trim() || (isFirst ? voice.ack(mode, noteId) : voice.replyAck(mode, noteId)),
   });
+  // A shaper question about something the person already answered is noise; fall back to the template.
+  const known = new Set(points.filter((p) => p.state === "known").map((p) => p.id));
+  const asksKnown = (q: string) => {
+    const norm = q.trim().toLowerCase().replace(/[^a-z ]/g, "");
+    return POINTS.some((p) => known.has(p.id) && (norm === p.question.toLowerCase().replace(/[^a-z ]/g, "") || (p.id === "people" && /^who (else )?is involved/.test(norm)) || (p.id === "timing" && /^(when|is there a (real )?(date|time))/.test(norm))));
+  };
+  if (options.question && asksKnown(options.question)) options = { ...options, question: undefined };
   const hyped = new Set(thread.hypeGiven ?? []);
   if (isReady(points)) {
     next = ensureMoves(next);

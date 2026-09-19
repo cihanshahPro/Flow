@@ -118,6 +118,15 @@ test("the shaper's reply and question win over templated wording", () => {
   assert.equal(t.messages[2].text, "What would 'done' look like for the garage?");
 });
 
+test("a shaper question about an already-known point is ignored in favour of the next missing one", () => {
+  const text = "I need to book the dentist for the kids with my wife.";
+  const t = respondToRecording(thread(text), "n1", text, { now, mode: "builder", question: "Who is involved?" });
+  const q = pendingMessage(t);
+  assert.equal(q.kind, "question");
+  assert.notEqual(q.pointId, "people");
+  assert.notEqual(q.text, "Who is involved?");
+});
+
 test("answering the question marks it answered, fills the meter, and a ready thread gets hyped once and offered a move", () => {
   const start = respondToRecording(thread("I want to clear the garage."), "n1", "I want to clear the garage.", {
     mode: "builder",
