@@ -22,11 +22,11 @@ Useful commands:
 
 ```bash
 npm run verify
-npx expo start --go --lan --port 8082
+npx expo start --go --lan --port 8083
 npx expo export --platform all --output-dir /tmp/flow-export
 ```
 
-The test Expo server runs on the Mac mini at `10.0.0.152:8082` from `~/Library/Caches/Anchor/flow-build-12`; the voice processor runs from the same checkout with `node --env-file=.env.processor scripts/voice-server.mjs` and the shaper binary at `~/Library/Caches/Anchor/shape-thought` (compile with `swiftc -parse-as-library scripts/shape-thought.swift -o ~/Library/Caches/Anchor/shape-thought`). Use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only.
+The test Expo server runs on the Mac mini at `10.0.0.152:8083` from `~/Library/Caches/Anchor/flow-build-12`; the voice processor runs from the same checkout with `node --env-file=.env.processor scripts/voice-server.mjs` and the shaper binary at `~/Library/Caches/Anchor/shape-thought` (compile with `swiftc -parse-as-library scripts/shape-thought.swift -o ~/Library/Caches/Anchor/shape-thought`). Use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only.
 
 ## Scope and boundary
 
