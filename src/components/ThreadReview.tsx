@@ -16,12 +16,14 @@ export default function ThreadReview({
   draft,
   onCapture,
   onDevelop,
+  prompt,
   onClose,
   busy = false,
 }: {
   draft: ThoughtDraft;
   onCapture: () => void;
   onDevelop: () => void;
+  prompt: string;
   onClose: () => void;
   busy?: boolean;
 }) {
@@ -52,8 +54,8 @@ export default function ThreadReview({
         ))}
         {!points.length && <Text style={s.detail}>The first recording is the starting point. Nothing else needs to be entered right now.</Text>}
       </View>
-      {!!missing.length && <View style={s.card}><Text style={s.eyebrow}>STILL UNCLEAR</Text>{missing.slice(0, 1).map((item) => <Text key={item} style={s.body}>{item}</Text>)}<Text style={s.detail}>Record another thought whenever you are ready. Flow will keep the thread together.</Text></View>}
-      <Pressable accessibilityRole="button" accessibilityLabel="Add to this thread" onPress={onCapture} disabled={busy} style={s.secondary}><Text style={s.buttonText}>Add another recording</Text><Text style={s.detail}>Continue this thread in your own words.</Text></Pressable>
+      {!ready && <View style={s.card}><Text style={s.eyebrow}>THE NEXT MISSING PIECE</Text><Text style={s.body}>{missing[0] ?? prompt}</Text><Text style={s.detail}>Flow is keeping the thread open until this is clear. Answer by recording; you do not need to organize it.</Text></View>}
+      {!ready && <Pressable accessibilityRole="button" accessibilityLabel="Record the answer" onPress={onCapture} disabled={busy} style={s.primary}><Text style={s.primaryText}>Record the answer</Text><Text style={s.primaryDetail}>{prompt}</Text></Pressable>}
       {ready && <Pressable accessibilityRole="button" accessibilityLabel="Develop this thread into goals" onPress={onDevelop} disabled={busy} style={s.primary}><Text style={s.primaryText}>Develop this thread into goals</Text><Text style={s.primaryDetail}>Flow will suggest a few smaller goals only after the thread is ready.</Text></Pressable>}
       <Pressable accessibilityRole="button" accessibilityLabel="Keep this thread for later" onPress={onClose} disabled={busy}><Text style={s.link}>Keep this thread for later</Text></Pressable>
     </ScrollView>
