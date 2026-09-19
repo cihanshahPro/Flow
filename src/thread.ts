@@ -334,6 +334,8 @@ export function pendingMessage(thread: ThoughtDraft): ThreadMessage | null {
 }
 
 export function attentionLabel(thread: ThoughtDraft, tasks: Task[]): string {
+  if (thread.state === "parked") return STAGE_LABEL.parked;
+  if (thread.resolvedAt) return STAGE_LABEL.done;
   const pending = pendingMessage(thread);
   if (pending?.kind === "question") return "Flow has a question";
   if (pending?.kind === "offer") return "Flow has a move for you";

@@ -2,14 +2,15 @@ import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Task } from "../model.ts";
-import { attentionLabel, clarity, pendingMessage, stageFor } from "../thread.ts";
+import { attentionLabel, clarity, pendingMessage } from "../thread.ts";
 import { BUILD_TAG } from "./Funnel.tsx";
 import { C } from "./theme.ts";
 
 /**
- * Home is one button and the threads Flow made. There is nothing to organise.
+ * Today: your one Next move, what Flow suggests recording, and only the
+ * threads that need you right now. There is nothing to organise.
  */
-export default function Home({
+export default function Today({
   threads,
   tasks,
   nextTask,
@@ -47,27 +48,18 @@ export default function Home({
   onOpenMe: () => void;
   onDismissNotice: () => void;
 }) {
-  const visible = threads.filter((t) => !t.example);
   const lastAt = (t: ThoughtDraft) => t.messages?.at(-1)?.createdAt ?? t.createdAt;
-  const sorted = [...visible].sort((a, b) => {
-    const pa = pendingMessage(a) ? 1 : 0,
-      pb = pendingMessage(b) ? 1 : 0;
-    if (pa !== pb) return pb - pa;
-    const sa = stageFor(a, tasks) === "parked" || stageFor(a, tasks) === "done" ? 1 : 0;
-    const sb = stageFor(b, tasks) === "parked" || stageFor(b, tasks) === "done" ? 1 : 0;
-    if (sa !== sb) return sa - sb;
-    return lastAt(b).localeCompare(lastAt(a));
-  });
+  const sorted = threads
+    .filter((t) => !t.example && t.state !== "parked" && pendingMessage(t))
+    .sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
   return (
     <View style={s.root}>
       <View style={s.header}>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-          <Text style={s.brand}>
-            flow<Text style={{ color: C.blue }}>.</Text>
-          </Text>
+          <Text style={s.brand}>Today</Text>
           <Text style={s.tag}>{BUILD_TAG}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Me" onPress={onOpenMe} style={s.pill}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Your level" onPress={onOpenMe} style={s.pill}>
           <Text style={s.pillText}>{levelLabel}</Text>
         </Pressable>
       </View>
@@ -135,11 +127,10 @@ export default function Home({
         </View>
         {sorted.length > 0 && (
           <View style={s.threads}>
-            <Text style={s.kicker}>YOUR THREADS</Text>
+            <Text style={s.kicker}>NEEDS YOU</Text>
             {sorted.map((t) => {
               const meter = clarity(t.threadPoints);
               const pending = pendingMessage(t);
-              const stage = stageFor(t, tasks);
               return (
                 <Pressable
                   key={t.id}
@@ -147,7 +138,7 @@ export default function Home({
                   accessibilityLabel={`Open thread ${t.title}`}
                   onPress={() => onOpenThread(t.id)}
                   disabled={busy}
-                  style={({ pressed }) => [s.card, pressed && { opacity: 0.7 }, (stage === "parked" || stage === "done") && s.cardQuiet]}
+                  style={({ pressed }) => [s.card, pressed && { opacity: 0.7 }]}
                 >
                   <View style={s.cardRow}>
                     <Text style={s.cardTitle} numberOfLines={2}>
@@ -196,7 +187,6 @@ const s = StyleSheet.create({
   doneText: { color: C.ink, fontSize: 16, fontWeight: "800" },
   threads: { gap: 10, marginTop: 10 },
   card: { padding: 16, borderRadius: 18, backgroundColor: C.white, gap: 8 },
-  cardQuiet: { opacity: 0.7 },
   cardRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardTitle: { flex: 1, fontSize: 17, lineHeight: 22, fontWeight: "700", color: C.ink },
   cardMeta: { fontSize: 13, color: C.muted },

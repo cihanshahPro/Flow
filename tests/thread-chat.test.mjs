@@ -5,7 +5,9 @@ import React from "react";
 import renderer, { act } from "react-test-renderer";
 register("./voice-loader.mjs", import.meta.url);
 const { default: ThreadChat } = await import("../src/components/ThreadChat.tsx");
-const { default: Home } = await import("../src/components/Home.tsx");
+const { default: Today } = await import("../src/components/Today.tsx");
+const { default: Threads } = await import("../src/components/Threads.tsx");
+const { default: TabBar } = await import("../src/components/TabBar.tsx");
 const { respondToRecording, answerChip, pendingMessage } = await import("../src/thread.ts");
 const { suggestDraft } = await import("../src/drafts.ts");
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -92,13 +94,13 @@ test("the meter reflects the fingerprint and expands to the person's own evidenc
   await act(async () => view.unmount());
 });
 
-test("Home is one Record button plus thread cards that say what Flow needs; the Next card has Done and calendar only", async () => {
+test("Today is the Next card, Flow's suggestion with one Record button, and only the threads that need you", async () => {
   const a = respondToRecording(suggestDraft("a", vague, now), "n1", vague, { now });
   const b = respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now });
   const task = { id: "flow:b:auto", title: "Collect the receipts", done: false, createdAt: now.toISOString(), plannedDate: "" };
   const opened = [];
   const view = await render(
-    React.createElement(Home, {
+    React.createElement(Today, {
       threads: [a, b, { ...suggestDraft("ex", rich, now), example: true }],
       tasks: [task],
       nextTask: task,
@@ -113,11 +115,12 @@ test("Home is one Record button plus thread cards that say what Flow needs; the 
   assert.equal(found.filter((l) => l === "Record").length, 1);
   assert.ok(found.includes("Done"));
   assert.ok(found.includes("Put it on my calendar"));
-  assert.ok(found.includes("Me"));
-  assert.ok(!found.some((l) => /Library|Feedback|Today|My mind|Settings/.test(l)), "no tabs to choose between");
+  assert.ok(found.includes("Your level"));
+  assert.ok(!found.some((l) => /Library|My mind|Settings/.test(l)));
   const cards = found.filter((l) => l.startsWith("Open thread "));
-  assert.equal(cards.length, 2, "example drafts are never shown");
+  assert.equal(cards.length, 2, "both threads need the person; example drafts are never shown");
   const text = textOf(view);
+  assert.match(text, /NEEDS YOU/);
   assert.match(text, /Flow has a question/);
   assert.match(text, /Flow has a move for you/);
   const card = view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === `Open thread ${a.title}`);
@@ -126,18 +129,40 @@ test("Home is one Record button plus thread cards that say what Flow needs; the 
   await act(async () => view.unmount());
 });
 
-test("an empty Home is Flow's suggested prompt with one Record button", async () => {
+test("an empty Today is Flow's suggested prompt with one Record button", async () => {
   const view = await render(
-    React.createElement(Home, {
+    React.createElement(Today, {
       threads: [], tasks: [], levelLabel: "Me",
       suggestion: { title: "Money & bills", prompt: "What's the one thing in money & bills hanging over you?" },
       onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
     }),
   );
   const found = labels(view);
-  assert.deepEqual(found.sort(), ["Me", "Record", "Something else", "Write instead"]);
+  assert.deepEqual(found.sort(), ["Record", "Something else", "Write instead", "Your level"]);
   assert.match(textOf(view), /FLOW SUGGESTS/);
   assert.match(textOf(view), /Money & bills/);
   assert.doesNotMatch(textOf(view), /What's on your mind\?/);
   await act(async () => view.unmount());
+});
+
+test("Threads lists every conversation, needs-you first, quiet ones last, with one New thread button; the tab bar has four tabs and a badge", async () => {
+  const a = respondToRecording(suggestDraft("a", vague, now), "n1", vague, { now });
+  const b = { ...respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now }), state: "parked" };
+  const c = { ...suggestDraft("c", "Clean the garage this weekend.", now), messages: [], resolvedAt: now.toISOString() };
+  const view = await render(React.createElement(Threads, { threads: [a, b, c], tasks: [], onOpenThread() {}, onNew() {} }));
+  const cards = labels(view).filter((l) => l.startsWith("Open thread "));
+  assert.equal(cards.length, 3);
+  assert.equal(cards[0], `Open thread ${a.title}`, "the thread that needs you comes first");
+  assert.ok(labels(view).includes("New thread"));
+  assert.match(textOf(view), /"1"," open"/);
+  assert.match(textOf(view), /Parked/);
+  await act(async () => view.unmount());
+  const picked = [];
+  const bar = await render(React.createElement(TabBar, { active: "today", badge: 2, onSelect: (t) => picked.push(t) }));
+  const tabs = bar.root.findAllByType("Pressable").map((n) => n.props.accessibilityLabel);
+  assert.deepEqual(tabs, ["Today", "Threads", "Progress", "Profile"]);
+  assert.match(textOf(bar), /"2"/);
+  await act(async () => bar.root.findAllByType("Pressable")[3].props.onPress());
+  assert.deepEqual(picked, ["profile"]);
+  await act(async () => bar.unmount());
 });

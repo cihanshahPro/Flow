@@ -5,7 +5,8 @@ import React from "react";
 import renderer, { act } from "react-test-renderer";
 register("./voice-loader.mjs", import.meta.url);
 const { default: Funnel, PLATE_QUESTIONS, firstPrompt } = await import("../src/components/Funnel.tsx");
-const { default: Me } = await import("../src/components/Me.tsx");
+const { default: Profile } = await import("../src/components/Profile.tsx");
+const { default: Progress } = await import("../src/components/Progress.tsx");
 const { newProfile, ITEMS, FUNNEL_VERSION } = await import("../src/personality.ts");
 const { newProgress } = await import("../src/progress.ts");
 const { suggestDraft } = await import("../src/drafts.ts");
@@ -116,7 +117,7 @@ test("the five profile questions and the first prompt are what the plan says", (
   assert.match(firstPrompt(undefined).prompt, /the thing on your mind/);
 });
 
-test("Me shows the Flow type, the level with honest counters, the profile, and the feedback route", async () => {
+test("Profile shows the Flow type and an editable plate; Progress shows the level with honest counters", async () => {
   const profile = {
     ...newProfile(),
     answers: ITEMS.map((i) => (i.reverse ? 1 : 5)),
@@ -129,20 +130,31 @@ test("Me shows the Flow type, the level with honest counters, the profile, and t
     suggestDraft("u", "Call Sam about the invoice.", new Date()),
   ];
   const fb = [];
+  const plates = [];
   const view = await render(
-    React.createElement(Me, { profile, progress, threads, notes: [{ id: "f", captureKind: "feedback", title: "x", text: "x", createdAt: "" }], onBack() {}, onRetake() {}, onFeedback: (m) => fb.push(m) }),
+    React.createElement(Profile, { profile, threads, notes: [{ id: "f", captureKind: "feedback", title: "x", text: "x", createdAt: "" }], onRetake() {}, onFeedback: (m) => fb.push(m), onPlate: (p) => plates.push(p) }),
   );
-  const text = textOf(view);
+  let text = textOf(view);
   assert.match(text, /Coordinator/);
-  assert.match(text, /Momentum/);
-  assert.match(text, /\["2"\][^]*moves done/);
   assert.match(text, /Work project/);
   assert.match(text, /Boss/);
   assert.match(text, /Sam/);
   assert.match(text, /Mornings/);
-  assert.match(text, /came up in ","2"," threads/);
   await press(view, "Record feedback");
   assert.deepEqual(fb, ["voice"]);
   assert.ok(labels(view).includes("Redo the test and profile"));
+  await press(view, "Edit profile");
+  await press(view, "Health");
+  assert.deepEqual(plates.at(-1).areas, ["Work project", "Health"]);
+  await press(view, "Evenings");
+  assert.equal(plates.at(-1).timeWindow, "Evenings");
   await act(async () => view.unmount());
+
+  const prog = await render(React.createElement(Progress, { progress, threads }));
+  text = textOf(prog);
+  assert.match(text, /Momentum/);
+  assert.match(text, /\["2"\][^]*moves done/);
+  assert.match(text, /THE LADDER/);
+  assert.match(text, /came up in ","2"," threads/);
+  await act(async () => prog.unmount());
 });

@@ -17,10 +17,13 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { randomUUID } from "expo-crypto";
 import VoiceCapture, { AudioPlayback, type SavedVoiceNote } from "./src/components/VoiceCapture";
-import Home from "./src/components/Home";
+import Today from "./src/components/Today";
+import Threads from "./src/components/Threads";
+import Progress from "./src/components/Progress";
+import Profile from "./src/components/Profile";
+import TabBar, { type Tab } from "./src/components/TabBar";
 import ThreadChat from "./src/components/ThreadChat";
 import Funnel, { type FunnelStep } from "./src/components/Funnel";
-import Me from "./src/components/Me";
 import { C } from "./src/components/theme";
 import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/services/storage";
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
@@ -29,15 +32,15 @@ import { syncProgress } from "./src/services/progress";
 import { processCapturedNote } from "./src/services/processing";
 import { syncReminders } from "./src/services/reminders";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
-import { newProfile, FUNNEL_VERSION, type Profile } from "./src/personality";
+import { newProfile, FUNNEL_VERSION, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask } from "./src/task-flow";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
+import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, pendingMessage, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
 import type { ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
-type Screen = "home" | "thread" | "me";
+type Screen = Tab | "thread";
 type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback"; prompt?: string };
 const EVALUATE_EVERY_MS = 15 * 60 * 1000;
 
@@ -56,12 +59,13 @@ function pendingQuestion(thread: ThoughtDraft): string | undefined {
 
 function Flow() {
   const [ready, setReady] = useState(false);
-  const [profile, setProfile] = useState<Profile>(newProfile());
+  const [profile, setProfile] = useState<ProfileModel>(newProfile());
   const [progress, setProgress] = useState(newProgress());
   const [threads, setThreads] = useState<ThoughtDraft[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [screen, setScreen] = useState<Screen>("home");
+  const [screen, setScreen] = useState<Screen>("today");
+  const [lastTab, setLastTab] = useState<Tab>("today");
   const [openId, setOpenId] = useState<string | null>(null);
   const [funnel, setFunnel] = useState(false);
   const [funnelStep, setFunnelStep] = useState<FunnelStep>("intro");
@@ -162,7 +166,7 @@ function Flow() {
     }
   }
 
-  async function updateProfile(p: Profile) {
+  async function updateProfile(p: ProfileModel) {
     await saveProfile(p);
     setProfile(p);
   }
@@ -192,8 +196,14 @@ function Flow() {
     void evaluateAll().catch(() => {});
   }
   function closeThread() {
-    setScreen("home");
+    setScreen(lastTab);
     setOpenId(null);
+  }
+  function selectTab(tab: Tab) {
+    setLastTab(tab);
+    setScreen(tab);
+    setNotice("");
+    setError("");
   }
 
   function startCapture(
@@ -472,7 +482,7 @@ function Flow() {
               await updateProfile(p);
               setProgress(await syncProgress().catch(() => progress));
               setFunnel(false);
-              setScreen("home");
+              selectTab("today");
             })
           }
           onRecordFirst={(prompt) => startCapture("voice", null, "thought", prompt)}
@@ -488,72 +498,81 @@ function Flow() {
   return (
     <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
       <StatusBar style="dark" />
-      {screen === "home" && (
-        <Home
-          threads={threads}
-          tasks={tasks}
-          nextTask={nextTask}
-          nextThread={nextThread}
-          levelLabel={level.level ? level.level.title : type ? type.name : "Me"}
-          suggestion={suggestion}
-          busy={busy}
-          notice={notice}
-          error={error}
-          onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}
-          onWrite={() => startCapture("text", null, "thought", suggestion.prompt)}
-          onRecordOther={() => startCapture("voice", null, "thought", "Something else that's on your mind. Say where it stands, what you'd want out of it, who's involved, what's in the way.")}
-          onOpenThread={openThread}
-          onDoneNext={doneNext}
-          onCalendarNext={calendarNext}
-          onOpenMe={() => {
-            setScreen("me");
-            setNotice("");
-          }}
-          onDismissNotice={() => {
-            setNotice("");
-            setError("");
-          }}
-        />
-      )}
-      {screen === "thread" && current && (
-        <ThreadChat
-          thread={current}
-          tasks={tasks}
-          notes={notes}
-          mode={mode}
-          busy={busy}
-          processing={processing && !capture}
-          error={error || processingError}
-          onRecord={() => startCapture("voice", current.id, "thought", pendingQuestion(current))}
-          onWrite={() => startCapture("text", current.id, "thought", pendingQuestion(current))}
-          onChip={chip}
-          onClose={closeThread}
-        />
-      )}
-      {screen === "thread" && !current && (
-        <View style={s.loading}>
-          <Text style={s.body}>That thread is no longer here.</Text>
-          <Pressable accessibilityRole="button" onPress={closeThread}>
-            <Text style={s.link}>Back to home</Text>
-          </Pressable>
-        </View>
-      )}
-      {screen === "me" && (
-        <Me
-          profile={profile}
-          progress={progress}
-          threads={threads}
-          notes={notes}
-          busy={busy}
-          onBack={() => setScreen("home")}
-          onRetake={() =>
-            void run(async () => {
-              await updateProfile({ ...profile, answers: [], funnelVersion: undefined });
-              setFunnelStep("intro");
-              setFunnel(true);
-            })
-          }
-          onFeedback={(m) => startCapture(m, null, "feedback")}
+      <View style={{ flex: 1 }}>
+        {screen === "today" && (
+          <Today
+            threads={threads}
+            tasks={tasks}
+            nextTask={nextTask}
+            nextThread={nextThread}
+            levelLabel={level.level ? level.level.title : type ? type.name : "Level"}
+            suggestion={suggestion}
+            busy={busy}
+            notice={notice}
+            error={error}
+            onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}
+            onWrite={() => startCapture("text", null, "thought", suggestion.prompt)}
+            onRecordOther={() => startCapture("voice", null, "thought", "Something else that's on your mind. Say where it stands, what you'd want out of it, who's involved, what's in the way.")}
+            onOpenThread={openThread}
+            onDoneNext={doneNext}
+            onCalendarNext={calendarNext}
+            onOpenMe={() => selectTab("progress")}
+            onDismissNotice={() => {
+              setNotice("");
+              setError("");
+            }}
+          />
+        )}
+        {screen === "threads" && (
+          <Threads threads={threads} tasks={tasks} busy={busy} onOpenThread={openThread} onNew={() => startCapture("voice", null, "thought", suggestion.prompt)} />
+        )}
+        {screen === "progress" && <Progress progress={progress} threads={threads} />}
+        {screen === "profile" && (
+          <Profile
+            profile={profile}
+            threads={threads}
+            notes={notes}
+            busy={busy}
+            onRetake={() =>
+              void run(async () => {
+                await updateProfile({ ...profile, answers: [], funnelVersion: undefined });
+                setFunnelStep("intro");
+                setFunnel(true);
+              })
+            }
+            onFeedback={(m) => startCapture(m, null, "feedback")}
+            onPlate={(plate) => void run(() => updateProfile({ ...profile, plate }))}
+          />
+        )}
+        {screen === "thread" && current && (
+          <ThreadChat
+            thread={current}
+            tasks={tasks}
+            notes={notes}
+            mode={mode}
+            busy={busy}
+            processing={processing && !capture}
+            error={error || processingError}
+            onRecord={() => startCapture("voice", current.id, "thought", pendingQuestion(current))}
+            onWrite={() => startCapture("text", current.id, "thought", pendingQuestion(current))}
+            onChip={chip}
+            onClose={closeThread}
+          />
+        )}
+        {screen === "thread" && !current && (
+          <View style={s.loading}>
+            <Text style={s.body}>That thread is no longer here.</Text>
+            <Pressable accessibilityRole="button" onPress={closeThread}>
+              <Text style={s.link}>Back</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+      {screen !== "thread" && (
+        <TabBar
+          active={screen}
+          badge={threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt && pendingMessage(t)).length}
+          onSelect={selectTab}
         />
       )}
       {captureSheet}
