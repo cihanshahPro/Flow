@@ -52,8 +52,11 @@ export async function capabilities(): Promise<Capabilities> {
   if (!FlowIntelligence) return { speech: false, llm: false, reason: "no-native-module" };
   try {
     const caps = await FlowIntelligence.capabilities();
-    if (typeof __DEV__ !== "undefined" && __DEV__) console.log("[Flow caps]", JSON.stringify(caps));
-    return caps;
+    const dev = typeof __DEV__ !== "undefined" && __DEV__;
+    // Dev only: behave like a device without Apple Intelligence to exercise the cloud path.
+    const out = dev && process.env.EXPO_PUBLIC_FORCE_NO_LLM === "1" ? { ...caps, llm: false, reason: "forced-no-llm" } : caps;
+    if (dev) console.log("[Flow caps]", JSON.stringify(out));
+    return out;
   } catch {
     return { speech: false, llm: false, reason: "capabilities-failed" };
   }
