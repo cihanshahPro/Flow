@@ -7,6 +7,8 @@ const { processVoiceNote, createThoughtDraft } =
 const { harness } = await import("./processing-mocks.mjs");
 process.env.EXPO_PUBLIC_PROCESSOR_URL = "http://testing.invalid";
 process.env.EXPO_PUBLIC_PROCESSOR_TOKEN = "test";
+// These suites exercise the development-only LAN processor.
+globalThis.__DEV__ = true;
 const note = {
   id: "recording",
   audioUri: "file://saved.m4a",
@@ -39,8 +41,9 @@ test("saved audio becomes a persisted transcript then one draft; repeat processi
   assert.deepEqual(harness.writes, ["transcript", "draft"]);
   assert.equal(draft.steps.length, 2);
   assert.equal(harness.notes[0].audioUri, note.audioUri);
+  const fetches = harness.fetches;
   assert.deepEqual(await processVoiceNote(note), draft);
-  assert.equal(harness.fetches, 1);
+  assert.equal(harness.fetches, fetches);
 });
 test("draft-write retry reuses the persisted transcript instead of retranscribing", async () => {
   harness.reset();
@@ -59,14 +62,14 @@ test("draft-write retry reuses the persisted transcript instead of retranscribin
     harness.requests.filter(
       (r) => r.headers["Content-Type"] === "application/json",
     ).length,
-    1,
+    2, // each attempt reshapes the saved text; audio is uploaded once
   );
 });
 test("unreachable processor does not change or erase the original recording", async () => {
   harness.reset();
   harness.notes = [structuredClone(note)];
   harness.offline = true;
-  await assert.rejects(processVoiceNote(note), /same Wi-Fi/);
+  await assert.rejects(processVoiceNote(note), /development processor/);
   assert.deepEqual(harness.notes, [note]);
   assert.deepEqual(harness.writes, []);
 });

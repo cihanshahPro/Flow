@@ -37,7 +37,8 @@ export type ThoughtDraft = {
   createdAt: string;
   example?: boolean;
   summary?: string;
-  organizer?: "apple-local";
+  /** apple-local: Apple Foundation Models on device; cloud: text-only cloud shaper. */
+  organizer?: "apple-local" | "cloud";
   direction?: DirectionContext;
   /** New fields are additive so existing local drafts remain readable. */
   threadStatus?: ThreadStatus;
@@ -237,6 +238,7 @@ export function shapedDraft(
   id: string,
   source: string,
   value: unknown,
+  organizer: "apple-local" | "cloud" = "apple-local",
 ): ThoughtDraft {
   const base = suggestDraft(id, source);
   if (!value || typeof value !== "object")
@@ -300,7 +302,7 @@ export function shapedDraft(
     title,
     summary: faithfulSummary,
     steps,
-    organizer: "apple-local",
+    organizer,
   };
 }
 

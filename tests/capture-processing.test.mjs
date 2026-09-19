@@ -9,6 +9,8 @@ const { harness } = await import("./processing-mocks.mjs");
 
 process.env.EXPO_PUBLIC_PROCESSOR_URL = "http://testing.invalid";
 process.env.EXPO_PUBLIC_PROCESSOR_TOKEN = "test";
+// These suites exercise the development-only LAN processor.
+globalThis.__DEV__ = true;
 
 const recording = (extra = {}) => ({
   id: "capture",
@@ -72,7 +74,7 @@ for (const captureKind of ["note", "feedback"]) {
     const saved = recording({ captureKind });
     harness.notes = [structuredClone(saved)];
     harness.offline = true;
-    await assert.rejects(processCapturedNote(saved), /same Wi-Fi/);
+    await assert.rejects(processCapturedNote(saved), /development processor/);
     assert.deepEqual(harness.notes, [saved]);
     assert.deepEqual(harness.writes, []);
     assert.deepEqual(harness.drafts, []);
@@ -108,7 +110,7 @@ test("explicit and legacy thoughts retain the existing draft path", async () => 
     assert.deepEqual(result.draft.direction, direction);
     assert.deepEqual(harness.writes, ["transcript", "draft"]);
     assert.deepEqual(await processCapturedNote(saved), result);
-    assert.equal(harness.fetches, 1);
+    assert.equal(harness.requests.filter((r) => r.body?.uri).length, 1, "audio uploaded once");
   }
 });
 
@@ -166,7 +168,7 @@ test("a thought update stays attached to its original plan and is idempotent", a
   assert.deepEqual(result.draft.updates, [transcript]);
   assert.deepEqual(harness.notes, [{ ...saved, text: transcript }]);
   assert.deepEqual(await processCapturedNote(saved), result);
-  assert.equal(harness.fetches, 1);
+  assert.equal(harness.requests.filter((r) => r.body?.uri).length, 1, "audio uploaded once");
   assert.deepEqual(harness.writes, ["transcript", "draft"]);
 });
 
