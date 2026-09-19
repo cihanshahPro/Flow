@@ -230,8 +230,8 @@ export function threadTasks(thread: ThoughtDraft, tasks: Task[]): Task[] {
 
 export function stageFor(thread: ThoughtDraft, tasks: Task[]): ThreadStage {
   if (thread.state === "parked") return "parked";
+  if (thread.resolvedAt) return "done";
   const mine = threadTasks(thread, tasks);
-  if (mine.length && mine.every((t) => t.done)) return "done";
   if (mine.some((t) => !t.done)) return "moving";
   if (isReady(thread.threadPoints)) return "understood";
   return "dumped";
@@ -239,7 +239,7 @@ export function stageFor(thread: ThoughtDraft, tasks: Task[]): ThreadStage {
 
 export const STAGE_LABEL: Record<ThreadStage, string> = {
   dumped: "Flow is working on this",
-  understood: "Ready — Flow has moves",
+  understood: "Ready",
   moving: "In motion",
   done: "Done",
   parked: "Parked",
@@ -259,7 +259,9 @@ export function attentionLabel(thread: ThoughtDraft, tasks: Task[]): string {
   if (pending?.kind === "offer") return "Flow has a move for you";
   if (pending?.kind === "checkin") return "Quick check-in";
   if (pending?.kind === "stale") return "Still on this?";
-  return STAGE_LABEL[stageFor(thread, tasks)];
+  const stage = stageFor(thread, tasks);
+  if (stage === "understood" && offerableSteps(thread).length) return "Ready — Flow has moves";
+  return STAGE_LABEL[stage];
 }
 
 /** Moves Flow can offer: steps not yet accepted or declined, at most three. */
@@ -427,12 +429,24 @@ export function answerChip(
   if (target.kind === "offer" && target.stepId) {
     if (chipId === "do") {
       effects.push({ type: "accept", stepId: target.stepId });
+      next = {
+        ...next,
+        steps: next.steps.map((s) => (s.id === target.stepId ? { ...s, accepted: true, deferred: false } : s)),
+      };
       push({ from: "flow", kind: "ack", text: "On it. It's your Next card now — I'll check back after." });
     } else {
       next = { ...next, declinedStepIds: [...(thread.declinedStepIds ?? []), target.stepId] };
       const step = offerableSteps(next)[0];
       if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at));
       else push({ from: "flow", kind: "ack", text: "Fair. I'll hold this thread and bring it back when something changes." });
+    }
+  } else if (target.kind === "checkin" && target.id.includes(":check:resolved:")) {
+    if (chipId === "yes") {
+      next = { ...next, resolvedAt: at };
+      effects.push({ type: "credit", id: target.id });
+      push({ from: "flow", kind: "hype", text: voice.resolved(mode) });
+    } else {
+      push({ from: "flow", kind: "question", pointId: "next", text: "Okay. What's the next move on this?" });
     }
   } else if (target.kind === "checkin") {
     if (chipId === "yes") {
@@ -563,6 +577,18 @@ export function noteMoveDone(
   ];
   const step = isReady(next.threadPoints) && !pendingMessage(next) ? offerableSteps(next)[0] : undefined;
   if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at));
+  else if (!pendingMessage(next))
+    added.push({
+      id: `${thread.id}:check:resolved:${task.id}`,
+      createdAt: at,
+      from: "flow",
+      kind: "checkin",
+      text: "That was the last move I had. Is this whole thing resolved now?",
+      chips: [
+        { id: "yes", label: "Resolved 🎉" },
+        { id: "no", label: "There's more" },
+      ],
+    });
   return withMessages(next, added);
 }
 

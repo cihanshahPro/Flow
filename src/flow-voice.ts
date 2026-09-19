@@ -101,6 +101,13 @@ const DONE: Record<Mode, string[]> = {
   connector: ["🎉💛 Done! That's a promise kept.", "🙌 Finished. People will notice."],
 };
 
+const RESOLVED: Record<Mode, string> = {
+  explorer: "🎉🎉🔥 Thread closed. That's the whole thing, done.",
+  builder: "🏁✅ Resolved and closed. Clean finish.",
+  analyst: "🏁📈 Resolved. Filed as complete.",
+  connector: "🎉💛 Resolved — and everyone involved is sorted. Lovely.",
+};
+
 const BACK: Record<Mode, string> = {
   explorer: "👀🙌 Look who came back. Picking up where we left off.",
   builder: "👋 Good — picking up where we left off.",
@@ -134,6 +141,7 @@ export const voice = {
   replyAck: (mode: Mode, seed: string) => pick(REPLY_ACK[mode], seed),
   fullPicture: (mode: Mode) => FULL[mode],
   done: (mode: Mode, seed: string) => pick(DONE[mode], seed),
+  resolved: (mode: Mode) => RESOLVED[mode],
   back: (mode: Mode) => BACK[mode],
   levelUp: (mode: Mode, level: string) => LEVEL[mode].replace("{level}", level),
   offerIntro: (mode: Mode) => OFFER_INTRO[mode],

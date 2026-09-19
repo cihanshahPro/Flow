@@ -199,8 +199,42 @@ test("an accepted move that slipped past its day gets a Done / Not yet check-in"
   assert.equal(check.taskId, task.id);
   const yes = answerChip(checked, check.id, "yes", { now: later });
   assert.ok(yes.effects.some((e) => e.type === "complete" && e.taskId === task.id));
-  assert.equal(stageFor(accepted, [{ ...task, done: true }]), "done");
-  assert.equal(evaluateThread(accepted, [{ ...task, done: true }], { now: later }), accepted);
+  assert.equal(stageFor(accepted, [{ ...task, done: true }]), "understood", "finishing a move does not close the thread by itself");
+  // With the move done, the only thing left to ask about is the date that passed ("tonight").
+  const dueCheck = pendingMessage(evaluateThread(accepted, [{ ...task, done: true }], { now: later }));
+  assert.equal(dueCheck.kind, "checkin");
+  assert.equal(dueCheck.taskId, undefined);
+});
+
+test("after the last move Flow asks whether the whole thing is resolved; only a Yes closes the thread", async () => {
+  const { noteMoveDone } = await import("../src/thread.ts");
+  const t = respondToRecording(thread(rich, "r1"), "n1", rich, { now });
+  const offer = pendingMessage(t);
+  assert.equal(offer.kind, "offer");
+  let { thread: accepted } = answerChip(t, offer.id, "do", { now });
+  // Decline everything else so no moves remain.
+  let pending = pendingMessage(accepted);
+  while (pending?.kind === "offer") {
+    accepted = answerChip(accepted, pending.id, "skip", { now }).thread;
+    pending = pendingMessage(accepted);
+  }
+  const task = { id: `flow:${t.id}:${offer.stepId}`, title: "Send the invoice", done: true, plannedDate: "" };
+  const after = noteMoveDone(accepted, task, { now });
+  assert.equal(after.messages.at(-2).kind, "hype");
+  const ask = pendingMessage(after);
+  assert.equal(ask.kind, "checkin");
+  assert.match(ask.text, /resolved/i);
+  assert.deepEqual(ask.chips.map((c) => c.label), ["Resolved 🎉", "There's more"]);
+  assert.equal(stageFor(after, [task]), "understood");
+  assert.equal(noteMoveDone(after, task, { now }), after, "idempotent");
+  const more = answerChip(after, ask.id, "no", { now });
+  assert.equal(pendingMessage(more.thread).kind, "question");
+  assert.equal(stageFor(more.thread, [task]), "understood");
+  const yes = answerChip(after, ask.id, "yes", { now });
+  assert.ok(yes.thread.resolvedAt);
+  assert.equal(stageFor(yes.thread, [task]), "done");
+  assert.deepEqual(yes.effects, [{ type: "credit", id: ask.id }]);
+  assert.equal(yes.thread.messages.at(-1).kind, "hype");
 });
 
 test("a quiet thread gets one Still on it / Park it prompt, and parking is honoured", () => {

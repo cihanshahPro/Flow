@@ -54,6 +54,8 @@ export type ThoughtDraft = {
   declinedStepIds?: string[];
   lastEvaluatedAt?: string;
   lastOpenedAt?: string;
+  /** Set only when the person confirms the whole thread is resolved. */
+  resolvedAt?: string;
 };
 export type ThreadStage = "dumped" | "understood" | "moving" | "done" | "parked";
 export type DueHint = { date: string; phrase: string };
