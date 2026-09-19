@@ -11,7 +11,11 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
-    infoPlist: { ITSAppUsesNonExemptEncryption: false },
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      NSSpeechRecognitionUsageDescription:
+        "Flowthread turns your voice note into text on your iPhone. Audio never leaves your device.",
+    },
   },
   android: {
     package: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
