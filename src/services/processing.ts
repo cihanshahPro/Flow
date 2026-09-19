@@ -6,6 +6,7 @@ import {
   suggestDraft,
   shapedDraft,
   appendPlanUpdate,
+  missingThreadPoints,
   type ThoughtDraft,
 } from "../drafts";
 import type { DirectionContext, Note } from "../model";
@@ -130,7 +131,7 @@ async function processThoughtNote(note: Note): Promise<ThoughtDraft> {
     ...draft,
     threadStatus: draft.threadStatus ?? "dumped",
     goalsReady: draft.goalsReady ?? false,
-    missingPoints: draft.missingPoints ?? [],
+    missingPoints: draft.missingPoints ?? missingThreadPoints(draft.source),
   };
   if (note.planId) {
     const plan = (await loadDrafts()).find((d) => d.id === note.planId);

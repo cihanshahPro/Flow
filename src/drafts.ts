@@ -85,6 +85,7 @@ export function suggestDraft(
   const source = text.trim();
   if (!source || source.length > 20000)
     throw new Error("Use between 1 and 20,000 characters.");
+  const missing = missingThreadPoints(source);
   const sentences = source
     .split(/(?:\n+|[.!?]+\s+|;\s*|,?\s+then\s+)/i)
     .map((s) =>
@@ -127,9 +128,10 @@ export function suggestDraft(
     })),
     state: "draft",
     createdAt: now.toISOString(),
-    threadStatus: "dumped",
-    goalsReady: false,
-    missingPoints: missingThreadPoints(source),
+    // A first dump that already answers every point is ready; nothing forces a second recording.
+    threadStatus: missing.length ? "dumped" : "ready",
+    goalsReady: missing.length === 0,
+    missingPoints: missing,
     threadPoints: threadFingerprint(source),
   };
 }
