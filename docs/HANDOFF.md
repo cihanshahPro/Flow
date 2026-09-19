@@ -39,9 +39,7 @@ The existing web implementation's authentication, cloud records/audio, browser t
 
 ## SDK decision to review before release
 
-The dependency baseline is **Expo SDK 54 (`expo ~54.0.36`), React Native 0.81.5, React 19.1.0**. This is intentional for physical-iPhone testing in App Store Expo Go. [Expo currently documents](https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/) that its App Store Expo Go build stops at SDK 54.
-
-Before upgrading, review the current Expo Go/testing route, library compatibility, and migration notes together; update the lockfile and repeat the device checklist. A development build becomes the preferred route when adding custom native modules. SDK 54 itself is not the current upload blocker: Expo says its default EAS image meets the Xcode 26/iOS 26 build requirement. Recheck that [build-image guidance](https://expo.dev/blog/app-store-connect-minimum-sdk-26) for the actual release date.
+The current testing branch is on **Expo SDK 57**. Use the matching Expo Go build for the QR test server, and do not downgrade the lockfile to SDK 54. Before a store build, verify the current Expo Go/device compatibility, native module compatibility, signing setup, and EAS build image together; repeat the device checklist after any SDK change.
 
 ## Build and TestFlight ownership
 
