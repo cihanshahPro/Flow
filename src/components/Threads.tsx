@@ -103,7 +103,7 @@ export default function Threads({
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.paper },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 72 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 84 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
   count: { fontSize: 13, fontWeight: "700", color: C.muted },
   group: { gap: 10, marginTop: 6 },

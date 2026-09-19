@@ -399,7 +399,7 @@ export function concreteMove(value: string): boolean {
 const MOVE_LEAD =
   /^(?:(?:ok(?:ay)?|so|well|and|then|first|next|also|maybe|probably|just|i'?ll|i will|i'?m going to|i am going to|i can|i could|i'?m gonna|gonna|going to|plan to|i plan to|want to|i want to|need to|i need to|should|i should|i|start by|starting with|step one|the first (?:thing|step) is(?: to)?|first step is(?: to)?|to)\s+)+/i;
 const MOVE_WHEN =
-  /\s*\b(?:tonight|today|tomorrow(?:\s+(?:morning|afternoon|evening|night))?|this\s+(?:morning|afternoon|evening|weekend)|(?:on\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)day|(?:at|by|around)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|first thing|later)\b[\s,.]*/gi;
+  /\s*\b(?:tonight|today|tomorrow(?:\s+(?:morning|afternoon|evening|night))?|this\s+(?:morning|afternoon|evening|weekend)|(?:(?:on|by|before)\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)day|(?:at|by|around)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|first thing|later)\b[\s,.]*/gi;
 
 /** A short "verb + object" move from someone's own sentence: no filler, no time words, at most `max` characters. */
 export function cleanMove(text: string, max = 60): string {
@@ -410,7 +410,8 @@ export function cleanMove(text: string, max = 60): string {
   if (t.length > max) {
     const cut = t.slice(0, max - 1);
     const at = cut.lastIndexOf(" ");
-    t = (at > max * 0.5 ? cut.slice(0, at) : cut).replace(/[\s,;:–-]+$/, "") + "…";
+    t = (at > max * 0.5 ? cut.slice(0, at) : cut).replace(/[\s,;:–-]+$/, "");
+    t = t.replace(/(?:\s+(?:by|for|to|the|of|and|with|my|a|an|in|on|at))+$/i, "") + "…";
   }
   return capitalise(t);
 }

@@ -177,7 +177,7 @@ export default function Today({
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.paper },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 72 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 84 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
   streak: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, backgroundColor: C.lime },
   streakText: { fontSize: 13, fontWeight: "800", color: C.onLime },

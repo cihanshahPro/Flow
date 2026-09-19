@@ -23,3 +23,8 @@ test("moveHeadline puts the time first", () => {
   assert.equal(moveHeadline(task, "Evenings", now), "This evening: Draft page 1 of the quarterly report");
   assert.equal(moveHeadline({ ...task, plannedDate: "2026-09-20" }, "Evenings", now), "Tomorrow: Draft page 1 of the quarterly report");
 });
+
+test("cleanMove drops a trailing deadline and never ends on a dangling word", () => {
+  assert.equal(cleanMove("Finish the quarterly report for my boss by Friday"), "Finish the quarterly report for my boss");
+  assert.ok(!/\b(?:by|for|to|the|of|my)…$/i.test(cleanMove("Finish the quarterly report for my boss and then send it to everyone on the team", 40)));
+});
