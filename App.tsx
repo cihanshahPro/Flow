@@ -33,7 +33,13 @@ import { starterFor, starterDraft } from "./src/starters";
 import type { DirectionContext } from "./src/model";
 import Onboarding from "./src/components/Onboarding";
 import { loadProfile, saveProfile } from "./src/services/profile";
-import { productivityGuide, newProfile, type Profile } from "./src/personality";
+import {
+  AREAS,
+  areaSelections,
+  productivityGuide,
+  newProfile,
+  type Profile,
+} from "./src/personality";
 import DraftReview from "./src/components/DraftReview";
 import {
   processVoiceNote,
@@ -124,6 +130,10 @@ function Flow() {
   const [screen, setScreen] = useState<Screen>("Today");
   const [profile, setProfile] = useState<Profile>(newProfile());
   const [onboarding, setOnboarding] = useState(false);
+  const [completionSection, setCompletionSection] = useState<
+    "assessment" | "areas" | undefined
+  >();
+  const [timeChosenFor, setTimeChosenFor] = useState<string | null>(null);
   const [captureTopic, setCaptureTopic] = useState("");
   const [ready, setReady] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -182,6 +192,10 @@ function Flow() {
       refresh(),
       loadProfile().then((p) => {
         setProfile(p);
+        if (typeof p.preferredMinutes === "number") {
+          setBudget(p.preferredMinutes);
+          setTimeChosenFor(localDate());
+        } else if (p.preferredMinutes === "varies") setBudget(10);
         setOnboarding(!p.completed && p.stage === "intro");
       }),
     ])
@@ -313,6 +327,34 @@ function Flow() {
     await saveProfile(p);
     setProfile(p);
   }
+  function finishProfileSection() {
+    setOnboarding(false);
+    if (completionSection) {
+      setCompletionSection(undefined);
+      navigate("Profile");
+    }
+  }
+  async function openProfileSection(
+    section: "assessment" | "areas",
+    requestedIndex?: number,
+  ) {
+    await run(async () => {
+      const index = AREAS.findIndex(
+        (a) =>
+          profile.areas[a.id] !== "Nothing current" &&
+          !areaSelections(profile.areas[a.id]).some((c) =>
+            a.choices.includes(c),
+          ),
+      );
+      await updateProfile({
+        ...profile,
+        stage: section,
+        areaIndex: requestedIndex ?? (index < 0 ? 0 : index),
+      });
+      setCompletionSection(section);
+      setOnboarding(true);
+    });
+  }
   function continueJourney() {
     navigate("Today");
     if (next.kind === "setup") {
@@ -355,7 +397,11 @@ function Flow() {
   }
   const current = drafts.find((d) => d.id === selected);
   const activeDrafts = drafts.filter((d) => d.state === "draft");
-  const day = todayTasks(tasks, budget);
+  const effectiveBudget =
+    profile.preferredMinutes === "varies" && timeChosenFor !== localDate()
+      ? 10
+      : budget;
+  const day = todayTasks(tasks, effectiveBudget);
   const today = localDate();
   const done = tasks.filter((t) => t.done && t.plannedDate === today).length;
   const choose: ChooseCalendar = (options, preferred) =>
@@ -518,7 +564,8 @@ function Flow() {
             await saveProfile(p);
             setProfile(p);
           }}
-          onClose={() => setOnboarding(false)}
+          onClose={finishProfileSection}
+          sectionMode={completionSection}
           onCapture={(topic) => {
             const d = directionOptions(profile).find((d) => d.title === topic);
             if (d) guidedCapture(d);
@@ -574,7 +621,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 08</Text>
+          <Text style={s.test}>TEST BUILD · 09</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
@@ -718,6 +765,13 @@ function Flow() {
                   disabled={busy}
                 />
               )}
+              {nextTask && nextTask.minutes > effectiveBudget && (
+                <Text style={s.body}>
+                  This saved action needs {nextTask.minutes} minutes; your
+                  current time filter is {effectiveBudget}. Keep it for a longer
+                  window or choose a time in Calendar.
+                </Text>
+              )}
               <View style={s.captureRow}>
                 <Tap
                   label="Capture another thought"
@@ -731,17 +785,30 @@ function Flow() {
                   {done ? `${done} done` : "Keep it light"}
                 </Text>
               </View>
+              {profile.preferredMinutes === "varies" &&
+                timeChosenFor !== localDate() && (
+                  <Text style={s.body}>
+                    How much time fits today? Showing short options up to 10
+                    minutes until you choose.
+                  </Text>
+                )}
               <View style={s.budgets}>
                 {[10, 30, 60].map((m) => (
                   <Pressable
                     key={m}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: budget === m }}
-                    onPress={() => setBudget(m)}
-                    style={[s.budget, budget === m && s.budgetActive]}
+                    accessibilityState={{ selected: effectiveBudget === m }}
+                    onPress={() => {
+                      setBudget(m);
+                      setTimeChosenFor(localDate());
+                    }}
+                    style={[s.budget, effectiveBudget === m && s.budgetActive]}
                   >
                     <Text
-                      style={[s.budgetText, budget === m && { color: C.white }]}
+                      style={[
+                        s.budgetText,
+                        effectiveBudget === m && { color: C.white },
+                      ]}
                     >
                       {m} min
                     </Text>
@@ -807,6 +874,34 @@ function Flow() {
               tasks={tasks}
               busy={busy}
               onContinue={continueJourney}
+              onConfigure={async (patch) => {
+                if (lock.current)
+                  throw new Error("Another save is in progress.");
+                lock.current = true;
+                setBusy(true);
+                try {
+                  await updateProfile({ ...profile, ...patch });
+                  if (patch.preferredMinutes !== undefined) {
+                    setBudget(
+                      typeof patch.preferredMinutes === "number"
+                        ? patch.preferredMinutes
+                        : 10,
+                    );
+                    setTimeChosenFor(
+                      typeof patch.preferredMinutes === "number"
+                        ? localDate()
+                        : null,
+                    );
+                  }
+                } finally {
+                  lock.current = false;
+                  setBusy(false);
+                }
+              }}
+              onCompleteAssessment={() => void openProfileSection("assessment")}
+              onCompleteAreas={(index) =>
+                void openProfileSection("areas", index)
+              }
               onEditAreas={() =>
                 void run(async () => {
                   await updateProfile({
@@ -846,6 +941,7 @@ function Flow() {
                     ...profile,
                     focus: title,
                     focusExplicit: true,
+                    focusNone: false,
                   });
                   navigate("Today");
                 })
