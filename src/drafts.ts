@@ -293,7 +293,8 @@ export function shapedDraft(
     });
   }
   // Dropped options are replaced by the template's own, so a thread never opens with fewer than two moves to pick from.
-  const complete = completeOptions(steps, base.steps.map((s, i) => ({ ...s, id: `tpl-${i}` })));
+  // An empty list is the model's deliberate answer for reflective notes and stays empty.
+  const complete = !plan.choices.length ? steps : completeOptions(steps, base.steps.map((s, i) => ({ ...s, id: `tpl-${i}` })));
   if (plan.choices.length && !complete.length)
     throw new Error(
       "The suggested actions could not be matched to your words.",

@@ -157,8 +157,23 @@ export type Profile = {
   /** Settings: morning reminder time as "HH:MM" (default 08:30) and an off switch. Additive. */
   morningTime?: string;
   morningOff?: boolean;
+  /** When the person tapped "Later" on the get-to-know-you invitation (ISO). Additive. */
+  assessmentLaterAt?: string;
 };
-export const FUNNEL_VERSION = 3;
+/** 4: welcome → first thought → Flow's first move; the test and profile come after, by invitation. */
+export const FUNNEL_VERSION = 4;
+/** Profiles that finished build 12's test-first funnel (3) keep their flow untouched. */
+export const FUNNEL_DONE_VERSION = 3;
+export const needsFunnel = (p: Pick<Profile, "funnelVersion">): boolean => (p.funnelVersion ?? 0) < FUNNEL_DONE_VERSION;
+export const assessmentDone = (answers: number[] | undefined): boolean =>
+  !!answers && answers.length >= ITEMS.length && answers.slice(0, ITEMS.length).every((a) => Number.isInteger(a) && a >= 1 && a <= 5);
+/** "Later" quiets the invitation on Today for this long; Profile always offers the test. */
+export const INVITE_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+export function shouldInviteAssessment(p: Profile, hasFirstThread: boolean, now = new Date()): boolean {
+  if (!hasFirstThread || assessmentDone(p.answers) || needsFunnel(p)) return false;
+  const later = p.assessmentLaterAt ? Date.parse(p.assessmentLaterAt) : NaN;
+  return !(Number.isFinite(later) && now.getTime() - later < INVITE_SNOOZE_MS);
+}
 
 export type Plate = {
   areas: string[];

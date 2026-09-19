@@ -150,6 +150,8 @@ export const Animated = {
   Text: "Animated.Text",
   timing: () => animation(),
   parallel: () => animation(),
+  sequence: () => animation(),
+  loop: () => animation(),
 };
 export const Easing = { in: (f) => f, quad: (x) => x };
 export const Dimensions = { get: () => ({ width: 390, height: 844 }) };

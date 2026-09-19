@@ -108,3 +108,37 @@ test("release build ignores LAN env: no native speech means a clear error, never
   await assert.rejects(processVoiceNote(note()), /On-device transcription/);
   assert.equal(harness.fetches, 0);
 });
+
+test("a shaper that takes too long falls back to the template and logs the timeout", async () => {
+  harness.reset();
+  device(true);
+  harness.native.shapeThought = () => new Promise(() => {}); // never answers
+  const { shapeText } = await import("../src/services/processors.ts");
+  const warn = console.warn;
+  const warned = [];
+  console.warn = (m) => warned.push(String(m));
+  try {
+    const out = await shapeText(transcript, null, { timeoutMs: 25 });
+    assert.equal(out.shape, null);
+    assert.equal(out.kind, "template");
+    assert.match(out.reason, /timeout/);
+    assert.equal(shaperLog()[0].outcome, "fallback");
+    assert.equal(shaperLog()[0].detail, "timeout");
+    assert.ok(warned.some((m) => /timed out/.test(m)), "the fallback is logged");
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test("cancelling while Flow thinks uses the template right away", async () => {
+  harness.reset();
+  device(true);
+  harness.native.shapeThought = () => new Promise(() => {});
+  const { shapeText } = await import("../src/services/processors.ts");
+  const abort = new AbortController();
+  const pending = shapeText(transcript, null, { signal: abort.signal, timeoutMs: 60_000 });
+  setTimeout(() => abort.abort(), 10);
+  const out = await pending;
+  assert.equal(out.shape, null);
+  assert.equal(shaperLog()[0].detail, "cancelled");
+});

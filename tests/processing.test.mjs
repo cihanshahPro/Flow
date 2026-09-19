@@ -120,7 +120,8 @@ test("invalid organizer output preserves direction in the basic audio draft", as
   const draft = await processVoiceNote({ ...note, direction });
   assert.deepEqual(draft.direction, direction);
   assert.equal(draft.source, transcript);
-  assert.equal(draft.organizer, undefined);
+  // The invented option is dropped; any moves left come from the template, never from the model.
+  assert.ok(draft.steps.every((s) => !s.id.startsWith("ai-")));
 });
 
 test("typed thoughts keep context locally for AI and offline drafts without changing their words", async () => {

@@ -24,6 +24,7 @@ import Progress from "./src/components/Progress";
 import Profile from "./src/components/Profile";
 import TabBar, { type Tab } from "./src/components/TabBar";
 import ThreadChat from "./src/components/ThreadChat";
+import Thinking from "./src/components/Thinking";
 import Funnel, { type FunnelStep } from "./src/components/Funnel";
 import { C } from "./src/components/theme";
 import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/services/storage";
@@ -38,7 +39,7 @@ import { syncReminders } from "./src/services/reminders";
 import { exportAllData, deleteAllData } from "./src/services/data";
 import Constants from "expo-constants";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
-import { newProfile, FUNNEL_VERSION, type Profile as ProfileModel } from "./src/personality";
+import { newProfile, needsFunnel, shouldInviteAssessment, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
@@ -95,6 +96,9 @@ function Flow() {
   const processingLock = useRef(false);
   const captureId = useRef("");
   const revealAfterSheet = useRef<string | null>(null);
+  const shapingAbort = useRef<AbortController | null>(null);
+  const captureOpen = useRef(false);
+  captureOpen.current = !!capture;
 
   const mode = modeFor(profile.answers) ?? DEFAULT_MODE;
   const current = threads.find((t) => t.id === openId);
@@ -153,8 +157,8 @@ function Flow() {
     Promise.all([refresh(), loadProfile()])
       .then(async ([data, p]) => {
         setProfile(p);
-        // Every device goes through the build-12 funnel once, from the top, whatever an older build saved.
-        setFunnel(p.funnelVersion !== FUNNEL_VERSION);
+        // New (and pre-build-12) profiles get welcome → first thought. Anyone who finished the test-first funnel keeps their flow.
+        setFunnel(needsFunnel(p));
         setFunnelStep("intro");
         await evaluateAll(data);
         setReady(true);
@@ -290,28 +294,43 @@ function Flow() {
     setVoiceResult(entry);
     void processRecording(entry);
   }
+  /** Stop waiting for the AI: the thread is still made, from the basic template. */
+  function cancelShaping() {
+    shapingAbort.current?.abort();
+  }
+  /** Leave the capture sheet while Flow keeps thinking; the thread lands in the list. */
+  function continueInBackground() {
+    setCapture(null);
+    selectTab(lastTab);
+  }
   async function processRecording(entry: Note) {
     if (processingLock.current) return;
     processingLock.current = true;
+    const abort = new AbortController();
+    shapingAbort.current = abort;
     setProcessing(true);
     setProcessingError("");
     const before = level.level?.number ?? 0;
     try {
-      const result = await processCapturedNote(entry, { askCloudConsent });
+      const result = await processCapturedNote(entry, { askCloudConsent, signal: abort.signal });
       const data = await refresh();
       if (result.kind === "note") {
         setCapture(null);
         setNotice("Saved. Thank you — it stays on this phone.");
         return;
       }
+      const stayedHere = captureOpen.current;
       setCapture(null);
-      if (openId !== result.draft.id) reveal(result.draft.id);
+      // Someone who walked away is not pulled into the thread; it is simply in their list.
+      if (!stayedHere) setNotice(`Flow shaped “${result.draft.title}”. It's in your threads.`);
+      else if (openId !== result.draft.id) reveal(result.draft.id);
       await evaluateAll(data);
       await announceLevel(result.draft.id, before);
     } catch (failure) {
       setProcessingError(failure instanceof Error ? failure.message : "Processing paused. Your recording is saved.");
       await refresh().catch(() => {});
     } finally {
+      shapingAbort.current = null;
       processingLock.current = false;
       setProcessing(false);
     }
@@ -331,7 +350,8 @@ function Flow() {
       };
       await saveNote(n);
       setInput("");
-      await processRecording(n);
+      // Not awaited: the sheet can be left while Flow thinks, and Today stays usable.
+      void processRecording(n);
     });
   }
 
@@ -454,11 +474,9 @@ function Flow() {
                 <>
                   {voiceResult ? (
                     <View style={s.card}>
-                      <Text style={s.cardTitle}>{processing ? "Saved. Flow is listening back…" : "Recording saved."}</Text>
-                      {processing ? <ActivityIndicator color={C.blue} /> : <AudioPlayback uri={voiceResult.audioUri!} />}
-                      <Text style={s.body}>
-                        {processing ? "Your audio stays on this phone. Turning it into text here." : processingError}
-                      </Text>
+                      <Text style={s.cardTitle}>{processing ? "Saved." : "Recording saved."}</Text>
+                      {processing ? <Thinking onBackground={continueInBackground} onCancel={cancelShaping} /> : <AudioPlayback uri={voiceResult.audioUri!} />}
+                      {!processing && <Text style={s.body}>{processingError}</Text>}
                       {!processing && (
                         <Pressable accessibilityRole="button" accessibilityLabel="Retry processing" onPress={() => void processRecording(voiceResult)} style={s.primary}>
                           <Text style={s.primaryText}>Retry</Text>
@@ -497,6 +515,7 @@ function Flow() {
                   >
                     <Text style={s.primaryText}>{processing ? "Flow is reading…" : capture?.kind === "feedback" ? "Save feedback" : "Send to Flow"}</Text>
                   </Pressable>
+                  {processing && <Thinking onBackground={continueInBackground} onCancel={cancelShaping} />}
                   {!!processingError && <Text style={s.error}>{processingError}</Text>}
                   {!processing && (
                     <Pressable accessibilityRole="button" accessibilityLabel="Speak instead" onPress={() => capture && setCapture({ ...capture, mode: "voice" })} hitSlop={8} style={{ alignSelf: "center" }}>
@@ -543,6 +562,7 @@ function Flow() {
           }
           onRecordFirst={(prompt) => startCapture("voice", null, "thought", prompt)}
           onWriteFirst={(prompt) => startCapture("text", null, "thought", prompt)}
+          onExit={needsFunnel(profile) ? undefined : () => void run(async () => { await updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() }); setFunnel(false); selectTab("today"); })}
         />
         {captureSheet}
       </SafeAreaView>
@@ -566,6 +586,19 @@ function Flow() {
             celebrate={celebrate}
             suggestion={suggestion}
             busy={busy}
+            processing={processing && !capture}
+            onCancelProcessing={cancelShaping}
+            invite={
+              shouldInviteAssessment(profile, threads.some((t) => !t.example))
+                ? {
+                    onStart: () => {
+                      setFunnelStep("test");
+                      setFunnel(true);
+                    },
+                    onLater: () => void run(() => updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() })),
+                  }
+                : null
+            }
             notice={notice}
             error={error}
             onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}
@@ -593,8 +626,8 @@ function Flow() {
             busy={busy}
             onRetake={() =>
               void run(async () => {
-                await updateProfile({ ...profile, answers: [], funnelVersion: undefined });
-                setFunnelStep("intro");
+                await updateProfile({ ...profile, answers: [] });
+                setFunnelStep("test");
                 setFunnel(true);
               })
             }

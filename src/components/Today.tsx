@@ -4,6 +4,7 @@ import type { ThoughtDraft } from "../drafts.ts";
 import type { Task } from "../model.ts";
 import { attentionLabel, clarity, moveHeadline, pendingMessage } from "../thread.ts";
 import Celebrate from "./Celebrate.tsx";
+import Thinking from "./Thinking.tsx";
 import { C } from "./theme.ts";
 
 /**
@@ -20,6 +21,9 @@ export default function Today({
   celebrate = 0,
   suggestion,
   busy = false,
+  processing = false,
+  onCancelProcessing,
+  invite,
   notice = "",
   error = "",
   onRecord,
@@ -43,6 +47,11 @@ export default function Today({
   /** What Flow suggests recording next, from the person's own profile. */
   suggestion: { title: string; prompt: string };
   busy?: boolean;
+  /** Flow is shaping a thought in the background. */
+  processing?: boolean;
+  onCancelProcessing?: () => void;
+  /** The soft "let Flow get to know you" card; null once done or snoozed. */
+  invite?: { onStart: () => void; onLater: () => void } | null;
   notice?: string;
   error?: string;
   onRecord: () => void;
@@ -84,6 +93,11 @@ export default function Today({
           </Pressable>
         )}
         <Celebrate pulse={celebrate} message="Done ✓" />
+        {processing && (
+          <View style={s.suggest}>
+            <Thinking compact onCancel={onCancelProcessing} />
+          </View>
+        )}
         {nextTask && (
           <View style={s.next}>
             <Text style={s.kicker}>NEXT</Text>
@@ -131,6 +145,19 @@ export default function Today({
             </Pressable>
           </View>
         </View>
+        {invite && (
+          <View style={s.suggest}>
+            <Text style={s.kickerBlue}>MAKE FLOW FIT YOU</Text>
+            <Text style={s.headline}>Let Flow get to know you</Text>
+            <Text style={s.body}>2 minutes — makes its questions fit you.</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Get to know me" onPress={invite.onStart} disabled={busy} style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}>
+              <Text style={s.recordText}>Start</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Later" onPress={invite.onLater} hitSlop={8} style={{ alignSelf: "center" }}>
+              <Text style={s.link}>Later</Text>
+            </Pressable>
+          </View>
+        )}
         {sorted.length > 0 && (
           <View style={s.threads}>
             <Text style={s.kicker}>YOUR THREADS</Text>

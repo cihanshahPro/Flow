@@ -11,7 +11,6 @@ import {
   emptyPlate,
   type Plate,
   type Profile,
-  areaPhrase,
 } from "../personality.ts";
 import { flowType } from "../flow-voice.ts";
 import { C } from "./theme.ts";
@@ -19,12 +18,11 @@ import { C } from "./theme.ts";
 const RATINGS = ["Not me", "Not really", "Somewhat", "Mostly", "Very me"];
 
 /**
- * The funnel. Every device goes through it once, in order, with one thing to
- * do per screen:
- *   1. the personality test (twenty taps, not skippable)
- *   2. the reveal
- *   3. five guided profile questions answered by tapping suggestions
- *   4. the first thread, prompted from the profile
+ * The funnel: value first, test second, one thing to do per screen.
+ *   New people: welcome → first thought ("What's on your mind right now?").
+ *   Later, by invitation from Today or Profile ("Let Flow get to know you"):
+ *   the personality test (twenty taps) → the reveal → five guided profile
+ *   questions answered by tapping suggestions → back to Today.
  */
 export type FunnelStep = "intro" | "test" | "reveal" | "plate" | "first";
 
@@ -44,13 +42,8 @@ export const PLATE_QUESTIONS: {
   { key: "datedSoon", kicker: "5 OF 5", title: "Anything with a real date on it coming up?", hint: "Just yes or no — you'll tell Flow the details when you record.", options: DATED_SOON, multi: false },
 ];
 
-export function firstPrompt(plate: Plate | undefined): { area: string; prompt: string } {
-  const area = plate?.areas[0] ?? "the thing on your mind";
-  return {
-    area,
-    prompt: `Tell me about ${areaPhrase(area)}: where it stands, what you'd want to come out of it, who's involved, and what's in the way. Don't organise it — just talk.`,
-  };
-}
+export const FIRST_QUESTION = "What's on your mind right now?";
+export const FIRST_PROMPT = `${FIRST_QUESTION} Say it the way it comes. Don't organise it — Flow will ask the rest.`;
 
 export default function Funnel({
   profile,
@@ -60,6 +53,7 @@ export default function Funnel({
   onFinish,
   onRecordFirst,
   onWriteFirst,
+  onExit,
   busy = false,
   error = "",
 }: {
@@ -70,6 +64,8 @@ export default function Funnel({
   onFinish: (profile: Profile) => Promise<void>;
   onRecordFirst: (prompt: string) => void;
   onWriteFirst: (prompt: string) => void;
+  /** Leave the optional test/profile for later (only offered after the first thread). */
+  onExit?: () => void;
   busy?: boolean;
   error?: string;
 }) {
@@ -95,7 +91,6 @@ export default function Funnel({
       void savePlate({ ...plate, [question.key]: label });
     }
   };
-  const first = firstPrompt(plate);
   return (
     <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
       <View style={s.brandRow}>
@@ -111,11 +106,8 @@ export default function Funnel({
       {step === "intro" && (
         <>
           <Text style={s.headline}>Record it once.{"\n"}Flow keeps the thread.</Text>
-          <Text style={s.body}>
-            First, a two-minute personality test. Flow uses it to decide how to talk to you and which question to ask first.
-          </Text>
-          <Text style={s.body}>Then five quick taps about what's on your plate, and your first thread.</Text>
-          <Primary label="Start the test" onPress={() => onStep("test")} busy={busy} />
+          <Text style={s.body}>Say or type what's on your mind. Flow asks a couple of questions and picks one next step.</Text>
+          <Primary label="Get started" onPress={() => onStep("first")} busy={busy} />
         </>
       )}
       {step === "test" && (
@@ -154,6 +146,7 @@ export default function Funnel({
             })}
           </View>
           {index > 0 && <Secondary label="Back" onPress={() => setIndex(index - 1)} busy={busy} />}
+          {onExit && <Secondary label="Not now" onPress={onExit} busy={busy} />}
         </>
       )}
       {step === "reveal" && (
@@ -213,7 +206,7 @@ export default function Funnel({
             label={plateIndex === PLATE_QUESTIONS.length - 1 ? "Done" : "Next"}
             onPress={() => {
               if (plateIndex < PLATE_QUESTIONS.length - 1) setPlateIndex(plateIndex + 1);
-              else onStep("first");
+              else void onFinish({ ...profile, assessmentLaterAt: undefined });
             }}
             busy={busy}
             disabled={!question.multi && chosen(question.key).length === 0}
@@ -228,14 +221,14 @@ export default function Funnel({
       {step === "first" && (
         <>
           <Text style={s.kicker}>YOUR FIRST THREAD</Text>
-          <Text style={s.headline}>Let's start with {areaPhrase(first.area)}.</Text>
-          <Text style={s.body}>{first.prompt}</Text>
-          <Text style={s.small}>Flow will turn it into a thread, ask you one thing at a time, and offer a move when it has enough.</Text>
+          <Text style={s.headline}>{FIRST_QUESTION}</Text>
+          <Text style={s.body}>Say it the way it comes — a worry, a to-do, a half idea. You don't have to organise it.</Text>
+          <Text style={s.small}>Flow turns it into a thread, asks you one thing at a time, and offers one next move.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Record"
             onPress={() =>
-              void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onRecordFirst(first.prompt))
+              void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onRecordFirst(FIRST_PROMPT))
             }
             disabled={busy}
             style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}
@@ -246,7 +239,7 @@ export default function Funnel({
           <Secondary
             label="or write it down"
             onPress={() =>
-              void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onWriteFirst(first.prompt))
+              void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onWriteFirst(FIRST_PROMPT))
             }
             busy={busy}
           />
