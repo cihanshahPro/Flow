@@ -197,6 +197,9 @@ function Bubble({
         {message.kind === "checkin" && task && !message.answered && (
           <Text style={s.small}>Your move: {task.title}</Text>
         )}
+        {message.kind === "question" && !message.answered && !!message.chips?.length && (
+          <Text style={s.small}>Tap one, or record your own answer.</Text>
+        )}
         {!!message.chips && !message.answered && (
           <View style={s.chips}>
             {message.chips.map((chip, i) => (
@@ -206,9 +209,9 @@ function Bubble({
                 accessibilityLabel={chip.label}
                 onPress={() => onChip(chip.id)}
                 disabled={busy || !active}
-                style={({ pressed }) => [s.chip, i === 0 && s.chipPrimary, (pressed || busy) && { opacity: 0.6 }]}
+                style={({ pressed }) => [s.chip, i === 0 && message.kind !== "question" && s.chipPrimary, (pressed || busy) && { opacity: 0.6 }]}
               >
-                <Text style={[s.chipText, i === 0 && s.chipPrimaryText]}>{chip.label}</Text>
+                <Text style={[s.chipText, i === 0 && message.kind !== "question" && s.chipPrimaryText]}>{chip.label}</Text>
               </Pressable>
             ))}
           </View>
