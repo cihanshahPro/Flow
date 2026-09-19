@@ -305,31 +305,27 @@ function Flow() {
     void run(async () => {
       const before = level.level?.number ?? 0;
       const { thread, effects } = answerChip(current, messageId, chipId, { mode, plate: profile.plate });
-      // Create the task from the saved (not-yet-accepted) step first; acceptStep skips steps already marked accepted.
-      for (const effect of effects) {
-        if (effect.type === "accept") {
-          const step = current.steps.find((s) => s.id === effect.stepId);
-          if (step) await acceptStep(current, step);
+      const accepted = effects.find((e) => e.type === "accept");
+      if (accepted) {
+        const step = thread.steps.find((x) => x.id === accepted.stepId);
+        if (step) {
+          // The move may have been created in this very turn: save it unaccepted first so acceptStep can find it.
+          const pending = { ...thread, steps: thread.steps.map((x) => (x.id === step.id ? { ...x, accepted: false } : x)) };
+          await saveDraft(pending);
+          await acceptStep(pending, step);
+          const id = `flow:${thread.id}:${step.id}`;
+          const plannedDate = plannedDateFor(profile.plate?.timeWindow);
+          const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
+          // If the exclusive transaction produced nothing, write the task plainly so the Next card exists.
+          await saveTask({ ...(saved ?? taskForStep(pending, step, plannedDate)), plannedDate });
+          await updateProfile({ ...profile, activeTaskId: id });
+          const count = (await loadWorkspace()).tasks.length;
+          setNotice(`Your move is on Today. (${count} ${count === 1 ? "move" : "moves"} saved)`);
         }
       }
       await saveDraft(thread);
       for (const effect of effects) {
-        if (effect.type === "accept") {
-          const step = thread.steps.find((s) => s.id === effect.stepId);
-          if (step) {
-            // The move is an if-then plan: it lands on the day the person said they have time.
-            const id = `flow:${thread.id}:${step.id}`;
-            const plannedDate = plannedDateFor(profile.plate?.timeWindow);
-            const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
-            if (saved) await saveTask({ ...saved, plannedDate });
-            else {
-              // The exclusive-transaction insert did not land; write the task plainly so the Next card exists.
-              console.warn("[Flow] acceptStep produced no task; saving directly");
-              await saveTask({ ...taskForStep(thread, step, plannedDate), plannedDate });
-            }
-            await updateProfile({ ...profile, activeTaskId: id });
-          }
-        } else if (effect.type === "complete") {
+        if (effect.type === "complete") {
           const task = tasks.find((t) => t.id === effect.taskId);
           if (task && !task.done) await saveTask(completeTask(task));
         }
