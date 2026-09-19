@@ -104,6 +104,8 @@ export type Profile = {
   areas: Record<string, string | string[]>;
   focus?: string;
   focusExplicit?: boolean;
+  focusNone?: boolean;
+  preferredMinutes?: 10 | 30 | 60 | "varies";
   obstacle?: string;
   presentation?: Presentation;
   completed?: boolean;

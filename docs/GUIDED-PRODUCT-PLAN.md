@@ -62,4 +62,6 @@ flowchart TD
 
 ## Acceptance bar
 
+Profile setup completeness follows [PROFILE-COMPLETION-CONTRACT.md](PROFILE-COMPLETION-CONTRACT.md): five useful sections, a stable versioned percentage, and one direct route to the next missing piece. It is separate from action milestones and does not measure how accurately the app understands a person.
+
 A returning user never loses the next step after a reload. Canceling recording does not earn progress. Reprocessing audio retains its direction and original words. A chosen task stays visible until completed. Completion advances factual progress once. Existing records survive the update. Profile and Today use the same derived state. All new behavior stays on testing; no production release.

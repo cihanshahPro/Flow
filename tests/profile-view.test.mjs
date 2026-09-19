@@ -35,6 +35,9 @@ test("profile exposes supplied coverage, saved interests and a real continuation
         onEditAreas() {},
         onAssessment() {},
         onPreference() {},
+        onConfigure: async () => {},
+        onCompleteAssessment() {},
+        onCompleteAreas() {},
         onFocus: (t) => (focus = t),
       }),
     );
@@ -48,9 +51,16 @@ test("profile exposes supplied coverage, saved interests and a real continuation
     );
   assert.equal(view.root.findAllByType("TextInput").length, 0);
   const text = JSON.stringify(view.toJSON());
-  assert.ok(text.includes("assessment answers"));
+  assert.ok(text.includes("PROFILE COMPLETION"));
   assert.ok(text.includes("Getting acquainted".toUpperCase()));
-  assert.ok(!text.includes("%"));
+  assert.ok(text.includes("%"));
+  assert.equal(
+    view.root
+      .findAllByType("View")
+      .find((v) => v.props.accessibilityRole === "progressbar").props
+      .accessibilityValue.now,
+    27,
+  );
   await tap("Go to my next step");
   assert.equal(continued, 1);
   await tap("See my saved interests");
