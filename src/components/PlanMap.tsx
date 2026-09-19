@@ -153,6 +153,18 @@ export default function PlanMap({
     (branch) =>
       branch.plans.length || branch.tasks.length || branch.notes.length,
   );
+  const repeated = (() => {
+    const counts = new Map<string, { title: string; count: number }>();
+    for (const draft of drafts) {
+      for (const step of draft.steps) {
+        const key = step.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        if (!key) continue;
+        const current = counts.get(key);
+        counts.set(key, { title: current?.title ?? step.title, count: (current?.count ?? 0) + 1 });
+      }
+    }
+    return [...counts.values()].find((item) => item.count > 1);
+  })();
   const areas = [
     ...new Set(
       branches.map((branch) => branch.direction?.areaId ?? "__unlinked__"),
@@ -190,6 +202,13 @@ export default function PlanMap({
         Your interests → plans → chosen steps. Open any step to change it or
         check in.
       </Text>
+      {repeated && (
+        <View style={s.pattern}>
+          <Text style={s.patternKicker}>FLOW NOTICED A PATTERN</Text>
+          <Text style={s.patternTitle}>{repeated.title}</Text>
+          <Text style={s.meta}>This appeared more than once. Flow will keep watching; nothing is turned into a task or routine automatically.</Text>
+        </View>
+      )}
       {areas.map((areaId) => (
         <View key={areaId} style={s.area}>
           <Text style={s.areaTitle}>
@@ -409,6 +428,9 @@ const s = StyleSheet.create({
     fontWeight: "500",
   },
   meta: { fontSize: 11, lineHeight: 18, color: "#68788C", marginTop: 2 },
+  pattern: { padding: 16, borderRadius: 16, backgroundColor: "#EEF3FF", gap: 6 },
+  patternKicker: { fontSize: 11, letterSpacing: 1.3, fontWeight: "700", color: "#345BEE" },
+  patternTitle: { fontSize: 16, fontWeight: "700", color: "#142138" },
   note: {
     flexDirection: "row",
     gap: 10,
