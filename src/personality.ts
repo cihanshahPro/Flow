@@ -99,9 +99,11 @@ export const AREAS = [
 export type Profile = {
   version: 1;
   answers: number[];
-  stage: "intro" | "assessment" | "results" | "areas" | "map";
+  stage: "intro" | "assessment" | "results" | "areas" | "map" | "guide";
   areaIndex: number;
-  areas: Record<string, string>;
+  areas: Record<string, string | string[]>;
+  focus?: string;
+  obstacle?: string;
   presentation?: Presentation;
   completed?: boolean;
 };
@@ -112,3 +114,124 @@ export const newProfile = (): Profile => ({
   areaIndex: 0,
   areas: {},
 });
+
+// Accept build-06 string values without a destructive migration.
+export function areaSelections(value: string | string[] | undefined): string[] {
+  const entries = Array.isArray(value) ? value : value ? [value] : [];
+  return [
+    ...new Set(entries.filter((x) => x !== "Nothing current" && x !== "Later")),
+  ];
+}
+export function toggleArea(
+  profile: Profile,
+  areaId: string,
+  choice: string,
+): Profile {
+  const selected = areaSelections(profile.areas[areaId]);
+  return {
+    ...profile,
+    areas: {
+      ...profile.areas,
+      [areaId]: selected.includes(choice)
+        ? selected.filter((x) => x !== choice)
+        : [...selected, choice],
+    },
+  };
+}
+export function productivityGuide(
+  answers: number[],
+  preference?: Presentation,
+) {
+  const scores = answers.length === 20 ? scoreAnswers(answers) : null;
+  const presentation =
+    preference ??
+    (scores && scores.Conscientiousness >= 3.5 ? "sequence" : "small");
+  const descriptions: Record<Trait, [string, string, string]> = {
+    Extraversion: [
+      "You describe a quieter social style.",
+      "You describe a mix of social and quiet tendencies.",
+      "You describe an outgoing social style.",
+    ],
+    Agreeableness: [
+      "Your answers lean toward interpersonal independence.",
+      "Your answers mix independence and concern for others.",
+      "Your answers emphasize concern for others.",
+    ],
+    Conscientiousness: [
+      "Your answers show less consistency with order and immediate follow-through.",
+      "Your answers mix structure and flexibility.",
+      "Your answers emphasize order and follow-through.",
+    ],
+    Neuroticism: [
+      "You report relative emotional steadiness.",
+      "Your answers describe a mix of calm and emotional ups and downs.",
+      "You report more emotional ups and downs.",
+    ],
+    Imagination: [
+      "Your answers lean toward concrete rather than abstract thinking.",
+      "Your answers mix concrete and imaginative thinking.",
+      "Your answers emphasize imagination and abstract thinking.",
+    ],
+  };
+  const traits = scores
+    ? (Object.entries(scores) as [Trait, number][]).map(([trait, value]) => ({
+        trait,
+        description:
+          descriptions[trait][value < 2.5 ? 0 : value >= 3.5 ? 2 : 1],
+        value,
+      }))
+    : [];
+  return {
+    presentation,
+    title:
+      presentation === "small"
+        ? "One small win, then the next."
+        : "A clear sequence, one step at a time.",
+    reason: !scores
+      ? "Start with a manageable action and adjust after trying it."
+      : presentation === "small"
+        ? "Keep the starting effort low. Capture the details, choose one small action, and finish that before opening another direction."
+        : "Make the route visible. Capture the details, review the steps, and carry out the first one before moving on.",
+    traits,
+    voicePrompt:
+      scores && scores.Imagination >= 3.5
+        ? "Describe one result you want and what is stopping you. Keep other ideas for a separate capture."
+        : "Say what needs doing, what is already done, and the next practical step.",
+    tips: scores
+      ? [
+          scores.Extraversion >= 3.5
+            ? "Try explaining your next step aloud before starting."
+            : "Start with a quiet, private check-in.",
+          scores.Agreeableness >= 3.5
+            ? "Separate what you want to do from promises you have made to others."
+            : "Name the outcome that makes this worth your effort.",
+          scores.Neuroticism >= 3.5
+            ? "Keep today’s focus on one manageable action; the rest stays saved."
+            : "Finish the selected action before adding another.",
+        ]
+      : ["Keep everything else saved while you work on one thing."],
+    obstacles:
+      scores && scores.Imagination >= 3.5
+        ? [
+            "Too many directions",
+            "The task feels too big",
+            "Nothing is blocking me",
+          ]
+        : [
+            "The task feels too big",
+            "I need more clarity",
+            "Nothing is blocking me",
+          ],
+  };
+}
+export function obstaclePlan(obstacle: string, presentation: Presentation) {
+  if (obstacle === "Too many directions")
+    return "If another idea pulls you away, save it for later and return to this one result.";
+  if (obstacle === "The task feels too big")
+    return "If starting feels too big, choose the smallest action you can do in five minutes.";
+  if (obstacle === "I need more clarity")
+    return "If the next step is unclear, identify one missing fact before making a plan.";
+  return presentation === "small"
+    ? "Start with one five-minute action. Review after you finish."
+    : "Follow the first step in your draft, then review the next one.";
+}
