@@ -1,5 +1,7 @@
 # Flow: one guided path from setup to action
 
+**Current route contract:** [STRAIGHT-PATH.md](STRAIGHT-PATH.md) supersedes the build-08/10 routing below. Follow-through, contextual editing, a visible plan tree and purpose-specific capture are now core work, not future dashboard features.
+
 ## Product contract
 
 Flow turns what a person supplies into a saved, reviewable next step. It remembers the connection between their interests, original words, draft and chosen action. It does not send people back to a blank page after assessing them.
