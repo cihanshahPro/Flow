@@ -3,7 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Task } from "../model.ts";
 import { attentionLabel, clarity, moveHeadline, pendingMessage } from "../thread.ts";
-import { BUILD_TAG } from "./Funnel.tsx";
+import Celebrate from "./Celebrate.tsx";
+import { streakLabel } from "../streak.ts";
 import { C } from "./theme.ts";
 
 /**
@@ -17,6 +18,8 @@ export default function Today({
   nextThread,
   levelLabel,
   timeWindow,
+  streak = 0,
+  celebrate = 0,
   suggestion,
   busy = false,
   notice = "",
@@ -37,6 +40,10 @@ export default function Today({
   levelLabel: string;
   /** The person's usual time window, used to word when the move happens. */
   timeWindow?: string;
+  /** Consecutive days with a finished move. */
+  streak?: number;
+  /** Bumps each time a move is finished, to play the small celebration. */
+  celebrate?: number;
   /** What Flow suggests recording next, from the person's own profile. */
   suggestion: { title: string; prompt: string };
   busy?: boolean;
@@ -60,7 +67,11 @@ export default function Today({
       <View style={s.header}>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
           <Text style={s.brand}>Today</Text>
-          <Text style={s.tag}>{BUILD_TAG}</Text>
+          {streak > 0 && (
+            <View style={s.streak} accessibilityLabel={`${streakLabel(streak)} in a row`}>
+              <Text style={s.streakText}>🔥 {streak}</Text>
+            </View>
+          )}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Your level" onPress={onOpenMe} style={s.pill}>
           <Text style={s.pillText}>{levelLabel}</Text>
@@ -81,6 +92,7 @@ export default function Today({
             </Text>
           </Pressable>
         )}
+        <Celebrate pulse={celebrate} message={streak > 1 ? `Done ✓ · ${streakLabel(streak)} in a row` : "Done ✓"} />
         {nextTask && (
           <View style={s.next}>
             <Text style={s.kicker}>NEXT</Text>
@@ -167,7 +179,8 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.paper },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 72 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
-  tag: { fontSize: 10, letterSpacing: 1.3, fontWeight: "700", color: C.faint },
+  streak: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, backgroundColor: C.lime },
+  streakText: { fontSize: 13, fontWeight: "800", color: C.ink },
   suggest: { padding: 18, borderRadius: 22, backgroundColor: C.white, gap: 10 },
   kickerBlue: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.blue },
   altRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 },

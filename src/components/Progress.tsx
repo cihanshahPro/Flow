@@ -5,8 +5,8 @@ import { levelForProgress, type ProgressRecord } from "../progress.ts";
 import { repeatedPattern } from "../thread.ts";
 import { C } from "./theme.ts";
 
-/** The ladder, what counts, and Flow's recent gas-ups. No streaks, nothing expires. */
-export default function Progress({ progress, threads }: { progress: ProgressRecord; threads: ThoughtDraft[] }) {
+/** The ladder, what counts, and Flow's recent gas-ups. Nothing expires. */
+export default function Progress({ progress, threads, streak = 0 }: { progress: ProgressRecord; threads: ThoughtDraft[]; streak?: number }) {
   const level = levelForProgress(progress);
   const real = threads.filter((t) => !t.example);
   const pattern = repeatedPattern(real);
@@ -37,6 +37,7 @@ export default function Progress({ progress, threads }: { progress: ProgressReco
         )}
       </View>
       <View style={s.stats}>
+        <Stat n={streak} label={streak === 1 ? "day in a row" : "days in a row"} />
         <Stat n={level.movesDone} label="moves done" />
         <Stat n={level.threadsUnderstood} label="threads understood" />
         <Stat n={level.checkIns} label="check-ins kept" />

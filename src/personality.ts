@@ -154,6 +154,9 @@ export type Profile = {
   plate?: Plate;
   /** Settings: reminders switched off by the person. Additive; absent means on. */
   notificationsOff?: boolean;
+  /** Settings: morning reminder time as "HH:MM" (default 08:30) and an off switch. Additive. */
+  morningTime?: string;
+  morningOff?: boolean;
 };
 export const FUNNEL_VERSION = 3;
 

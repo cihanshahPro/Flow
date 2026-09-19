@@ -62,6 +62,25 @@ export function planReminders(
   return planned.sort((a, b) => a.at.localeCompare(b.at)).slice(0, MAX_REMINDERS);
 }
 
+export const MORNING_ID = `${PREFIX}morning`;
+export const DEFAULT_MORNING = "08:30";
+
+export function parseMorning(value: string | undefined): { hour: number; minute: number } {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value ?? DEFAULT_MORNING);
+  const hour = m ? Number(m[1]) : 8;
+  const minute = m ? Number(m[2]) : 30;
+  return hour < 24 && minute < 60 ? { hour, minute } : { hour: 8, minute: 30 };
+}
+
+/** Pure: the morning nudge, only when there is an open move. `headline` is the move as the Next card words it. */
+export function planMorning(headline: string | undefined, time: string | undefined, now = new Date()): PlannedReminder | undefined {
+  if (!headline) return undefined;
+  const { hour, minute } = parseMorning(time);
+  let at = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+  if (at.getTime() <= now.getTime()) at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hour, minute, 0);
+  return { id: MORNING_ID, title: "Flow", body: `Today's one move is ready: ${headline}`, at: at.toISOString() };
+}
+
 let configured = false;
 function configure() {
   if (configured) return;
@@ -85,10 +104,14 @@ export async function syncReminders(
   tasks: Task[],
   now = new Date(),
   /** `ask`: the person just confirmed a move or date, so this is the moment to request permission. `enabled`: the Settings switch. */
-  options: { ask?: boolean; enabled?: boolean } = {},
+  options: { ask?: boolean; enabled?: boolean; morning?: { headline?: string; time?: string; off?: boolean } } = {},
 ): Promise<number> {
   if (Platform.OS === "web") return 0;
   const planned = planReminders(threads, tasks, now);
+  if (options.morning && !options.morning.off) {
+    const m = planMorning(options.morning.headline, options.morning.time, now);
+    if (m) planned.push(m);
+  }
   try {
     configure();
     const existing = await Notifications.getAllScheduledNotificationsAsync();

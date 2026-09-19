@@ -37,9 +37,11 @@ import Constants from "expo-constants";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
 import { newProfile, FUNNEL_VERSION, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
-import { completeTask } from "./src/task-flow";
+import { completeTask, pickNextTask } from "./src/task-flow";
+import { streakDays } from "./src/streak";
+import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, pendingMessage, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
+import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, suggestPrompt, threadTasks } from "./src/thread";
 import type { ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
@@ -82,6 +84,7 @@ function Flow() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [celebrate, setCelebrate] = useState(0);
   const lock = useRef(false);
   const processingLock = useRef(false);
   const captureId = useRef("");
@@ -91,10 +94,18 @@ function Flow() {
   const current = threads.find((t) => t.id === openId);
   const level = levelForProgress(progress);
   const type = flowType(profile.answers);
-  const nextTask =
-    tasks.find((t) => t.id === profile.activeTaskId && !t.done) ??
-    [...tasks].filter((t) => !t.done && t.id.startsWith("flow:")).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const nextTask = pickNextTask(tasks, profile.activeTaskId);
   const nextThread = nextTask ? threads.find((t) => nextTask.id.startsWith(`flow:${t.id}:`)) : undefined;
+
+  /** Thread reminders plus the morning "today's one move" nudge, from the freshly saved data. */
+  function syncAll(data: { tasks: Task[]; threads: ThoughtDraft[] }, p: ProfileModel, ask = false) {
+    const next = pickNextTask(data.tasks, p.activeTaskId);
+    return syncReminders(data.threads, data.tasks, new Date(), {
+      ask,
+      enabled: !p.notificationsOff,
+      morning: { headline: next ? moveHeadline(next, p.plate?.timeWindow) : undefined, time: p.morningTime, off: p.morningOff },
+    }).catch(() => 0);
+  }
 
   async function refresh() {
     const [w, d] = await Promise.all([loadWorkspace(), loadDrafts()]);
@@ -123,7 +134,7 @@ function Flow() {
       }
     }
     if (changed) await refresh();
-    void syncReminders(data.threads, data.tasks, new Date(), { enabled: !profile.notificationsOff }).catch(() => {});
+    void syncAll(data, profile);
   }
 
   useEffect(() => {
@@ -328,7 +339,7 @@ function Flow() {
       const data = await refresh();
       // Confirming a move is the moment a reminder makes sense, so this is when permission is requested.
       if (effects.some((e) => e.type === "accept") && !profile.notificationsOff)
-        void syncReminders(data.threads, data.tasks, new Date(), { ask: true }).catch(() => {});
+        void syncAll(data, profile, true);
       await announceLevel(thread.id, before);
     });
   }
@@ -341,7 +352,10 @@ function Flow() {
       const thread = nextThread ? (await loadDrafts()).find((t) => t.id === nextThread.id) : undefined;
       if (thread) await saveDraft(noteMoveDone(thread, nextTask, { mode, plate: profile.plate }));
       if (profile.activeTaskId === nextTask.id) await updateProfile({ ...profile, activeTaskId: undefined });
-      await refresh();
+      const data = await refresh();
+      void syncAll(data, { ...profile, activeTaskId: undefined });
+      setCelebrate((n) => n + 1);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       await announceLevel(thread?.id, before);
       setNotice(thread ? `Done. Flow left you a note in “${thread.title}”.` : "Done.");
     });
@@ -513,6 +527,8 @@ function Flow() {
             nextThread={nextThread}
             levelLabel={level.level ? level.level.title : type ? type.name : "Level"}
             timeWindow={profile.plate?.timeWindow}
+            streak={streakDays(tasks)}
+            celebrate={celebrate}
             suggestion={suggestion}
             busy={busy}
             notice={notice}
@@ -533,7 +549,7 @@ function Flow() {
         {screen === "threads" && (
           <Threads threads={threads} tasks={tasks} busy={busy} onOpenThread={openThread} onNew={() => startCapture("voice", null, "thought", suggestion.prompt)} />
         )}
-        {screen === "progress" && <Progress progress={progress} threads={threads} />}
+        {screen === "progress" && <Progress progress={progress} threads={threads} streak={streakDays(tasks)} />}
         {screen === "profile" && (
           <Profile
             profile={profile}
@@ -550,12 +566,21 @@ function Flow() {
             onFeedback={(m) => startCapture(m, null, "feedback")}
             onPlate={(plate) => void run(() => updateProfile({ ...profile, plate }))}
             notificationsOn={!profile.notificationsOff}
+            morningOn={!profile.morningOff}
+            morningTime={profile.morningTime ?? "08:30"}
+            onMorning={(patch) =>
+              void run(async () => {
+                const next = { ...profile, ...patch };
+                await updateProfile(next);
+                await syncAll({ tasks, threads }, next, !next.morningOff);
+              })
+            }
             version={Constants.expoConfig?.version ?? ""}
             onToggleNotifications={(on) =>
               void run(async () => {
                 await updateProfile({ ...profile, notificationsOff: on ? undefined : true });
-                const data = { tasks, threads };
-                if (on) await syncReminders(data.threads, data.tasks, new Date(), { ask: true });
+                const next = { ...profile, notificationsOff: on ? undefined : true };
+                if (on) await syncAll({ tasks, threads }, next, true);
                 else await syncReminders([], [], new Date(), { enabled: false });
               })
             }

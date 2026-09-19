@@ -36,3 +36,19 @@ test("reminders are capped and ordered by time", () => {
   assert.equal(plan.length, MAX_REMINDERS);
   assert.deepEqual([...plan.map((r) => r.at)].sort(), plan.map((r) => r.at));
 });
+
+test("morning reminder defaults to 08:30, uses the next occurrence and names the move", async () => {
+  const { planMorning, parseMorning } = await import("../src/services/reminders.ts");
+  const early = new Date(2026, 8, 19, 7, 0);
+  const late = new Date(2026, 8, 19, 9, 0);
+  const a = planMorning("This evening: Draft page 1", undefined, early);
+  assert.equal(new Date(a.at).getTime(), new Date(2026, 8, 19, 8, 30).getTime());
+  assert.equal(a.body, "Today's one move is ready: This evening: Draft page 1");
+  assert.equal(new Date(planMorning("x", "07:15", late).at).getTime(), new Date(2026, 8, 20, 7, 15).getTime());
+  assert.deepEqual(parseMorning("garbage"), { hour: 8, minute: 30 });
+});
+
+test("no open move means no morning reminder", async () => {
+  const { planMorning } = await import("../src/services/reminders.ts");
+  assert.equal(planMorning(undefined, "08:30", new Date()), undefined);
+});

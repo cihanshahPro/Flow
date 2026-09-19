@@ -10,6 +10,13 @@ import { C } from "./theme.ts";
 export const PRIVACY_URL = "https://kodavena.com/privacy";
 
 /** Profile: who Flow thinks you are and what it knows — a living thing you can edit, not a one-time quiz. */
+/** "08:30" moved by `delta` minutes, wrapping around midnight. */
+export function shiftTime(time: string, delta: number): string {
+  const [h, m] = time.split(":").map(Number);
+  const total = (((h * 60 + m + delta) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 export default function Profile({
   profile,
   threads,
@@ -21,6 +28,9 @@ export default function Profile({
   notificationsOn = true,
   version = "",
   onToggleNotifications,
+  morningOn = true,
+  morningTime = "08:30",
+  onMorning,
   onExport,
   onDeleteAll,
 }: {
@@ -34,6 +44,9 @@ export default function Profile({
   notificationsOn?: boolean;
   version?: string;
   onToggleNotifications?: (on: boolean) => void;
+  morningOn?: boolean;
+  morningTime?: string;
+  onMorning?: (patch: { morningOff?: boolean; morningTime?: string }) => void;
   onExport?: () => void;
   onDeleteAll?: () => void;
 }) {
@@ -143,6 +156,24 @@ export default function Profile({
           <Text style={[s.body, { flex: 1 }]}>Reminders</Text>
           <Switch accessibilityLabel="Reminders" value={notificationsOn} onValueChange={(v) => onToggleNotifications?.(v)} disabled={busy} />
         </View>
+        <View style={s.rowBetween}>
+          <Text style={[s.body, { flex: 1 }]}>Morning reminder</Text>
+          <Switch accessibilityLabel="Morning reminder" value={morningOn} onValueChange={(v) => onMorning?.({ morningOff: v ? undefined : true })} disabled={busy || !notificationsOn} />
+        </View>
+        {morningOn && notificationsOn && (
+          <View style={s.rowBetween}>
+            <Text style={s.small}>Sent at</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Earlier by 30 minutes" hitSlop={10} disabled={busy} onPress={() => onMorning?.({ morningTime: shiftTime(morningTime, -30) })}>
+                <Text style={s.link}>−</Text>
+              </Pressable>
+              <Text style={s.body} accessibilityLabel={`Morning reminder at ${morningTime}`}>{morningTime}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Later by 30 minutes" hitSlop={10} disabled={busy} onPress={() => onMorning?.({ morningTime: shiftTime(morningTime, 30) })}>
+                <Text style={s.link}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
         <Pressable accessibilityRole="button" accessibilityLabel="Export my data" onPress={onExport} disabled={busy} hitSlop={8}>
           <Text style={s.link}>Export my data</Text>
         </Pressable>
