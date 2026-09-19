@@ -7,6 +7,7 @@ import type {
   ThreadPoint,
   ThreadStage,
 } from "./drafts.ts";
+import { shortTitle } from "./drafts.ts";
 import type { Task } from "./model.ts";
 import { localDate } from "./model.ts";
 import { areaPhrase, type Plate } from "./personality.ts";
@@ -379,7 +380,7 @@ export function ensureMoves(thread: ThoughtDraft): ThoughtDraft {
   const seed = [known("next"), known("outcome")].find((v) => v && concreteMove(v));
   if (!known("next") && !known("outcome")) return thread;
   const title = seed
-    ? seed.replace(/[.!?…]+$/, "").replace(/^(first|then|next|tonight|tomorrow)\s+/i, "")
+    ? shortTitle(seed.replace(/[.!?…]+$/, "").replace(/^(first|then|next|tonight|tomorrow)\s+/i, ""), 70)
     : `Take the first small step on ${thread.title.toLowerCase()}`;
   return {
     ...thread,
