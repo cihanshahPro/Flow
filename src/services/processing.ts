@@ -3,7 +3,7 @@ import { fetch } from "expo/fetch";
 import { saveNote, loadWorkspace } from "./storage";
 import { loadDrafts, saveDraft } from "./drafts";
 import { suggestDraft, shapedDraft } from "../drafts";
-import type { Note } from "../model";
+import type { DirectionContext, Note } from "../model";
 
 export async function processVoiceNote(note: Note) {
   const existing = (await loadDrafts()).find((d) => d.id === note.id);
@@ -74,16 +74,21 @@ export async function processVoiceNote(note: Note) {
     }
   } else if (note.text) {
     try {
-      draft = await organizeThought(note.id, text);
+      draft = await organizeThought(note.id, text, note.direction);
     } catch {
       /* Transcript remains usable in a basic draft. */
     }
   }
+  if (note.direction) draft = { ...draft, direction: note.direction };
   await saveDraft(draft);
   return draft;
 }
 
-export async function organizeThought(id: string, text: string) {
+export async function organizeThought(
+  id: string,
+  text: string,
+  direction?: DirectionContext,
+) {
   const url = process.env.EXPO_PUBLIC_PROCESSOR_URL,
     token = process.env.EXPO_PUBLIC_PROCESSOR_TOKEN;
   if (!url || !token)
@@ -114,15 +119,21 @@ export async function organizeThought(id: string, text: string) {
       throw new Error(
         "Local AI is unavailable right now. Your thought is saved; try again shortly.",
       );
-    return shapedDraft(id, text, result.shape);
+    const draft = shapedDraft(id, text, result.shape);
+    return direction ? { ...draft, direction } : draft;
   } finally {
     clearTimeout(timer);
   }
 }
-export async function createThoughtDraft(id: string, text: string) {
+export async function createThoughtDraft(
+  id: string,
+  text: string,
+  direction?: DirectionContext,
+) {
   try {
-    return await organizeThought(id, text);
+    return await organizeThought(id, text, direction);
   } catch {
-    return suggestDraft(id, text);
+    const draft = suggestDraft(id, text);
+    return direction ? { ...draft, direction } : draft;
   }
 }
