@@ -183,6 +183,19 @@ function Flow() {
     setSelected(null);
     setThreadDeveloping(false);
   }
+  function threadPrompt(draft: ThoughtDraft): string {
+    const area = draft.direction?.areaId;
+    if (area === "people" || area === "admin" || area === "dates") {
+      return "What person, date, or commitment matters most in this thread?";
+    }
+    if (area === "health") {
+      return "What outcome or appointment are you trying to get clear about?";
+    }
+    if (area === "work" || area === "home") {
+      return "What result would make this thread feel resolved?";
+    }
+    return "What is the most important outcome you want Flow to understand?";
+  }
   async function refresh() {
     const [w, d] = await Promise.all([loadWorkspace(), loadDrafts()]);
     setTasks(w.tasks);
@@ -551,7 +564,7 @@ function Flow() {
     capture(
       "voice",
       null,
-      `What is already happening with ${direction.choice.toLowerCase()}? Mention any actual date or person involved.`,
+      `Dump everything connected to ${direction.choice.toLowerCase()}. Include what matters, what is active, and what you do not want to forget. Do not organize it.`,
       direction,
     );
   }
@@ -1555,7 +1568,8 @@ function Flow() {
               draft={current}
               busy={busy}
               onClose={closeThread}
-              onCapture={() => capture("voice", current.id, `Add to the thread: ${current.title}`, current.direction)}
+              prompt={threadPrompt(current)}
+              onCapture={() => capture("voice", current.id, threadPrompt(current), current.direction)}
               onDevelop={() => setThreadDeveloping(true)}
             />
           )}
