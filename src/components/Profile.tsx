@@ -132,7 +132,7 @@ export default function Profile({
 
 const s = StyleSheet.create({
   page: { padding: 20, paddingBottom: 48, gap: 12, backgroundColor: C.paper },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, paddingRight: 56 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   chipOn: { backgroundColor: C.blue, borderColor: C.blue },

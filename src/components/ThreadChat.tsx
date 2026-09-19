@@ -61,15 +61,15 @@ export default function ThreadChat({
   return (
     <View style={s.root}>
       <View style={s.header}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close thread" onPress={onClose} disabled={busy} hitSlop={12} style={s.back}>
+          <Text style={s.link}>‹ Back</Text>
+        </Pressable>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={s.title} numberOfLines={2}>
             {thread.title}
           </Text>
           <Text style={s.stage}>{STAGE_LABEL[stage]}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close thread" onPress={onClose} disabled={busy} hitSlop={12}>
-          <Text style={s.link}>Done</Text>
-        </Pressable>
       </View>
       <Pressable
         accessibilityRole="button"
@@ -223,7 +223,8 @@ function Bubble({
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.paper },
-  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, paddingRight: 64 },
+  back: { paddingTop: 2 },
   title: { fontSize: 22, lineHeight: 27, fontWeight: "700", color: C.ink },
   stage: { fontSize: 13, fontWeight: "600", color: C.blue },
   link: { color: C.blue, fontSize: 16, fontWeight: "700", paddingVertical: 4 },

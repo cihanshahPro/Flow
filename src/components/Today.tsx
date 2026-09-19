@@ -162,7 +162,7 @@ export default function Today({
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.paper },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 72 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
   tag: { fontSize: 10, letterSpacing: 1.3, fontWeight: "700", color: C.faint },
   suggest: { padding: 18, borderRadius: 22, backgroundColor: C.white, gap: 10 },
