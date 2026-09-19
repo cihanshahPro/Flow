@@ -16,7 +16,6 @@ import {
 import { flowType } from "../flow-voice.ts";
 import { C } from "./theme.ts";
 
-export const BUILD_TAG = "TEST 12";
 const RATINGS = ["Not me", "Not really", "Somewhat", "Mostly", "Very me"];
 
 /**
@@ -103,7 +102,6 @@ export default function Funnel({
         <Text style={s.brand}>
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
-        <Text style={s.tag}>{BUILD_TAG}</Text>
       </View>
       {!!error && (
         <Text accessibilityRole="alert" style={s.error}>
@@ -283,7 +281,6 @@ const s = StyleSheet.create({
   page: { padding: 24, paddingBottom: 48, gap: 16, flexGrow: 1, justifyContent: "center", backgroundColor: C.paper },
   brandRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
-  tag: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.faint },
   kicker: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.muted },
   headline: { fontSize: 29, lineHeight: 35, fontWeight: "700", color: C.ink },
   body: { fontSize: 17, lineHeight: 25, color: C.muted },
@@ -292,20 +289,20 @@ const s = StyleSheet.create({
   track: { height: 6, borderRadius: 3, backgroundColor: C.line, overflow: "hidden" },
   fill: { height: 6, backgroundColor: C.blue, borderRadius: 3 },
   ratings: { gap: 8 },
-  rating: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, backgroundColor: C.white, borderWidth: 1, borderColor: C.line },
+  rating: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
   ratingChosen: { backgroundColor: C.blue, borderColor: C.blue },
   ratingText: { fontSize: 16, fontWeight: "600", color: C.ink },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingVertical: 11, paddingHorizontal: 14, borderRadius: 999, backgroundColor: C.white, borderWidth: 1, borderColor: C.line },
+  chip: { paddingVertical: 11, paddingHorizontal: 14, borderRadius: 999, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
   chipOn: { backgroundColor: C.blue, borderColor: C.blue },
   chipText: { fontSize: 15, fontWeight: "600", color: C.ink },
   nameRow: { flexDirection: "row" },
-  nameInput: { flex: 1, padding: 12, borderRadius: 12, backgroundColor: C.white, borderWidth: 1, borderColor: C.line, fontSize: 15, color: C.ink },
+  nameInput: { flex: 1, padding: 12, borderRadius: 12, backgroundColor: C.card, borderWidth: 1, borderColor: C.line, fontSize: 15, color: C.ink },
   primary: { backgroundColor: C.blue, borderRadius: 18, paddingVertical: 17, alignItems: "center", marginTop: 8 },
   primaryText: { color: C.white, fontSize: 17, fontWeight: "700" },
   link: { color: C.blue, fontSize: 15, fontWeight: "600" },
   record: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: C.blue, borderRadius: 22, paddingVertical: 22, marginTop: 8 },
-  recordIcon: { color: "#FF6B6B", fontSize: 20 },
+  recordIcon: { color: C.record, fontSize: 20 },
   recordText: { color: C.white, fontSize: 19, fontWeight: "700" },
   error: { color: C.red, fontSize: 14, lineHeight: 20 },
 });

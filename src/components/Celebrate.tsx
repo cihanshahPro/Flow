@@ -28,5 +28,5 @@ export default function Celebrate({ pulse, message }: { pulse: number; message: 
 
 const s = StyleSheet.create({
   pop: { alignSelf: "center", backgroundColor: C.lime, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999 },
-  text: { color: C.ink, fontWeight: "800", fontSize: 15 },
+  text: { color: C.onLime, fontWeight: "800", fontSize: 15 },
 });

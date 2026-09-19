@@ -181,7 +181,7 @@ export default function Profile({
           <Text style={s.link}>Privacy policy</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Delete all my data" onPress={onDeleteAll} disabled={busy} hitSlop={8}>
-          <Text style={[s.link, { color: "#C0392B" }]}>Delete all my data</Text>
+          <Text style={[s.link, { color: C.danger }]}>Delete all my data</Text>
         </Pressable>
         {!!version && <Text style={s.small}>Flow {version}</Text>}
       </View>
@@ -198,7 +198,7 @@ const s = StyleSheet.create({
   chipOnSoft: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: C.blueSoft },
   chipTextSoft: { fontSize: 13, fontWeight: "600", color: C.blue },
   kicker: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.muted },
-  card: { padding: 18, borderRadius: 20, backgroundColor: C.white, gap: 10 },
+  card: { padding: 18, borderRadius: 20, backgroundColor: C.card, gap: 10 },
   title: { fontSize: 24, lineHeight: 30, fontWeight: "700", color: C.ink },
   body: { fontSize: 15, lineHeight: 22, color: C.muted },
   bodyStrong: { fontSize: 15, lineHeight: 22, color: C.ink, fontWeight: "600" },
@@ -210,7 +210,7 @@ const s = StyleSheet.create({
   statN: { fontSize: 22, fontWeight: "800", color: C.ink },
   statLabel: { fontSize: 12, color: C.muted },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: C.white, borderWidth: 1, borderColor: C.line },
+  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
   chipText: { fontSize: 13, fontWeight: "600", color: C.ink },
   primary: { backgroundColor: C.blue, borderRadius: 16, paddingVertical: 15, alignItems: "center" },
   primaryText: { color: C.white, fontSize: 16, fontWeight: "700" },

@@ -489,7 +489,7 @@ function Flow() {
   if (funnel) {
     return (
       <SafeAreaView style={s.safe}>
-        <StatusBar style="dark" />
+        <StatusBar style="auto" />
         <Funnel
           profile={profile}
           step={funnelStep}
@@ -517,7 +517,7 @@ function Flow() {
 
   return (
     <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
       <View style={{ flex: 1 }}>
         {screen === "today" && (
           <Today

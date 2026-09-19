@@ -46,7 +46,7 @@ test("the funnel is test → reveal → five profile questions → prompted firs
   const rerender = () => act(async () => view.update(React.createElement(Funnel, props())));
 
   assert.deepEqual(labels(view), ["Start the test"], "intro has exactly one action and no skip");
-  assert.match(textOf(view), /TEST 12/);
+  assert.doesNotMatch(textOf(view), /TEST 12/);
   await press(view, "Start the test");
   await rerender();
   assert.equal(step, "test");

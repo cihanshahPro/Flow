@@ -43,7 +43,7 @@ export default function TabBar({ active, badge = 0, onSelect }: { active: Tab; b
 }
 
 const s = StyleSheet.create({
-  bar: { flexDirection: "row", borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.white, paddingTop: 6, paddingBottom: 4 },
+  bar: { flexDirection: "row", borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.card, paddingTop: 6, paddingBottom: 4 },
   tab: { flex: 1, alignItems: "center", gap: 2, minHeight: 48, justifyContent: "center" },
   glyph: { fontSize: 18, color: C.faint },
   label: { fontSize: 11, fontWeight: "600", color: C.muted },
