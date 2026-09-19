@@ -1,20 +1,22 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text } from "react-native";
 import { C } from "./theme.ts";
 
 /** A brief, quiet "done" pop. Re-runs whenever `pulse` changes; renders nothing before the first one. */
 export default function Celebrate({ pulse, message }: { pulse: number; message: string }) {
   const v = useRef(new Animated.Value(0)).current;
+  const [shown, setShown] = useState(false);
   useEffect(() => {
     if (!pulse) return;
     v.setValue(0);
+    setShown(true);
     Animated.sequence([
       Animated.spring(v, { toValue: 1, useNativeDriver: true, friction: 6 }),
       Animated.delay(1100),
       Animated.timing(v, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start();
+    ]).start(() => setShown(false));
   }, [pulse, v]);
-  if (!pulse) return null;
+  if (!pulse || !shown) return null;
   return (
     <Animated.View
       pointerEvents="none"
