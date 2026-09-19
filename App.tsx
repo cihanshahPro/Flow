@@ -496,7 +496,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 06</Text>
+          <Text style={s.test}>TEST BUILD · 07</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
