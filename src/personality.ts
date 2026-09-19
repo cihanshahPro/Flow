@@ -55,6 +55,35 @@ export function scoreAnswers(answers: number[]): Record<Trait, number> {
   return scores;
 }
 export type Presentation = "small" | "sequence";
+export type WorkingType = {
+  code: string;
+  name: string;
+  description: string;
+};
+const workingTypes: Record<string, WorkingType> = {
+  ISTJ: { code: "ISTJ", name: "The Steward", description: "You work best with a clear order, concrete context, and a quiet finish line." },
+  ISFJ: { code: "ISFJ", name: "The Supporter", description: "You work best when commitments and people are visible, with a calm next step." },
+  INFJ: { code: "INFJ", name: "The Guide", description: "You work best when the deeper reason is clear and the path stays focused." },
+  INTJ: { code: "INTJ", name: "The Architect", description: "You work best when Flow maps the system and removes noise from the route." },
+  ISTP: { code: "ISTP", name: "The Troubleshooter", description: "You work best by seeing the real problem and testing one practical move." },
+  ISFP: { code: "ISFP", name: "The Maker", description: "You work best with a small, tangible move that respects your energy." },
+  INFP: { code: "INFP", name: "The Values Builder", description: "You work best when the outcome feels meaningful and the plan leaves room to breathe." },
+  INTP: { code: "INTP", name: "The Explorer", description: "You work best when Flow captures the ideas and asks you to choose one thread." },
+  ESTP: { code: "ESTP", name: "The Operator", description: "You work best with a direct route, immediate feedback, and little ceremony." },
+  ESFP: { code: "ESFP", name: "The Energizer", description: "You work best with visible momentum and a next move that feels alive." },
+  ENFP: { code: "ENFP", name: "The Catalyst", description: "You work best when Flow contains the many ideas and keeps one meaningful thread in view." },
+  ENTP: { code: "ENTP", name: "The Inventor", description: "You work best when Flow stores possibilities and makes the next experiment obvious." },
+  ESTJ: { code: "ESTJ", name: "The Organizer", description: "You work best with a clear outcome, ownership, and a visible sequence." },
+  ESFJ: { code: "ESFJ", name: "The Coordinator", description: "You work best when people, promises, and timing are held together for you." },
+  ENFJ: { code: "ENFJ", name: "The Mentor", description: "You work best when the human outcome is clear and the route protects your focus." },
+  ENTJ: { code: "ENTJ", name: "The Director", description: "You work best when Flow turns a large aim into a decisive, ordered route." },
+};
+export function workingType(answers: number[]): WorkingType | null {
+  if (answers.length !== 20) return null;
+  const scores = scoreAnswers(answers);
+  const code = `${scores.Extraversion >= 3 ? "E" : "I"}${scores.Imagination >= 3 ? "N" : "S"}${scores.Agreeableness >= 3 ? "F" : "T"}${scores.Conscientiousness >= 3 ? "J" : "P"}`;
+  return workingTypes[code];
+}
 export function suggestedPresentation(answers: number[]): Presentation {
   return scoreAnswers(answers).Conscientiousness >= 3.5 ? "sequence" : "small";
 }
@@ -194,8 +223,10 @@ export function productivityGuide(
         value,
       }))
     : [];
+  const type = workingType(answers);
   return {
     presentation,
+    type,
     title:
       presentation === "small"
         ? "One small win, then the next."
