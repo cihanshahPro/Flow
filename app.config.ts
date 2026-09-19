@@ -37,6 +37,8 @@ const config: ExpoConfig = {
         microphonePermission:
           "Flowthread records a voice note only when you tap Record.",
         enableBackgroundRecording: false,
+        // Recording and playback happen only in the foreground; no background audio mode (App Review 2.5.4).
+        enableBackgroundPlayback: false,
       },
     ],
     "expo-sqlite",
@@ -45,6 +47,8 @@ const config: ExpoConfig = {
       {
         calendarPermission:
           "Flowthread saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
+        // Reminders are never read or written.
+        remindersPermission: false,
       },
     ],
   ],
