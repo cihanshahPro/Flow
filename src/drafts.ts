@@ -1,7 +1,8 @@
 import type { DirectionContext, Task, Topic } from "./model.ts";
 import { localDate } from "./model.ts";
 import { extractContactDetails, deviceTimeZone } from "./calendar-model.ts";
-import { fingerprint, missingQuestions, isReady } from "./thread.ts";
+import { fingerprint, missingQuestions, isReady, cleanMove } from "./thread.ts";
+import { completeOptions, isConcreteAction, isConcreteLabel, isMoveHeadline } from "./ai-quality.ts";
 import { DEFAULT_MODE } from "./flow-voice.ts";
 
 export type DraftStep = {
@@ -273,6 +274,9 @@ export function shapedDraft(
       !smallAction ||
       !reason ||
       !evidence ||
+      !isConcreteLabel(label) ||
+      !isConcreteAction(action) ||
+      !isMoveHeadline(`Today: ${cleanMove(action, 51)}`) ||
       !normalized(source).includes(normalized(evidence)) ||
       seen.has(action.toLowerCase())
     )
@@ -288,10 +292,13 @@ export function shapedDraft(
       evidence,
     });
   }
-  if (plan.choices.length && !steps.length)
+  // Dropped options are replaced by the template's own, so a thread never opens with fewer than two moves to pick from.
+  const complete = completeOptions(steps, base.steps.map((s, i) => ({ ...s, id: `tpl-${i}` })));
+  if (plan.choices.length && !complete.length)
     throw new Error(
       "The suggested actions could not be matched to your words.",
     );
+  steps.splice(0, steps.length, ...complete);
   // An extractive preview cannot turn a time budget into a promised deadline.
   const normalized = (s: string) => s.replace(/\s+/g, " ").trim();
   const faithfulSummary = normalized(source).includes(normalized(summary))

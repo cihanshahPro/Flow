@@ -20,6 +20,7 @@ import {
   type Shape,
   type ShaperKind,
 } from "../ai-policy";
+import { SHAPE_TIMEOUT_MS, ShapeCancelled, ShapeTimeout, raceShape } from "../ai-quality";
 import { installId, loadAiState, setCloudConsent, setQuota } from "./ai-state";
 
 declare const __DEV__: boolean | undefined;
@@ -198,6 +199,9 @@ export type ShapeOptions = {
   /** Shows the one-time cloud consent sheet; resolves true for Allow. */
   askCloudConsent?: () => Promise<boolean>;
   now?: Date;
+  /** Abort to stop waiting: Flow falls back to the template draft. */
+  signal?: AbortSignal;
+  timeoutMs?: number;
 };
 export type ShapeOutcome = { shape: Shape | null; kind: ShaperKind; reason: string };
 
@@ -227,13 +231,19 @@ export async function shapeText(
     }
   }
   try {
-    const shape = await PROCESSORS[selection.kind].shape({ text, locale: deviceLocale(), profile });
+    const shape = await raceShape(
+      PROCESSORS[selection.kind].shape({ text, locale: deviceLocale(), profile }),
+      options.timeoutMs ?? SHAPE_TIMEOUT_MS,
+      options.signal,
+    );
     if (selection.kind === "cloud") await setQuota(consumeQuota(state?.quota, now));
     record({ ...selection, outcome: "ok" });
     return { shape, kind: shape ? selection.kind : "template", reason: selection.reason };
   } catch (error) {
     if (error instanceof CloudError && error.code === "quota_exceeded") await setQuota(exhaustQuota(now, limit));
-    const detail = error instanceof CloudError ? error.code : (error as Error)?.message;
+    const detail =
+      error instanceof ShapeTimeout ? "timeout" : error instanceof ShapeCancelled ? "cancelled" : error instanceof CloudError ? error.code : (error as Error)?.message;
+    if (error instanceof ShapeTimeout) console.warn(`[Flow shaper] ${selection.kind} timed out after ${options.timeoutMs ?? SHAPE_TIMEOUT_MS} ms; using the template draft`);
     record({ ...selection, outcome: "fallback", detail });
     return { shape: null, kind: "template", reason: `${selection.reason} → template (${detail})` };
   }
