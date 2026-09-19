@@ -305,12 +305,18 @@ function Flow() {
     void run(async () => {
       const before = level.level?.number ?? 0;
       const { thread, effects } = answerChip(current, messageId, chipId, { mode, plate: profile.plate });
+      // Create the task from the saved (not-yet-accepted) step first; acceptStep skips steps already marked accepted.
+      for (const effect of effects) {
+        if (effect.type === "accept") {
+          const step = current.steps.find((s) => s.id === effect.stepId);
+          if (step) await acceptStep(current, step);
+        }
+      }
       await saveDraft(thread);
       for (const effect of effects) {
         if (effect.type === "accept") {
           const step = thread.steps.find((s) => s.id === effect.stepId);
           if (step) {
-            await acceptStep(thread, step);
             // The move is an if-then plan: it lands on the day the person said they have time.
             const id = `flow:${thread.id}:${step.id}`;
             const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
