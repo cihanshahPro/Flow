@@ -28,9 +28,7 @@ test("accepting a suggested starter creates a stable linked action and moves the
   );
   const ready = journeyState(restored.p, [], restored.drafts, restored.tasks);
   assert.equal(ready.next.kind, "task");
-  assert.equal(ready.level.number, 3);
   const done = journeyState(p, [], [accepted], [{ ...task, done: true }]);
-  assert.equal(done.level.number, 4);
   assert.equal(done.next.kind, "starter");
   assert.equal(done.next.direction.choice, "Find work or clients");
 });

@@ -1,6 +1,6 @@
 # Flow product work
 
-Read `docs/GUIDED-PRODUCT-PLAN.md` and `docs/PROFILE-COMPLETION-CONTRACT.md` before changing onboarding, Profile or Today. They record the agreed product outcome and boundaries.
+Read `docs/GUIDED-PRODUCT-PLAN.md`, `docs/PROFILE-COMPLETION-CONTRACT.md` and `docs/ACCOMPLISHMENT-LEVELS.md` before changing onboarding, Profile or Today. They record the agreed product outcome and boundaries.
 
 - The core loop is guided setup → saved context → one reviewable next action → follow-through. A screen or questionnaire is not complete merely because its buttons work.
 - Preserve the user's answers and original words. Reuse saved information; do not require the same creative explanation again.

@@ -28,6 +28,9 @@ import {
   saveTask,
 } from "./src/services/storage";
 import ProfileView from "./src/components/ProfileView";
+import { newProgress, levelForProgress } from "./src/progress";
+import { syncProgress } from "./src/services/progress";
+import { profileCompletion } from "./src/profile-completion";
 import { journeyState, directionOptions } from "./src/journey";
 import { starterFor, starterDraft } from "./src/starters";
 import type { DirectionContext } from "./src/model";
@@ -129,6 +132,7 @@ export default function App() {
 function Flow() {
   const [screen, setScreen] = useState<Screen>("Today");
   const [profile, setProfile] = useState<Profile>(newProfile());
+  const [progress, setProgress] = useState(newProgress());
   const [onboarding, setOnboarding] = useState(false);
   const [completionSection, setCompletionSection] = useState<
     "assessment" | "areas" | undefined
@@ -142,6 +146,7 @@ function Flow() {
   const [budget, setBudget] = useState(30);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [progressError, setProgressError] = useState("");
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [composer, setComposer] = useState<"text" | "voice" | null>(null);
@@ -186,6 +191,20 @@ function Flow() {
     setTasks(w.tasks);
     setNotes(w.notes);
     setDrafts(d);
+    await refreshProgress();
+  }
+  async function refreshProgress() {
+    try {
+      const saved = await syncProgress();
+      setProgress(saved);
+      setProgressError("");
+      return saved;
+    } catch {
+      setProgressError(
+        "Your work is saved. Accomplishment progress could not update yet.",
+      );
+      return null;
+    }
   }
   useEffect(() => {
     Promise.all([
@@ -319,13 +338,38 @@ function Flow() {
     void processRecording(entry, "capture");
   }
   const journey = journeyState(profile, notes, drafts, tasks);
+  const completion = profileCompletion(profile);
   const next = journey.next;
   const suggestedStarter = next.direction ? starterFor(next.direction) : null;
   const nextTask =
     next.kind === "task" ? tasks.find((t) => t.id === next.id) : undefined;
   async function updateProfile(p: Profile) {
     await saveProfile(p);
+    if (p.preferredMinutes !== profile.preferredMinutes) {
+      setBudget(
+        typeof p.preferredMinutes === "number" ? p.preferredMinutes : 10,
+      );
+      setTimeChosenFor(
+        typeof p.preferredMinutes === "number" ? localDate() : null,
+      );
+    }
     setProfile(p);
+    await refreshProgress();
+  }
+  async function completeAction(task: Task) {
+    await run(async () => {
+      const before = levelForProgress(progress);
+      await saveTask({ ...task, done: true });
+      const saved = await refreshProgress();
+      const after = levelForProgress(saved ?? progress);
+      setNotice(
+        after.level && after.level.number > (before.level?.number ?? 0)
+          ? `Level ${after.level.number} · ${after.level.title}. ${after.completedCount === 1 ? "Your first action is finished." : `${after.completedCount} actions finished, one step at a time.`}`
+          : after.completedCount > before.completedCount
+            ? `Action complete. ${after.completedCount} accomplishments saved in Profile.`
+            : "Action complete. Your work is saved.",
+      );
+    });
   }
   function finishProfileSection() {
     setOnboarding(false);
@@ -358,7 +402,7 @@ function Flow() {
   function continueJourney() {
     navigate("Today");
     if (next.kind === "setup") {
-      setOnboarding(true);
+      navigate("Profile");
       return;
     }
     if (next.kind === "draft") {
@@ -380,10 +424,23 @@ function Flow() {
       const d = drafts.find((d) => d.id === id) ?? starterDraft(direction);
       await saveDraft(d);
       await acceptStep(d, d.steps[0]);
-      await updateProfile({ ...profile, completed: true });
+      const selectedDirection = directionOptions(profile).find(
+        (d) => d.directionId === direction.directionId,
+      );
+      await updateProfile({
+        ...profile,
+        completed: true,
+        ...(selectedDirection
+          ? {
+              focus: selectedDirection.title,
+              focusExplicit: true,
+              focusNone: false,
+            }
+          : {}),
+      });
       setOnboarding(false);
       navigate("Today");
-      setNotice("Your first action is ready. Everything else stays saved.");
+      setNotice("Your next action is ready. Everything else stays saved.");
     });
   }
   function guidedCapture(direction: DirectionContext) {
@@ -560,10 +617,7 @@ function Flow() {
       <SafeAreaView style={s.safe}>
         <Onboarding
           profile={profile}
-          onSave={async (p) => {
-            await saveProfile(p);
-            setProfile(p);
-          }}
+          onSave={updateProfile}
           onClose={finishProfileSection}
           sectionMode={completionSection}
           onCapture={(topic) => {
@@ -576,15 +630,13 @@ function Flow() {
           }}
           onContinue={() => {
             setOnboarding(false);
-            navigate("Today");
+            if (next.kind === "draft" || next.kind === "process")
+              continueJourney();
+            else navigate("Today");
           }}
           externalBusy={busy}
-          externalError={error}
-          existingWork={
-            notes.length > 0 ||
-            drafts.some((d) => !d.example) ||
-            tasks.length > 0
-          }
+          externalError={error || progressError}
+          existingWork={["task", "draft", "process"].includes(next.kind)}
         />
       </SafeAreaView>
     );
@@ -621,7 +673,7 @@ function Flow() {
           flow<Text style={{ color: C.blue }}>.</Text>
         </Text>
         <View style={s.row}>
-          <Text style={s.test}>TEST BUILD · 09</Text>
+          <Text style={s.test}>TEST BUILD · 10</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings and existing tools"
@@ -660,6 +712,22 @@ function Flow() {
               </Text>
             </Pressable>
           )}
+          {!!progressError && (
+            <View style={s.quiet}>
+              <Text accessibilityRole="alert" style={s.body}>
+                {progressError}
+              </Text>
+              <Tap
+                label="Retry progress update"
+                onPress={() =>
+                  void run(async () => {
+                    await refreshProgress();
+                  })
+                }
+                disabled={busy}
+              />
+            </View>
+          )}
           {screen === "Today" && (
             <>
               <View style={s.headingRow}>
@@ -676,6 +744,24 @@ function Flow() {
                   </Text>
                 </View>
               </View>
+              {completion.percent < 100 && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Finish my profile, ${completion.percent}% complete`}
+                  onPress={() => navigate("Profile")}
+                  style={s.quiet}
+                >
+                  <Text style={s.tapText}>
+                    Finish my profile · {completion.percent}%
+                  </Text>
+                  <Text style={s.meta}>
+                    Next: {completion.next?.title}.{" "}
+                    {progress.unlockedAt
+                      ? "Keep your guidance up to date."
+                      : "Levels unlock at 100%."}
+                  </Text>
+                </Pressable>
+              )}
               <View style={s.hero}>
                 <Text style={s.heroKicker}>
                   {next.direction?.choice.toUpperCase() ?? "YOUR NEXT STEP"}
@@ -697,13 +783,7 @@ function Flow() {
                         : next.kind === "task"
                           ? "This is the action you chose. Finish it before opening another direction."
                           : next.kind === "complete"
-                            ? journey.milestones.some(
-                                (m) =>
-                                  m.label === "First action completed" &&
-                                  m.done,
-                              )
-                              ? "Your chosen action is complete. Your profile keeps the progress."
-                              : "Your life areas are reviewed. You can add an interest in Profile when you need it."
+                            ? "You can pause here. When there’s more, add a thought and we’ll shape the next step."
                             : "We’ll use your saved answers and build a first plan."}
                 </Text>
                 {next.kind === "starter" && next.direction && (
@@ -717,14 +797,7 @@ function Flow() {
                 {next.kind === "task" && nextTask && (
                   <Tap
                     label="I’ve done this"
-                    onPress={() =>
-                      void run(async () => {
-                        await saveTask({ ...nextTask, done: true });
-                        setNotice(
-                          "First action complete. Your progress is saved in Profile.",
-                        );
-                      })
-                    }
+                    onPress={() => void completeAction(nextTask)}
                     disabled={busy}
                     primary
                   />
@@ -745,7 +818,11 @@ function Flow() {
                 )}
                 {next.kind === "complete" && (
                   <Tap
-                    label="See my progress"
+                    label={
+                      progress.unlockedAt
+                        ? "See my accomplishments"
+                        : "See my profile"
+                    }
                     onPress={() => navigate("Profile")}
                     primary
                   />
@@ -825,12 +902,7 @@ function Flow() {
                       accessibilityState={{ checked: t.done }}
                       accessibilityLabel={`Complete ${t.title}`}
                       disabled={busy}
-                      onPress={() =>
-                        void run(async () => {
-                          await saveTask({ ...t, done: true });
-                          setNotice("Done. A little more space.");
-                        })
-                      }
+                      onPress={() => void completeAction(t)}
                       style={s.check}
                     >
                       <Text style={{ color: C.blue }}>○</Text>
@@ -869,11 +941,13 @@ function Flow() {
           {screen === "Profile" && (
             <ProfileView
               profile={profile}
+              progress={progress}
               notes={notes}
               drafts={drafts}
               tasks={tasks}
               busy={busy}
               onContinue={continueJourney}
+              onCapture={() => capture("voice")}
               onConfigure={async (patch) => {
                 if (lock.current)
                   throw new Error("Another save is in progress.");
@@ -881,18 +955,6 @@ function Flow() {
                 setBusy(true);
                 try {
                   await updateProfile({ ...profile, ...patch });
-                  if (patch.preferredMinutes !== undefined) {
-                    setBudget(
-                      typeof patch.preferredMinutes === "number"
-                        ? patch.preferredMinutes
-                        : 10,
-                    );
-                    setTimeChosenFor(
-                      typeof patch.preferredMinutes === "number"
-                        ? localDate()
-                        : null,
-                    );
-                  }
                 } finally {
                   lock.current = false;
                   setBusy(false);

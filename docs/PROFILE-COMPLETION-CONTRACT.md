@@ -31,6 +31,7 @@ Formula: round(20 × sum(section fractions)), capped at 99 until all five sectio
 - Finishing a missing piece returns to Profile, not the full onboarding journey, map or recorder.
 - At 100%, say “Your starting profile is ready.” This is setup completeness, not personality certainty or a guarantee of optimal productivity.
 - Levels and action milestones remain separate. Completing tasks, granting microphone/calendar permission, or buying a subscription never changes this percentage.
+- Per the user's build-10 decision, reaching 100% once unlocks [accomplishment levels](ACCOMPLISHMENT-LEVELS.md). Later profile edits never remove earned levels. The normal funnel includes explicit focus and usual-time choices so users can reach 100% without searching Profile for missing questions.
 - Available time is a preference, not fabricated calendar availability. Varies asks for a session choice and clearly labels the initial short-option filter. An oversized saved task is not silently hidden or rewritten.
 
 ## Rules for future scope

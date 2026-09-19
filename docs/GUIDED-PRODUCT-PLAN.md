@@ -50,7 +50,7 @@ flowchart TD
 3. Suggest a small, reversible first action for each selectable interest, with its reason visible before accepting. Do not invent contacts, dates, medical instructions or legal obligations. An action is created only after an explicit tap.
 4. Show one primary continuation on Today. Accepting a draft returns to Today with the chosen action, rather than asking the user to select another branch.
 5. Give Profile factual coverage: valid answers out of 20; areas reviewed out of 6; areas deferred; selected interests and linked actions. 'Nothing current' is reviewed; 'Later' is deferred. Never report an invented understanding/accuracy percentage.
-6. Use four light levels: Getting acquainted, Mapped, Ready to act, In motion. Milestones reflect stored work, not personality scores or engagement tricks. No currencies, leaderboards or streak penalties.
+6. The original four setup milestones are superseded by [accomplishment levels](ACCOMPLISHMENT-LEVELS.md): unlock once Profile reaches 100%, then advance through distinct completed actions. Keep currencies, leaderboards and streak penalties out.
 7. Preserve the full five-trait assessment and adjustable guidance preference. Personality affects presentation and suggestions, not whether an obligation matters.
 
 ## Follow-on work in priority order

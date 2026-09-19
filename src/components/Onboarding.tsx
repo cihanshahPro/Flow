@@ -1,4 +1,5 @@
 import { starterFor } from "../starters";
+import { profileCompletion } from "../profile-completion";
 import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
@@ -129,6 +130,22 @@ export default function Onboarding({
     })),
   );
   const focus = active.find((x) => x.topic === profile.focus) ?? active[0];
+  const completion = profileCompletion(profile);
+  function nextPreference(p: Profile): Profile["stage"] {
+    if (!p.presentation) return "preferences";
+    if (!p.preferredMinutes) return "capacity";
+    return "guide";
+  }
+  function confirmDirection() {
+    const confirmed = {
+      ...profile,
+      focus: focus?.topic,
+      focusExplicit: !!focus,
+      focusNone: !focus,
+      obstacle: undefined,
+    };
+    void save({ ...confirmed, stage: nextPreference(confirmed) });
+  }
   return (
     <ScrollView contentContainerStyle={s.page}>
       <View style={s.top}>
@@ -334,20 +351,7 @@ export default function Onboarding({
               <Text style={s.kicker}>START HERE</Text>
               <Text style={s.title}>{focus.title}</Text>
               <Text style={s.body}>{guide.reason}</Text>
-              {existingWork &&
-                button("Continue my saved work", onContinue, true)}
-              {!existingWork &&
-                button(
-                  "Walk me through this",
-                  () =>
-                    void save({
-                      ...profile,
-                      focus: focus.topic,
-                      obstacle: undefined,
-                      stage: "guide",
-                    }),
-                  true,
-                )}
+              {button("Walk me through this", confirmDirection, true)}
               {active.length > 1 &&
                 button(
                   alternatives
@@ -396,11 +400,7 @@ export default function Onboarding({
               ))}
             </View>
           )}
-          {button(
-            "Go to my next step",
-            () => void save({ ...profile, completed: true }, onContinue),
-            true,
-          )}
+          {!focus && button("Confirm no current focus", confirmDirection, true)}
           {button(
             "Review life areas",
             () => void save({ ...profile, stage: "areas", areaIndex: 0 }),
@@ -428,6 +428,75 @@ export default function Onboarding({
           )}
         </>
       )}
+      {profile.stage === "preferences" && (
+        <>
+          <Text style={s.kicker}>HOW FLOW GUIDES YOU</Text>
+          <Text style={s.title}>A pace that feels manageable.</Text>
+          <Text style={s.body}>
+            Choose how you want to see your next steps. You can change this in
+            Profile.
+          </Text>
+          {(["small", "sequence"] as const).map((presentation) =>
+            button(
+              presentation === "small"
+                ? "One small action at a time"
+                : "Show me a step sequence",
+              () => {
+                const updated = { ...profile, presentation };
+                void save({ ...updated, stage: nextPreference(updated) });
+              },
+              presentation === guide.presentation,
+            ),
+          )}
+        </>
+      )}
+      {profile.stage === "capacity" && (
+        <>
+          <Text style={s.kicker}>ONE LAST PREFERENCE</Text>
+          <Text style={s.title}>How much time usually fits?</Text>
+          <Text style={s.body}>
+            We’ll use this to keep Today’s suggestions manageable. You can
+            change it any day.
+          </Text>
+          {([10, 30, 60, "varies"] as const).map((preferredMinutes) =>
+            button(
+              preferredMinutes === "varies"
+                ? "It varies — I’ll choose each day"
+                : `${preferredMinutes} minutes`,
+              () => void save({ ...profile, preferredMinutes, stage: "guide" }),
+            ),
+          )}
+        </>
+      )}
+      {profile.stage === "guide" && (
+        <View style={s.card}>
+          <Text style={s.kicker}>{completion.percent}% PROFILE COMPLETE</Text>
+          <Text style={s.body}>
+            {completion.percent === 100
+              ? "Your starting profile is ready. Each action you finish builds your accomplishment progress."
+              : "You can start now. Profile will guide you through the remaining pieces; levels unlock at 100%."}
+          </Text>
+        </View>
+      )}
+      {profile.stage === "guide" && !focus && (
+        <>
+          <Text style={s.title}>
+            {existingWork
+              ? "Pick up where you left off."
+              : "Room for whatever comes next."}
+          </Text>
+          <Text style={s.body}>
+            {existingWork
+              ? "Your saved work is ready to continue."
+              : "You haven’t chosen a direction yet. Your profile is saved; you can finish setup or capture a thought from Today."}
+          </Text>
+          {button(
+            existingWork ? "Continue my saved work" : "Go to Today",
+            () => void save({ ...profile, completed: true }, onContinue),
+            true,
+          )}
+        </>
+      )}
       {profile.stage === "guide" && focus && (
         <>
           <Text style={s.kicker}>
@@ -440,7 +509,11 @@ export default function Onboarding({
                 You already have saved work. We’ll continue that before asking
                 for more.
               </Text>
-              {button("Continue my saved work", onContinue, true)}
+              {button(
+                "Continue my saved work",
+                () => void save({ ...profile, completed: true }, onContinue),
+                true,
+              )}
             </>
           ) : (
             <>

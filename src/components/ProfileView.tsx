@@ -1,4 +1,6 @@
 import ProfileCompletion from "./ProfileCompletion";
+import ProgressCard from "./ProgressCard";
+import type { ProgressRecord } from "../progress.ts";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { productivityGuide, type Profile } from "../personality";
@@ -7,11 +9,13 @@ import type { Note, Task } from "../model";
 import type { ThoughtDraft } from "../drafts";
 export default function ProfileView({
   profile,
+  progress,
   notes,
   drafts,
   tasks,
   busy,
   onContinue,
+  onCapture,
   onEditAreas,
   onAssessment,
   onPreference,
@@ -21,11 +25,13 @@ export default function ProfileView({
   onCompleteAreas,
 }: {
   profile: Profile;
+  progress: ProgressRecord;
   notes: Note[];
   drafts: ThoughtDraft[];
   tasks: Task[];
   busy: boolean;
   onContinue: () => void;
+  onCapture: () => void;
   onEditAreas: () => void;
   onAssessment: () => void;
   onPreference: () => void;
@@ -54,6 +60,7 @@ export default function ProfileView({
     <View style={s.page}>
       <Text style={s.kicker}>PROFILE · YOUR STARTING POINT, KEPT</Text>
       <Text style={s.title}>A picture of you.</Text>
+      {progress.unlockedAt && <ProgressCard progress={progress} />}
       <ProfileCompletion
         profile={profile}
         busy={busy}
@@ -61,20 +68,7 @@ export default function ProfileView({
         onAssessment={onCompleteAssessment}
         onAreas={onCompleteAreas}
       />
-      <View style={s.level}>
-        <Text style={s.kicker}>
-          LEVEL {state.level.number} · {state.level.title.toUpperCase()}
-        </Text>
-        <Text style={s.body}>
-          Progress comes from saved plans and completed actions. No streaks to
-          protect.
-        </Text>
-        {state.milestones.map((m) => (
-          <Text key={m.label} style={s.body}>
-            {m.done ? "✓" : "○"} {m.label}
-          </Text>
-        ))}
-      </View>
+      {!progress.unlockedAt && <ProgressCard progress={progress} />}
       <View style={s.card}>
         <Text style={s.kicker}>YOUR CURRENT APPROACH</Text>
         <Text style={s.heading}>{guide.title}</Text>
@@ -86,11 +80,23 @@ export default function ProfileView({
         ))}
         {button("Change my guidance style", onPreference)}
       </View>
-      <View style={s.card}>
-        <Text style={s.heading}>Next, together</Text>
-        <Text style={s.body}>{state.next.title}</Text>
-        {button("Go to my next step", onContinue, true)}
-      </View>
+      {state.next.kind !== "setup" && (
+        <View style={s.card}>
+          <Text style={s.heading}>
+            {state.next.kind === "complete"
+              ? "Room for what comes next"
+              : "Next, together"}
+          </Text>
+          <Text style={s.body}>
+            {state.next.kind === "complete"
+              ? "Your saved steps are finished. You can pause here, or add a new thought when you’re ready."
+              : state.next.title}
+          </Text>
+          {state.next.kind === "complete"
+            ? button("Capture a new thought", onCapture)
+            : button("Go to my next step", onContinue, true)}
+        </View>
+      )}
       {button(traits ? "Hide personality details" : "See my personality", () =>
         setTraits(!traits),
       )}
@@ -169,7 +175,6 @@ const s = StyleSheet.create({
     color: "#52647C",
   },
   title: { fontSize: 36, fontWeight: "700", color: "#142138" },
-  level: { backgroundColor: "#E7EEDB", padding: 22, borderRadius: 24, gap: 10 },
   card: { backgroundColor: "white", padding: 22, borderRadius: 24, gap: 12 },
   heading: { fontSize: 18, fontWeight: "600", color: "#142138" },
   body: { fontSize: 15, lineHeight: 23, color: "#52647C" },
