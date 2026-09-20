@@ -394,8 +394,13 @@ test("a first dump with several subjects gets the split offer, and no second mov
   assert.equal(pendingMessage(t).id, branch.id, "the split question waits alone; And what else? comes after it");
   const kept = answerChip(t, branch.id, "keep", { now }).thread;
   assert.equal(pendingMessage(kept).stage, "else");
-  const more = respondToRecording(kept, "n2", "I also should email the client about the delay.", { now });
-  assert.equal(more.messages.filter((m) => m.kind === "branch").length, 1, "the split is offered once");
+  const more = respondToRecording(kept, "n2", "The designer said the last screens come Thursday.", { now });
+  assert.equal(more.messages.filter((m) => m.kind === "branch").length, 1, "nothing new to split");
+  const later = respondToRecording(kept, "n3", "Also the gym membership renews next week and I have not been in months.", { now });
+  assert.equal(later.messages.filter((m) => m.kind === "branch").length, 2, "a new side subject in a later message is offered its own thread");
+  assert.match(pendingMessage(later).text, /gym membership/i);
+  const again = respondToRecording(kept, "n4", "Also my landlord is asking about the lease renewal by end of month.", { now });
+  assert.equal(again.messages.filter((m) => m.kind === "branch").length, 1, "the same subject is never offered twice");
   assert.equal(more.messages.filter((m) => m.from === "flow" && !m.answered && m.kind === "question").length, 1, "one open question at a time");
 });
 

@@ -845,11 +845,14 @@ export function respondToRecording(
     const y = b.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
     return x === y || x.includes(y) || y.includes(x);
   };
+  // A subject already offered its own thread is not offered again.
+  const offeredBefore = (thread.messages ?? []).filter((m) => m.kind === "branch").flatMap((m) => m.branches ?? []);
   const branches = heard
     .filter((b) => b.title.trim() && b.evidence.trim())
     .filter((b, i, all) => all.findIndex((o) => same(o.title, b.title) || same(o.evidence, b.evidence)) === i)
+    .filter((b) => !offeredBefore.some((o) => same(o.title, b.title) || same(o.evidence, b.evidence)))
     .slice(0, 3);
-  if (branches.length && !(thread.messages ?? []).some((m) => m.kind === "branch")) {
+  if (branches.length) {
     push({
       from: "flow",
       kind: "branch",
