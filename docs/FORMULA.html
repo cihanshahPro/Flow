@@ -1,0 +1,300 @@
+<title>The Flow Formula</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  :root { --paper:#F6F7FA; --card:#FFFFFF; --ink:#142138; --muted:#697386; --faint:#8D95A4; --line:#E2E6ED; --blue:#345BEE; --blueSoft:#EDF0FF; --blueLine:#D5DDFB; --lime:#DFF586; --bg:#0F1320; --bg2:#161B2B; --bg3:#1D2336; --edge:#262D41; --text:#EEF1F7; --mutedText:#A5B0C3; --sp:#FFB86B; --sj:#7FD1FF; --nf:#F6A6FF; --nt:#8BF5C8; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Source Sans 3", -apple-system, "Helvetica Neue", Arial, sans-serif; font-size:15px; line-height:1.5; padding:0 20px; padding-block:32px 80px; }
+  .wrap { max-width:1280px; margin:0 auto; }
+  h1 { font-family:"Inter Tight", sans-serif; font-size:38px; font-weight:800; letter-spacing:-0.025em; margin:0 0 8px; text-wrap:balance; }
+  h2 { font-family:"Inter Tight", sans-serif; font-size:22px; font-weight:800; letter-spacing:-0.015em; margin:56px 0 6px; display:flex; align-items:baseline; gap:12px; }
+  h2 .no { font-family:"JetBrains Mono", monospace; font-size:13px; color:var(--lime); letter-spacing:1px; }
+  h3 { font-family:"Inter Tight", sans-serif; font-size:16px; font-weight:700; margin:22px 0 8px; }
+  p { max-width:78ch; margin:0 0 12px; }
+  .lede { color:var(--mutedText); font-size:17px; max-width:80ch; margin-bottom:22px; }
+  .sub { color:var(--mutedText); margin-bottom:16px; max-width:80ch; }
+  .eq { font-family:"JetBrains Mono", monospace; font-size:15px; background:var(--bg2); border:1px solid var(--edge); border-radius:14px; padding:16px 18px; margin:18px 0 8px; overflow-x:auto; line-height:1.7; }
+  .eq b { color:var(--lime); font-weight:700; }
+  .eq i { color:var(--mutedText); font-style:normal; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  .tbl { overflow-x:auto; border:1px solid var(--edge); border-radius:14px; background:var(--bg2); }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--edge); vertical-align:top; }
+  th { font-size:11px; letter-spacing:1.3px; text-transform:uppercase; color:var(--mutedText); font-weight:700; background:var(--bg3); }
+  tr:last-child td { border-bottom:0; }
+  td.q { font-weight:700; color:#fff; }
+  td.mono, .mono { font-family:"JetBrains Mono", monospace; font-size:12.5px; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.6px; background:var(--bg3); border:1px solid var(--edge); color:var(--mutedText); white-space:nowrap; }
+  .tag.book { color:var(--lime); border-color:#3d4a2a; }
+  .grid4 { display:grid; grid-template-columns:repeat(auto-fit, minmax(270px, 1fr)); gap:14px; }
+  .roof { background:var(--bg2); border:1px solid var(--edge); border-radius:16px; padding:16px 16px 14px; border-top:4px solid var(--c); }
+  .roof .code { font-family:"JetBrains Mono", monospace; font-size:12px; color:var(--c); letter-spacing:1px; font-weight:700; }
+  .roof .name { font-family:"Inter Tight", sans-serif; font-size:19px; font-weight:800; margin:2px 0 0; }
+  .roof .axis { color:var(--mutedText); font-size:12.5px; margin-bottom:10px; }
+  .roof .need { font-size:13.5px; margin-bottom:10px; }
+  .roof .need b { color:var(--c); }
+  .lbl { font-size:10px; letter-spacing:1.3px; font-weight:800; color:var(--mutedText); margin-top:10px; }
+  .qb { background:var(--card); color:var(--ink); border-radius:14px; border-bottom-left-radius:5px; padding:8px 11px; font-size:13.5px; line-height:1.4; margin:5px 0; }
+  .qb.hype { background:var(--lime); font-weight:700; }
+  .qb.you { background:var(--blue); color:#fff; border-radius:14px; border-bottom-right-radius:5px; margin-left:auto; max-width:90%; }
+  .note { font-size:13px; color:var(--mutedText); margin-top:4px; }
+  .matrix { display:grid; grid-template-columns:auto repeat(4, 1fr); gap:6px; font-family:"JetBrains Mono", monospace; font-size:13px; max-width:640px; }
+  .matrix .h { color:var(--mutedText); font-size:11px; letter-spacing:1px; padding:6px 4px; text-align:center; }
+  .matrix .rh { color:var(--mutedText); font-size:11px; letter-spacing:1px; padding:10px 8px 0 0; text-align:right; }
+  .matrix .c { padding:10px 6px; text-align:center; border-radius:10px; background:var(--bg2); border:1px solid var(--edge); font-weight:700; color:#fff; border-left:4px solid var(--c); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; margin:10px 0 0; font-size:13px; color:var(--mutedText); }
+  .legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:3px; background:var(--c); margin-right:6px; vertical-align:-1px; }
+  .types { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:10px; margin-top:10px; }
+  .type { background:var(--bg2); border:1px solid var(--edge); border-radius:14px; padding:12px 14px; border-left:4px solid var(--c); }
+  .type .top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .type .k { font-family:"JetBrains Mono", monospace; font-weight:700; color:var(--c); }
+  .type .kr { color:var(--mutedText); font-size:12px; }
+  .type .fn { font-family:"Inter Tight", sans-serif; font-weight:700; font-size:15px; margin:2px 0 6px; }
+  .type .d { font-size:13px; color:var(--mutedText); }
+  .type .d b { color:var(--text); font-weight:700; }
+  .dials { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; }
+  .dial { background:var(--bg2); border:1px solid var(--edge); border-radius:16px; padding:14px 16px; }
+  .dial .t { font-family:"Inter Tight", sans-serif; font-weight:800; font-size:16px; margin-bottom:6px; }
+  .dial .row { display:grid; grid-template-columns:auto 1fr; gap:8px 12px; font-size:13.5px; align-items:start; }
+  .dial .row b { font-family:"JetBrains Mono", monospace; color:var(--lime); }
+  .ex { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:12px; }
+  .chat { background:var(--paper); color:var(--ink); border-radius:18px; padding:12px; border-top:4px solid var(--c); display:flex; flex-direction:column; gap:6px; }
+  .chat .who { font-family:"Inter Tight", sans-serif; font-weight:800; font-size:12px; letter-spacing:1px; color:var(--c); filter:brightness(.7); margin-bottom:2px; }
+  .chat .meter { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--blue); font-weight:700; }
+  .chat .bar { width:60px; height:5px; background:var(--line); border-radius:3px; overflow:hidden; } .chat .bar i { display:block; height:100%; background:var(--blue); }
+  .rules { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:10px; }
+  .rule { background:var(--bg2); border:1px solid var(--edge); border-radius:12px; padding:12px 14px; font-size:14px; }
+  .rule b { color:var(--lime); }
+  .src { font-size:13.5px; color:var(--mutedText); columns:2; column-gap:28px; max-width:none; }
+  .src li { break-inside:avoid; margin-bottom:6px; }
+  .src a { color:var(--text); }
+  @media (max-width:600px) { .src { columns:1; } h1 { font-size:30px; } }
+</style>
+
+<div class="wrap">
+<h1>The Flow Formula</h1>
+<p class="lede">How Flow decides what to say next inside a thread. Nothing here is invented: the questions come from one book, the personality layer from another, and the glue from three published methods. Every thread, every person, every turn runs the same equation.</p>
+
+<div class="eq">
+<b>Turn</b> = Reflect(<i>what you just said</i>, roof) + Question(<i>stage</i>, roof) · Rhythm(E|I) · Lens(T|F or J|P)<br>
+<b>stage</b> = the first of 7 script steps not yet answered &nbsp;&nbsp; <b>roof</b> = temperament(16-letter type) ∈ {SP, SJ, NF, NT}<br>
+<b>understood%</b> = outcome·25 + challenge·25 + people·12.5 + timing·12.5 + dependencies·12.5 + motivation·12.5 &nbsp;→ suggestions only at 100
+</div>
+<p class="note">Read it as: say back what you heard, then ask the next question in the script, worded for this person's temperament, at this person's rhythm.</p>
+
+<!-- ============================================================ 1 -->
+<h2><span class="no">01</span> The spine — seven questions, fixed order</h2>
+<p class="sub">Michael Bungay Stanier, <i>The Coaching Habit</i> (2016). His seven questions are the GROW model (John Whitmore, <i>Coaching for Performance</i>, 1992) compressed into words a lazy person can answer without thinking. Flow asks them in this order and never skips ahead. Each answer fills part of the thread's fingerprint.</p>
+<div class="tbl"><table>
+<tr><th>#</th><th>Stage</th><th>Question (verbatim)</th><th>Method</th><th>Fills</th><th>Rule</th></tr>
+<tr><td class="mono">1</td><td>MIND</td><td class="q">What's on your mind?</td><td><span class="tag book">Coaching Habit · Kickstart</span></td><td>The dump. Title, first facts.</td><td>The record button. Never asked in words — it <i>is</i> the app.</td></tr>
+<tr><td class="mono">2</td><td>ELSE</td><td class="q">And what else?</td><td><span class="tag book">Coaching Habit · AWE</span> <span class="tag">GROW · Reality</span></td><td>people · timing · dependencies · constraints</td><td>Repeat until the answer adds no new fingerprint point. Cap by Rhythm (E: 3 · I: 1). The best question in the book: zero effort for the user, most of the fingerprint comes from here.</td></tr>
+<tr><td class="mono">3</td><td>CHALLENGE</td><td class="q">What's the real challenge here for you?</td><td><span class="tag book">Coaching Habit · Focus</span> <span class="tag">WOOP · Obstacle</span></td><td>challenge (constraints)</td><td>Asked once. "For you" is the point — the person's obstacle, not the project's.</td></tr>
+<tr><td class="mono">4</td><td>WANT</td><td class="q">What do you want?</td><td><span class="tag book">Coaching Habit · Foundation</span> <span class="tag">GROW · Goal</span> <span class="tag">WOOP · Wish + Outcome</span></td><td>outcome · motivation</td><td>Asked once. Answer becomes the thread's outcome line, quoted as evidence.</td></tr>
+<tr><td class="mono">—</td><td>SUMMARY</td><td class="q">Here's how I see it: …</td><td><span class="tag">MI · Summary reflection</span></td><td>—</td><td>Only at 100%. One paragraph, every fingerprint point, the person's own words. Then a lime "I've got the full picture".</td></tr>
+<tr><td class="mono">5</td><td>HELP</td><td class="q">How can I help?</td><td><span class="tag book">Coaching Habit · Lazy</span> <span class="tag">MI · Elicit-Provide-Elicit</span></td><td>next (the move)</td><td>Flow never suggests before asking this. The answer shapes ONE move, built by Flow with GTD's two questions (<i>what does done look like · what's the very next physical action</i>) and WOOP's if-then plan.</td></tr>
+<tr><td class="mono">6</td><td>TRADE</td><td class="q">If you're saying yes to this, what are you saying no to?</td><td><span class="tag book">Coaching Habit · Strategic</span> <span class="tag">Gollwitzer · Implementation intention</span></td><td>commitment</td><td>Asked when the person accepts the move by replying. Lens J adds a date; Lens P keeps it to the smallest step. Then it goes on Today.</td></tr>
+<tr><td class="mono">7</td><td>USEFUL</td><td class="q">What was most useful for you?</td><td><span class="tag book">Coaching Habit · Learning</span></td><td>check-in</td><td>The morning after a move. The answer feeds the next re-evaluation of the thread.</td></tr>
+</table></div>
+
+<!-- ============================================================ 2 -->
+<h2><span class="no">02</span> The meter — when a thread is understood</h2>
+<p class="sub">The fingerprint has six points of understanding (the seventh, <i>next</i>, is the move — it comes after understanding, not before). Each point counts only with a quote from the person as evidence. Questions 3 and 4 are worth half the meter on their own, so the bar cannot reach 100 without both being answered — which is exactly the script's rule.</p>
+<div class="tbl"><table>
+<tr><th>Point</th><th>Weight</th><th>Filled by</th><th>Evidence looks like</th></tr>
+<tr><td>outcome</td><td class="mono">25</td><td>Q4 WANT</td><td>"show up Friday with the delay clearly not mine"</td></tr>
+<tr><td>challenge</td><td class="mono">25</td><td>Q3 CHALLENGE</td><td>"it looks like it's on me"</td></tr>
+<tr><td>people</td><td class="mono">12.5</td><td>Q1 / Q2</td><td>"my manager and his boss", "the designer"</td></tr>
+<tr><td>timing</td><td class="mono">12.5</td><td>Q1 / Q2</td><td>"2pm Friday"</td></tr>
+<tr><td>dependencies</td><td class="mono">12.5</td><td>Q1 / Q2</td><td>"the last two are with the designer"</td></tr>
+<tr><td>motivation</td><td class="mono">12.5</td><td>Q4 (why-part) / Q2</td><td>"the boss's boss is in the room"</td></tr>
+</table></div>
+<p class="note">Header wording: 0–99 "Getting to know this · n%" · 100 "Flow gets it". A thread also re-scores every time a note is added, so a point can be filled without ever being asked.</p>
+
+<!-- ============================================================ 3 -->
+<h2><span class="no">03</span> 16 types → 4 roofs</h2>
+<p class="sub">David Keirsey, <i>Please Understand Me II</i> (1998). The 16 types collapse into four temperaments along two axes the book defines: what words people use (<b>concrete</b> S / <b>abstract</b> N) and what they aim at (<b>cooperative</b> — doing what's right by others / <b>utilitarian</b> — doing what works). Flow's test already produces the four letters; the roof is two of them.</p>
+<div class="eq">roof = S ? (P ? <b>SP Artisan</b> : <b>SJ Guardian</b>) : (F ? <b>NF Idealist</b> : <b>NT Rational</b>)</div>
+<div class="matrix">
+  <div></div><div class="h">_ _ T P</div><div class="h">_ _ F P</div><div class="h">_ _ T J</div><div class="h">_ _ F J</div>
+  <div class="rh">E S</div><div class="c" style="--c:var(--sp)">ESTP</div><div class="c" style="--c:var(--sp)">ESFP</div><div class="c" style="--c:var(--sj)">ESTJ</div><div class="c" style="--c:var(--sj)">ESFJ</div>
+  <div class="rh">I S</div><div class="c" style="--c:var(--sp)">ISTP</div><div class="c" style="--c:var(--sp)">ISFP</div><div class="c" style="--c:var(--sj)">ISTJ</div><div class="c" style="--c:var(--sj)">ISFJ</div>
+  <div class="rh">E N</div><div class="c" style="--c:var(--nt)">ENTP</div><div class="c" style="--c:var(--nf)">ENFP</div><div class="c" style="--c:var(--nt)">ENTJ</div><div class="c" style="--c:var(--nf)">ENFJ</div>
+  <div class="rh">I N</div><div class="c" style="--c:var(--nt)">INTP</div><div class="c" style="--c:var(--nf)">INFP</div><div class="c" style="--c:var(--nt)">INTJ</div><div class="c" style="--c:var(--nf)">INFJ</div>
+</div>
+<div class="legend"><span style="--c:var(--sp)">SP Artisan → Operator</span><span style="--c:var(--sj)">SJ Guardian → Steward</span><span style="--c:var(--nf)">NF Idealist → Catalyst</span><span style="--c:var(--nt)">NT Rational → Architect</span></div>
+<p class="note" style="margin-top:12px">Today's four Flow types are made from Big Five thresholds someone picked; this replaces them with the book's rule. Three names already fit. "Coordinator" becomes "Operator" (Artisans need a home; ESTP is already called The Operator in the code).</p>
+
+<!-- ============================================================ 4 -->
+<h2><span class="no">04</span> The four scripts</h2>
+<p class="sub">Same seven questions. Only the words move, along Keirsey's two axes, plus what each temperament needs to hear back (the book's "core need": Artisans — freedom and impact; Guardians — belonging and responsibility; Idealists — meaning and authenticity; Rationals — competence and knowledge). Questions 1, 2 and 7 are identical for everyone: they are already as short and open as a question gets.</p>
+<div class="grid4">
+
+<div class="roof" style="--c:var(--sp)">
+  <div class="code">SP · ARTISAN</div><div class="name">Operator</div>
+  <div class="axis">concrete words · utilitarian aims · tactical</div>
+  <div class="need">Needs to hear: <b>impact, right now.</b> Reflect actions and what's been tried. Short. No ceremony.</div>
+  <div class="lbl">REFLECT</div><div class="qb">So: demo Friday, three of five screens done, designer's gone quiet. Got it.</div>
+  <div class="lbl">Q3 CHALLENGE</div><div class="qb">What's actually in the way right now?</div>
+  <div class="lbl">Q4 WANT</div><div class="qb">What do you want to have happen?</div>
+  <div class="lbl">SUMMARY LEAD</div><div class="qb">Here's the play as I see it: …</div>
+  <div class="lbl">Q5 HELP</div><div class="qb">How can I help?</div>
+  <div class="lbl">MOVE SHAPE</div><div class="qb">One action, today, ten minutes: message your manager now — three screens on Friday, two with the designer.</div>
+  <div class="lbl">Q6 TRADE</div><div class="qb">If you do this now, what gets dropped?</div>
+  <div class="lbl">HYPE</div><div class="qb hype">⚡ Nice move.</div>
+</div>
+
+<div class="roof" style="--c:var(--sj)">
+  <div class="code">SJ · GUARDIAN</div><div class="name">Steward</div>
+  <div class="axis">concrete words · cooperative aims · logistical</div>
+  <div class="need">Needs to hear: <b>what's expected, by whom, by when.</b> Reflect duties and dates. Orderly.</div>
+  <div class="lbl">REFLECT</div><div class="qb">So: a demo your manager expects Friday 2pm, three of five screens done, two with the designer.</div>
+  <div class="lbl">Q3 CHALLENGE</div><div class="qb">Which part of this is on you and isn't handled yet?</div>
+  <div class="lbl">Q4 WANT</div><div class="qb">What needs to be done, and by when?</div>
+  <div class="lbl">SUMMARY LEAD</div><div class="qb">Here's where things stand: …</div>
+  <div class="lbl">Q5 HELP</div><div class="qb">How can I help?</div>
+  <div class="lbl">MOVE SHAPE</div><div class="qb">Owner, date, done-state: you message your manager tonight; done = he knows two screens depend on the designer before Friday.</div>
+  <div class="lbl">Q6 TRADE</div><div class="qb">If you commit to this, what are you saying no to?</div>
+  <div class="lbl">HYPE</div><div class="qb hype">✅ Handled.</div>
+</div>
+
+<div class="roof" style="--c:var(--nf)">
+  <div class="code">NF · IDEALIST</div><div class="name">Catalyst</div>
+  <div class="axis">abstract words · cooperative aims · diplomatic</div>
+  <div class="need">Needs to hear: <b>that it matters, and who it's for.</b> Reflect people and meaning. Warm.</div>
+  <div class="lbl">REFLECT</div><div class="qb">So: you're carrying a demo for your manager on Friday, and the designer going quiet is what's making it heavy.</div>
+  <div class="lbl">Q3 CHALLENGE</div><div class="qb">What's the part of this that's weighing on you?</div>
+  <div class="lbl">Q4 WANT</div><div class="qb">What would make this feel right for you?</div>
+  <div class="lbl">SUMMARY LEAD</div><div class="qb">Here's what I'm hearing: …</div>
+  <div class="lbl">Q5 HELP</div><div class="qb">How can I help?</div>
+  <div class="lbl">MOVE SHAPE</div><div class="qb">One honest message to your manager tonight — where things really stand, so Friday isn't a surprise for either of you.</div>
+  <div class="lbl">Q6 TRADE</div><div class="qb">If you say yes to this, what are you saying no to?</div>
+  <div class="lbl">HYPE</div><div class="qb hype">🌱 That's you at your best.</div>
+</div>
+
+<div class="roof" style="--c:var(--nt)">
+  <div class="code">NT · RATIONAL</div><div class="name">Architect</div>
+  <div class="axis">abstract words · utilitarian aims · strategic</div>
+  <div class="need">Needs to hear: <b>the model, and why the move works.</b> Reflect dependencies and logic. Precise.</div>
+  <div class="lbl">REFLECT</div><div class="qb">So: demo Friday depends on two screens that depend on a designer who's unresponsive. That's the critical path.</div>
+  <div class="lbl">Q3 CHALLENGE</div><div class="qb">What's the real problem underneath this?</div>
+  <div class="lbl">Q4 WANT</div><div class="qb">What outcome are you actually after?</div>
+  <div class="lbl">SUMMARY LEAD</div><div class="qb">Here's the model: …</div>
+  <div class="lbl">Q5 HELP</div><div class="qb">How can I help?</div>
+  <div class="lbl">MOVE SHAPE</div><div class="qb">Highest-leverage step: tell your manager tonight. It moves the blame off the critical path before Friday, whatever the designer does.</div>
+  <div class="lbl">Q6 TRADE</div><div class="qb">If you go with this, what does it cost you?</div>
+  <div class="lbl">HYPE</div><div class="qb hype">🎯 Right lever.</div>
+</div>
+</div>
+
+<!-- ============================================================ 5 -->
+<h2><span class="no">05</span> The dials — the two letters the roof doesn't use</h2>
+<p class="sub">Sandra Krebs Hirsh &amp; Jane Kise, <i>Introduction to Type and Coaching</i> (CPP). A roof fixes two of the four letters. The other two don't change the words — they change the rhythm and the lens. This is what makes 16 types out of 4 scripts without inventing 16 scripts.</p>
+<div class="dials">
+  <div class="dial"><div class="t">Rhythm · E / I — how many times Flow asks "And what else?"</div>
+    <div class="row"><b>E</b><span>Extraverts think by talking (Hirsh &amp; Kise). Keep pulling: up to <b style="color:#fff">3</b> rounds, stop early when a round adds no new point. Flow's replies can be two bubbles.</span>
+    <b>I</b><span>Introverts think first, then say the considered version. One "And what else?", then move on. One bubble per turn, shorter reflections, no stacking questions.</span></div></div>
+  <div class="dial"><div class="t">Lens · T / F — what Flow says back first <span class="note">(Artisans &amp; Guardians: their J/P is fixed by the roof)</span></div>
+    <div class="row"><b>T</b><span>Reflect facts, sequence and logic first; people second. Hype names the result.</span>
+    <b>F</b><span>Reflect people and what it means to them first; facts second. Hype names the person.</span></div></div>
+  <div class="dial"><div class="t">Lens · J / P — how the move is closed <span class="note">(Idealists &amp; Rationals: their T/F is fixed by the roof)</span></div>
+    <div class="row"><b>J</b><span>Closure. The move carries a date and a done-state, Q6 asks "by when", it lands on Today with a time.</span>
+    <b>P</b><span>Openness. The move is the smallest first step ("start, don't finish"), no date forced, Q6 asks what it displaces today.</span></div></div>
+</div>
+
+<!-- ============================================================ 6 -->
+<h2><span class="no">06</span> All sixteen, under their roofs</h2>
+<p class="sub">Keirsey's role name, Flow's name (already in the code), and the two dials each type gets. Types under one roof share every question word-for-word; they differ only in rhythm and lens.</p>
+
+<h3 style="color:var(--sp)">SP Artisan — Operator script</h3>
+<div class="types">
+  <div class="type" style="--c:var(--sp)"><div class="top"><span class="k">ESTP</span><span class="kr">Keirsey: Promoter</span></div><div class="fn">The Operator</div><div class="d"><b>E</b> · 3 rounds of "and what else?" · <b>T</b> · reflects what's been tried, then who. Fast, direct, immediate feedback.</div></div>
+  <div class="type" style="--c:var(--sp)"><div class="top"><span class="k">ISTP</span><span class="kr">Keirsey: Crafter</span></div><div class="fn">The Troubleshooter</div><div class="d"><b>I</b> · 1 round · <b>T</b> · reflects the mechanics. One bubble, one practical move to test.</div></div>
+  <div class="type" style="--c:var(--sp)"><div class="top"><span class="k">ESFP</span><span class="kr">Keirsey: Performer</span></div><div class="fn">The Energizer</div><div class="d"><b>E</b> · 3 rounds · <b>F</b> · reflects who's affected, then what's happening. Visible momentum, hype with people in it.</div></div>
+  <div class="type" style="--c:var(--sp)"><div class="top"><span class="k">ISFP</span><span class="kr">Keirsey: Composer</span></div><div class="fn">The Maker</div><div class="d"><b>I</b> · 1 round · <b>F</b> · reflects how it sits with them. Small tangible move, respects energy.</div></div>
+</div>
+
+<h3 style="color:var(--sj)">SJ Guardian — Steward script</h3>
+<div class="types">
+  <div class="type" style="--c:var(--sj)"><div class="top"><span class="k">ESTJ</span><span class="kr">Keirsey: Supervisor</span></div><div class="fn">The Organizer</div><div class="d"><b>E</b> · 3 rounds · <b>T</b> · reflects the sequence and who owns what. Clear outcome, visible order.</div></div>
+  <div class="type" style="--c:var(--sj)"><div class="top"><span class="k">ISTJ</span><span class="kr">Keirsey: Inspector</span></div><div class="fn">The Steward</div><div class="d"><b>I</b> · 1 round · <b>T</b> · reflects facts and dates. Quiet, exact, one finish line.</div></div>
+  <div class="type" style="--c:var(--sj)"><div class="top"><span class="k">ESFJ</span><span class="kr">Keirsey: Provider</span></div><div class="fn">The Coordinator</div><div class="d"><b>E</b> · 3 rounds · <b>F</b> · reflects promises to people first, then dates. Hype: "people will notice."</div></div>
+  <div class="type" style="--c:var(--sj)"><div class="top"><span class="k">ISFJ</span><span class="kr">Keirsey: Protector</span></div><div class="fn">The Supporter</div><div class="d"><b>I</b> · 1 round · <b>F</b> · reflects commitments to people. Calm next step, no pressure.</div></div>
+</div>
+
+<h3 style="color:var(--nf)">NF Idealist — Catalyst script</h3>
+<div class="types">
+  <div class="type" style="--c:var(--nf)"><div class="top"><span class="k">ENFP</span><span class="kr">Keirsey: Champion</span></div><div class="fn">The Catalyst</div><div class="d"><b>E</b> · 3 rounds · <b>P</b> · smallest first step, no forced date. Flow holds the many ideas, keeps one in view.</div></div>
+  <div class="type" style="--c:var(--nf)"><div class="top"><span class="k">INFP</span><span class="kr">Keirsey: Healer</span></div><div class="fn">The Values Builder</div><div class="d"><b>I</b> · 1 round · <b>P</b> · reflects meaning, leaves room. Move is a first step that feels right.</div></div>
+  <div class="type" style="--c:var(--nf)"><div class="top"><span class="k">ENFJ</span><span class="kr">Keirsey: Teacher</span></div><div class="fn">The Mentor</div><div class="d"><b>E</b> · 3 rounds · <b>J</b> · move with a date and a done-state, framed around the people it helps.</div></div>
+  <div class="type" style="--c:var(--nf)"><div class="top"><span class="k">INFJ</span><span class="kr">Keirsey: Counselor</span></div><div class="fn">The Guide</div><div class="d"><b>I</b> · 1 round · <b>J</b> · reflects the deeper reason, closes with one dated move. Focus protected.</div></div>
+</div>
+
+<h3 style="color:var(--nt)">NT Rational — Architect script</h3>
+<div class="types">
+  <div class="type" style="--c:var(--nt)"><div class="top"><span class="k">ENTJ</span><span class="kr">Keirsey: Fieldmarshal</span></div><div class="fn">The Director</div><div class="d"><b>E</b> · 3 rounds · <b>J</b> · large aim → decisive, dated, ordered move. Hype names the result.</div></div>
+  <div class="type" style="--c:var(--nt)"><div class="top"><span class="k">INTJ</span><span class="kr">Keirsey: Mastermind</span></div><div class="fn">The Architect</div><div class="d"><b>I</b> · 1 round · <b>J</b> · reflects the system, removes noise, one dated move with the why.</div></div>
+  <div class="type" style="--c:var(--nt)"><div class="top"><span class="k">ENTP</span><span class="kr">Keirsey: Inventor</span></div><div class="fn">The Inventor</div><div class="d"><b>E</b> · 3 rounds · <b>P</b> · stores possibilities, move is the next experiment, no date forced.</div></div>
+  <div class="type" style="--c:var(--nt)"><div class="top"><span class="k">INTP</span><span class="kr">Keirsey: Engineer</span></div><div class="fn">The Explorer</div><div class="d"><b>I</b> · 1 round · <b>P</b> · reflects the logic, asks to pick one thread, smallest testable step.</div></div>
+</div>
+
+<!-- ============================================================ 7 -->
+<h2><span class="no">07</span> Same dump, four people</h2>
+<p class="sub">One recording — <i>"Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday."</i> — answered by the same script through four roofs. Watch how the questions never change, only the words and the rhythm.</p>
+<div class="ex">
+  <div class="chat" style="--c:var(--sp)"><div class="who">SP · ESTP</div>
+    <div class="qb">So: demo Friday, designer's slipping, project's behind. Got it.</div><div class="qb">And what else?</div>
+    <div class="qb you">Three of five screens done, he's not answering since Tuesday</div>
+    <div class="qb">And what else?</div><div class="qb you">that's it</div>
+    <div class="qb">What's actually in the way right now?</div><div class="qb you">him. I can't finish two screens without him</div>
+    <div class="qb">What do you want to have happen?</div><div class="qb you">demo Friday with something solid, no drama</div>
+    <div class="meter">Flow gets it <span class="bar"><i style="width:100%"></i></span>100%</div>
+    <div class="qb hype">⚡ Here's the play as I see it: demo Friday, three screens ready, two stuck on a silent designer. You want a solid demo and no drama.</div><div class="qb">How can I help?</div></div>
+  <div class="chat" style="--c:var(--sj)"><div class="who">SJ · ISTJ</div>
+    <div class="qb">So: a demo your manager expects on Friday, and the designer's missed deadlines have put the project behind.</div><div class="qb">And what else?</div>
+    <div class="qb you">Three of five screens are done, the last two are with him, he's been silent since Tuesday</div>
+    <div class="qb">Which part of this is on you and isn't handled yet?</div><div class="qb you">telling my manager. He thinks we're on track</div>
+    <div class="qb">What needs to be done, and by when?</div><div class="qb you">he needs to know before Thursday, and I need to demo what's done</div>
+    <div class="meter">Flow gets it <span class="bar"><i style="width:100%"></i></span>100%</div>
+    <div class="qb hype">✅ Here's where things stand: demo Friday, three screens done, two with a designer silent since Tuesday. Your manager believes it's on track; he needs to know before Thursday.</div><div class="qb">How can I help?</div></div>
+  <div class="chat" style="--c:var(--nf)"><div class="who">NF · INFP</div>
+    <div class="qb">So: you're carrying a demo for Friday, and the designer going quiet is what's making it heavy.</div><div class="qb">And what else?</div>
+    <div class="qb you">I keep chasing him and it feels awkward, three screens are done, two aren't</div>
+    <div class="qb">What's the part of this that's weighing on you?</div><div class="qb you">that it'll look like I let it slide</div>
+    <div class="qb">What would make this feel right for you?</div><div class="qb you">being honest with my manager before Friday, not after</div>
+    <div class="meter">Flow gets it <span class="bar"><i style="width:100%"></i></span>100%</div>
+    <div class="qb hype">🌱 Here's what I'm hearing: three screens done, two with a designer you're tired of chasing, and the fear it lands on you. What would feel right is honesty before Friday.</div><div class="qb">How can I help?</div></div>
+  <div class="chat" style="--c:var(--nt)"><div class="who">NT · ENTJ</div>
+    <div class="qb">So: demo Friday depends on a designer who's slipping. That's the critical path.</div><div class="qb">And what else?</div>
+    <div class="qb you">Three of five screens done, two blocked on him, no reply since Tuesday, manager doesn't know</div>
+    <div class="qb">And what else?</div><div class="qb you">his boss will be in the room</div>
+    <div class="qb">What's the real problem underneath this?</div><div class="qb you">I have no leverage over a freelancer</div>
+    <div class="qb">What outcome are you actually after?</div><div class="qb you">a credible demo Friday and the delay attributed correctly</div>
+    <div class="meter">Flow gets it <span class="bar"><i style="width:100%"></i></span>100%</div>
+    <div class="qb hype">🎯 Here's the model: two screens blocked on a freelancer you can't compel, manager uninformed, his boss attending. You want a credible demo and the delay attributed correctly.</div><div class="qb">How can I help?</div></div>
+</div>
+
+<!-- ============================================================ 8 -->
+<h2><span class="no">08</span> Guardrails — what the formula forbids</h2>
+<div class="rules">
+  <div class="rule"><b>No invented questions.</b> Every question Flow asks is one of the seven, in one of the four wordings. The AI may reword nothing else.</div>
+  <div class="rule"><b>No narrow drill-downs.</b> Never "what exactly is missing", never "roughly when". Q2 does the pulling; if a point is still empty after Q4, Flow lives with it.</div>
+  <div class="rule"><b>Reflect before you ask.</b> Every question is preceded by one sentence saying back what was just said, in the person's words (MI reflective listening).</div>
+  <div class="rule"><b>Nothing suggested below 100.</b> The move exists only after the summary and after "How can I help?" is answered (MI: ask permission before advice).</div>
+  <div class="rule"><b>One move.</b> Built with GTD's two questions and stated as WOOP's if-then. Accepted by replying, never by a button.</div>
+  <div class="rule"><b>The only buttons.</b> "Its own thread? Yes / No" when a second subject appears — because the AI won't split correctly every time.</div>
+  <div class="rule"><b>One open thing at a time.</b> Never a question and an offer in the same turn. Never two questions.</div>
+  <div class="rule"><b>Never echo the person's question back.</b> If the person asked something, Flow answers from the thread, then continues the script.</div>
+</div>
+
+<!-- ============================================================ 9 -->
+<h2><span class="no">09</span> Sources</h2>
+<ul class="src">
+  <li>Michael Bungay Stanier, <i>The Coaching Habit: Say Less, Ask More &amp; Change the Way You Lead Forever</i> (Box of Crayons, 2016) — the seven questions.</li>
+  <li>John Whitmore, <i>Coaching for Performance</i> (1992) — the GROW model: Goal, Reality, Options, Will.</li>
+  <li>David Keirsey, <i>Please Understand Me II: Temperament, Character, Intelligence</i> (Prometheus Nemesis, 1998) — four temperaments, concrete/abstract, cooperative/utilitarian, core needs, role names. <a href="https://keirsey.com/temperament-overview/">keirsey.com overview</a> · <a href="https://en.wikipedia.org/wiki/Keirsey_Temperament_Sorter">Wikipedia</a></li>
+  <li>Sandra Krebs Hirsh &amp; Jane A. G. Kise, <i>Introduction to Type and Coaching</i>, 2nd ed. (CPP) — coaching each preference; Extraverts talk to think, Introverts think then talk. <a href="https://ap.themyersbriggs.com/content/Quick_Tips/Quick_Tips_Using_MBTI_to_Foster_Individual_Development.pdf">Myers-Briggs Co. quick tips</a></li>
+  <li>Gabriele Oettingen, <i>Rethinking Positive Thinking</i> (2014) — WOOP: Wish, Outcome, Obstacle, Plan. <a href="https://en.wikipedia.org/wiki/Gabriele_Oettingen">Wikipedia</a></li>
+  <li>Peter Gollwitzer &amp; Paschal Sheeran (2006) — implementation intentions ("if-then" plans), meta-analysis of 94 studies, d ≈ 0.65 on goal attainment.</li>
+  <li>William Miller &amp; Stephen Rollnick, <i>Motivational Interviewing</i> (3rd ed., 2013) — OARS (open questions, affirmations, reflections, summaries) and elicit-provide-elicit. <a href="https://motivationalinterviewing.org/understanding-motivational-interviewing">MINT</a> · <a href="https://www.ncbi.nlm.nih.gov/books/NBK571068/">NCBI chapter</a></li>
+  <li>David Allen, <i>Getting Things Done</i> (2001) — the Natural Planning Model: "What does done look like?", "What's the very next action?". <a href="https://gettingthingsdone.com/2024/11/the-natural-planning-model/">GTD</a></li>
+</ul>
+</div>
