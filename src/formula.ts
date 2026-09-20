@@ -313,7 +313,7 @@ export function formulaPrompt(formula: Formula | null): string {
   const f = formula ?? formulaFor("ISTJ");
   const s = f.script;
   return [
-    `PERSON: ${s.keirsey} (${f.code}). Use ${s.words} words. They need to hear ${s.need}. Reflect ${s.reflects} first.`,
+    `PERSON: ${s.keirsey} (${f.code}) — never say this word or code to them. Use ${s.words} words. They need to hear ${s.need}. Reflect ${s.reflects} first.`,
     `RHYTHM: ${f.rhythm === "E" ? "they think by talking — keep pulling, up to 3 rounds of the AWE question" : "they think first — ask 'And what else?' once, one bubble per turn, keep replies short"}.`,
     `CLOSE: ${f.closes === "dated" ? "the move carries a date and what done looks like" : "the move is the smallest first step; do not force a date"}.`,
     `SCRIPT (ask only these, in order, one per turn, after one sentence reflecting what they just said):`,
