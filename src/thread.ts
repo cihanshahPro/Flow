@@ -573,7 +573,12 @@ const SIDE_OPENERS = /^(?:oh,? and|also|and also|plus|separately|another thing|o
  * so splitting works even when the model misses it.
  */
 export function detectBranches(text: string, thread: Pick<ThoughtDraft, "title" | "source" | "threadPoints">): { title: string; evidence: string }[] {
-  const subject = contentWords([thread.title, thread.source, ...(thread.threadPoints ?? []).map((p) => p.value ?? "")].join(" "));
+  // On the first dump the whole text is the source, so the subject is its opening sentence(s) instead.
+  const firstDump = (thread.source ?? "").trim() === text.trim();
+  const opening = sentences(text).filter((x) => !SIDE_OPENERS.test(x)).slice(0, 2).join(" ");
+  const subject = contentWords(
+    firstDump ? [thread.title, opening].join(" ") : [thread.title, thread.source ?? "", ...(thread.threadPoints ?? []).map((p) => p.value ?? "")].join(" "),
+  );
   const out: { title: string; evidence: string }[] = [];
   for (const sentence of sentences(text)) {
     if (!SIDE_OPENERS.test(sentence)) continue;
@@ -607,7 +612,7 @@ function echoesPerson(question: string, text: string): boolean {
 /** What the AI needs to reply as a turn in this thread, not to one sentence in isolation. */
 export function threadContextFor(thread: ThoughtDraft, others: ThoughtDraft[] = []): ThreadContext {
   const recent = (thread.messages ?? [])
-    .filter((m) => ["transcript", "ack", "question", "reply", "offer"].includes(m.kind))
+    .filter((m) => ["transcript", "ack", "question", "reply"].includes(m.kind))
     .slice(-8)
     .map((m) => ({ from: m.from, text: m.text }));
   const open = pendingMessage(thread);
@@ -681,9 +686,14 @@ export function respondToRecording(
   });
   // Several subjects in one breath: offer to give the others their own thread, once.
   const heard = [...(options.branches ?? []), ...detectBranches(text, next)];
+  const same = (a: string, b: string) => {
+    const x = a.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    const y = b.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    return x === y || x.includes(y) || y.includes(x);
+  };
   const branches = heard
     .filter((b) => b.title.trim() && b.evidence.trim())
-    .filter((b, i, all) => all.findIndex((o) => o.title.toLowerCase() === b.title.toLowerCase() || o.evidence.toLowerCase().includes(b.evidence.toLowerCase().slice(0, 30))) === i)
+    .filter((b, i, all) => all.findIndex((o) => same(o.title, b.title) || same(o.evidence, b.evidence)) === i)
     .slice(0, 3);
   let branched = false;
   if (branches.length && !(thread.messages ?? []).some((m) => m.kind === "branch")) {
@@ -727,10 +737,11 @@ export function respondToRecording(
       push({ from: "flow", kind: "hype", text: voice.fullPicture(mode) });
       hyped.add("ready");
     }
-    const step = offerableSteps(next)[0];
+    const openOffer = (next.messages ?? []).some((m) => m.kind === "offer" && !m.answered);
+    const step = openOffer ? undefined : offerableSteps(next)[0];
     // The offer must see this recording too: its time words decide when the move lands.
     if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, options.plate));
-    else if (!isFirst || !hyped.has("ready")) {
+    else if (!openOffer && (!isFirst || !hyped.has("ready"))) {
       const point = nextMissingPoint(points, mode);
       if (point) ask(point);
     }

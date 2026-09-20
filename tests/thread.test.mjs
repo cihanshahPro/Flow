@@ -348,3 +348,16 @@ test("side subjects are detected locally and an echoed question is dropped", asy
   assert.ok(q, "a question is still asked");
   assert.notEqual(q.text, "What should you do about the designer first?", "the parroted question is replaced");
 });
+
+test("a first dump with several subjects gets the split offer, and no second move is offered while one is open", async () => {
+  const multi = "Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday. Also my landlord is asking about the lease renewal by end of month. And I keep meaning to book a dentist for the kids.";
+  const t = respondToRecording(thread(multi, "d"), "n1", multi, { now });
+  const branch = t.messages.find((m) => m.kind === "branch");
+  assert.ok(branch, "the opening sentence is the subject; the rest are branches");
+  assert.equal(branch.branches.length, 2);
+  const kept = answerChip(t, branch.id, "keep", { now }).thread;
+  const offer = pendingMessage(kept);
+  assert.equal(offer?.kind, "offer");
+  const more = respondToRecording(kept, "n2", "I also should email the client about the delay.", { now });
+  assert.equal(more.messages.filter((m) => m.kind === "offer" && !m.answered).length, 1, "one open move at a time");
+});
