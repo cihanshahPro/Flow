@@ -398,3 +398,12 @@ test("a first dump with several subjects gets the split offer, and no second mov
   assert.equal(more.messages.filter((m) => m.kind === "branch").length, 1, "the split is offered once");
   assert.equal(more.messages.filter((m) => m.from === "flow" && !m.answered && m.kind === "question").length, 1, "one open question at a time");
 });
+
+test("a model reply that only repeats the person is replaced by the template, and a sentence-long 'next' is not a move", () => {
+  const dump = "Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday.";
+  const t = respondToRecording(thread(dump, "echo"), "n1", dump, { now, reply: dump, evidence: { next: dump } });
+  assert.notEqual(t.messages[1].text, dump);
+  assert.equal(t.threadPoints.find((p) => p.id === "next").state, "missing");
+  const ok = respondToRecording(thread(dump, "echo2"), "n1", dump + " Tonight I'll message my manager.", { now, evidence: { next: "message my manager" } });
+  assert.equal(ok.threadPoints.find((p) => p.id === "next").value, "message my manager");
+});

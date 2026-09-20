@@ -183,6 +183,8 @@ export function fingerprint(
   for (const [id, evidence] of Object.entries(extra)) {
     if (!evidence || !POINTS.some((p) => p.id === id)) continue;
     const words = evidence.replace(/\s+/g, " ").trim();
+    // A "next" the model picked must read as a step the person intends, not their whole sentence.
+    if (id === "next" && !(detectors.next.test(words) || MOVE_VERBS.test(words))) continue;
     if (words && normalized.includes(words.toLowerCase())) detected[id as PointId] = clip(words);
   }
   return POINTS.map((point) => {
@@ -823,10 +825,12 @@ export function respondToRecording(
     } else push({ from: "flow", kind: "ack", text: "Fair. I'll hold this thread and bring it back when something changes." });
     return { ...withMessages(next, added), hypeGiven: [...hyped] };
   }
+  // A model reply that only repeats the person is no reflection; the template says what was settled instead.
+  const reply = options.reply?.trim() && !echoesPerson(options.reply, text) ? options.reply.trim() : "";
   push({
     from: "flow",
     kind: "ack",
-    text: options.reply?.trim() || templateReply(text, thread.threadPoints, points, isFirst, mode, noteId),
+    text: reply || templateReply(text, thread.threadPoints, points, isFirst, mode, noteId),
   });
   // Several subjects in one breath: offer to give the others their own thread, once.
   const heard = [...(options.branches ?? []), ...detectBranches(text, next)];
