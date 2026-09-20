@@ -211,3 +211,52 @@ export async function createThoughtDraft(
     return direction ? { ...draft, direction } : draft;
   }
 }
+
+/**
+ * Recordings made before the intake existed landed in one thread each (or
+ * were swallowed by an old thread). Re-sort them once, from the saved
+ * transcript, into thread starters — no re-recording. Runs on launch.
+ */
+export async function resortDumps(now = new Date()): Promise<{ recordings: number; threads: number }> {
+  const [workspace, drafts, profile] = await Promise.all([
+    loadWorkspace().catch(() => ({ tasks: [], notes: [] as Note[] })),
+    loadDrafts(),
+    loadProfile().catch(() => null),
+  ]);
+  const mode = modeFor(profile?.answers) ?? DEFAULT_MODE;
+  const formula = formulaFromAnswers(profile?.answers);
+  let recordings = 0, made = 0;
+  let threads = drafts;
+  for (const note of workspace.notes) {
+    if (note.planId || (note.captureKind && note.captureKind !== "thought") || !note.text?.trim()) continue;
+    const homes = threads.filter((d) => d.id === note.id || d.sourceNoteIds?.includes(note.id));
+    if (homes.length !== 1 || homes[0].example) continue;
+    const lump = homes[0];
+    if (lump.resortedNoteIds?.includes(note.id)) continue;
+    const subjects = subjectsOf(note.text);
+    if (subjects.length < 2) continue;
+    recordings++;
+    const others = threads.filter((t) => t.id !== lump.id);
+    for (const [i, subject] of subjects.entries()) {
+      const home = routeRecording(subject.evidence, others, workspace.tasks, { strict: true });
+      if (home) continue; // already has a thread of its own
+      const id = `${note.id}:r${i}`;
+      if (threads.some((t) => t.id === id)) continue;
+      const started = respondToRecording(
+        { ...suggestDraft(id, subject.evidence), title: subject.title, sourceNoteIds: [note.id], dueHints: extractDueHints(subject.evidence, now), createdAt: note.createdAt },
+        note.id,
+        subject.evidence,
+        { mode, formula, plate: profile?.plate, quiet: true, now },
+      );
+      await saveDraft(started);
+      threads = [...threads, started];
+      made++;
+    }
+    // The lump stays only if the person talked in it; an untouched lump is parked out of the way.
+    const talked = (lump.messages ?? []).filter((m) => m.from === "you").length > 1;
+    const marked = { ...lump, resortedNoteIds: [...(lump.resortedNoteIds ?? []), note.id], ...(lump.id === note.id && !talked ? { state: "parked" as const } : {}) };
+    await saveDraft(marked);
+    threads = threads.map((t) => (t.id === lump.id ? marked : t));
+  }
+  return { recordings, threads: made };
+}

@@ -32,7 +32,7 @@ import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/serv
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
-import { processCapturedNote } from "./src/services/processing";
+import { processCapturedNote, resortDumps } from "./src/services/processing";
 import { capabilities } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
 import type { Consent } from "./src/ai-policy";
@@ -176,7 +176,10 @@ function Flow() {
         // New (and pre-build-12) profiles get welcome → first thought. Anyone who finished the test-first funnel keeps their flow.
         setFunnel(needsFunnel(p));
         setFunnelStep("intro");
-        await evaluateAll(data);
+        // Recordings from before the intake existed are re-sorted from their saved transcripts — nothing to redo.
+        const resorted = await resortDumps().catch(() => ({ recordings: 0, threads: 0 }));
+        if (resorted.threads) setNotice(`Re-sorted ${resorted.recordings === 1 ? "an earlier recording" : `${resorted.recordings} earlier recordings`} into ${resorted.threads} new thread${resorted.threads === 1 ? "" : "s"}. They're in your threads.`);
+        await evaluateAll(resorted.threads ? await refresh() : data);
         setReady(true);
       })
       .catch((e) => {

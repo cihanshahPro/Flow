@@ -60,6 +60,8 @@ export type ThoughtDraft = {
   lastOpenedAt?: string;
   /** Set only when the person confirms the whole thread is resolved. */
   resolvedAt?: string;
+  /** Recordings that landed here as one lump before the intake existed and have since been re-sorted into threads. */
+  resortedNoteIds?: string[];
 };
 export type ThreadStage = "dumped" | "understood" | "moving" | "done" | "parked";
 export type DueHint = { date: string; phrase: string };

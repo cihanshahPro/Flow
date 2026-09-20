@@ -238,3 +238,31 @@ test("a dump about one thing is one ordinary thread", async () => {
   assert.equal(result.kind, "draft");
   assert.equal(result.draft.messages.at(-1).text, "And what else?");
 });
+
+test("recordings from before the intake are re-sorted from their saved transcript, once, without re-recording", async () => {
+  harness.reset();
+  const { resortDumps } = await import("../src/services/processing.ts");
+  const { respondToRecording } = await import("../src/thread.ts");
+  const { suggestDraft } = await import("../src/drafts.ts");
+  const fs = await import("node:fs");
+  const dump = fs.readFileSync(new URL("./fixtures/owner-dump-1.txt", import.meta.url), "utf8").trim();
+  // The old build: the whole dump swallowed by one wide thread.
+  const lump = respondToRecording({ ...suggestDraft("old", "Prioritize the lawyer, the app and the Amazon stuff."), title: "Prioritize Tasks", sourceNoteIds: ["old", "rec1"] }, "rec1", dump, {});
+  harness.drafts = [lump];
+  harness.notes = [{ id: "rec1", captureKind: "thought", text: dump, createdAt: "2026-09-20T18:57:00Z" }];
+  const first = await resortDumps();
+  assert.equal(first.recordings, 1);
+  assert.equal(first.threads, 4);
+  assert.deepEqual(harness.drafts.filter((d) => d.id.startsWith("rec1:r")).map((d) => d.title), ["My DEY case", "The defense lawyer", "An app portfolio", "Amazon FPA"]);
+  assert.ok(harness.drafts.find((d) => d.id === "old").resortedNoteIds.includes("rec1"));
+  assert.notEqual(harness.drafts.find((d) => d.id === "old").state, "parked", "a thread with other content is kept");
+  const again = await resortDumps();
+  assert.deepEqual(again, { recordings: 0, threads: 0 }, "once");
+  // A lump that is only this recording, untouched by the person, is parked out of the way.
+  harness.reset();
+  const own = respondToRecording(suggestDraft("rec2", dump), "rec2", dump, {});
+  harness.drafts = [own];
+  harness.notes = [{ id: "rec2", captureKind: "thought", text: dump, createdAt: "2026-09-20T18:57:00Z" }];
+  await resortDumps();
+  assert.equal(harness.drafts.find((d) => d.id === "rec2").state, "parked");
+});
