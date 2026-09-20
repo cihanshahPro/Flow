@@ -589,7 +589,7 @@ export function summaryText(thread: Pick<ThoughtDraft, "threadPoints">, formula:
   const outcome = known("outcome"), challenge = known("constraints"), people = known("people"), timing = known("timing"), deps = known("dependencies"), why = known("motivation");
   if (outcome) bits.push(`You want ${quote(outcome)}.`);
   if (challenge) bits.push(`In the way: ${quote(challenge)}.`);
-  const short = (v: string | undefined) => (v && v.length <= 90 ? v : undefined);
+  const short = (v: string | undefined) => (v && v.length <= 60 ? v : undefined);
   if (short(people)) bits.push(`Who: ${quote(people!)}.`);
   if (short(timing)) bits.push(`When: ${quote(timing!)}.`);
   if (short(deps)) bits.push(`It depends on ${quote(deps!)}.`);
@@ -605,6 +605,8 @@ function continueScript(
   at: string,
   hyped: Set<string>,
   plate?: Plate,
+  /** Flow's own answer to "How can I help?": when it starts with a verb, it is the move. */
+  moveSeed?: string,
 ): { thread: ThoughtDraft; added: ThreadMessage[] } {
   let next = thread;
   const push = (m: Omit<ThreadMessage, "id" | "createdAt"> & { id?: string }) => {
@@ -627,6 +629,9 @@ function continueScript(
     push({ from: "flow", kind: "question", stage: "help", text: script.questions.help });
   } else if (stage === null && scriptState(view()).answered.includes("help") && !next.steps.some((s) => s.accepted)) {
     // "How can I help?" is answered and no move is on the table: offer the one move, with its trade-off.
+    const seed = sentences(moveSeed ?? "")[0];
+    if (!next.steps.length && seed && MOVE_VERBS.test(seed.trim()))
+      next = { ...next, steps: [{ id: "auto-next", title: clip(cleanMove(seed, 60), 80), minutes: 15 }] };
     next = ensureMoves(next);
     const step = offerableSteps(view())[0];
     if (step) added.push(offerMessage(view(), step, at, plate, formula));
@@ -825,8 +830,9 @@ export function respondToRecording(
     } else push({ from: "flow", kind: "ack", text: "Fair. I'll hold this thread and bring it back when something changes." });
     return { ...withMessages(next, added), hypeGiven: [...hyped] };
   }
-  // A model reply that only repeats the person is no reflection; the template says what was settled instead.
-  const reply = options.reply?.trim() && !echoesPerson(options.reply, text) ? options.reply.trim() : "";
+  // A model reply that only repeats the person, or promises to do the work itself, is no reflection; the template says what was settled instead.
+  const speaksForFlow = new RegExp("\\bI(?:'ll| will| am going to) " + MOVE_VERBS.source.replace(/^\^/, ""), "i").test(options.reply ?? "");
+  const reply = options.reply?.trim() && !echoesPerson(options.reply, text) && !speaksForFlow ? options.reply.trim() : "";
   push({
     from: "flow",
     kind: "ack",
@@ -879,7 +885,7 @@ export function respondToRecording(
   }
   // A move on the table and a reply that is neither yes nor no: the reflection stands; the move stays open.
   if (openOffer) return { ...withMessages(next, added), hypeGiven: [...hyped] };
-  const cont = continueScript(next, added, formula, at, hyped, options.plate);
+  const cont = continueScript(next, added, formula, at, hyped, options.plate, reply);
   next = cont.thread;
   return { ...withMessages(next, added), hypeGiven: [...hyped] };
 }

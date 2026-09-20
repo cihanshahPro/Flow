@@ -407,3 +407,15 @@ test("a model reply that only repeats the person is replaced by the template, an
   const ok = respondToRecording(thread(dump, "echo2"), "n1", dump + " Tonight I'll message my manager.", { now, evidence: { next: "message my manager" } });
   assert.equal(ok.threadPoints.find((p) => p.id === "next").value, "message my manager");
 });
+
+test("Flow's own answer to How can I help? becomes the move when it starts with a verb; a reply that speaks for Flow is dropped", () => {
+  let t = respondToRecording(thread("The car insurance renewal is due at the end of the month and I have not compared quotes.", "ins"), "n1", "The car insurance renewal is due at the end of the month and I have not compared quotes.", { now });
+  t = walk(t, ["that's it", "I keep putting off the comparison sites", "a cheaper policy in place by the 30th"]);
+  assert.equal(pendingMessage(t).stage, "help");
+  const helped = respondToRecording(t, "h1", "just tell me where to start", { now, reply: "Visit the three main comparison websites and compare quotes for the next three days." });
+  const offer = pendingMessage(helped);
+  assert.equal(offer.kind, "offer");
+  assert.match(offer.text, /: Visit the three main comparison websites/);
+  const bad = respondToRecording(t, "h2", "just tell me where to start", { now, reply: "I'll compare the quotes for the next three days and let you know." });
+  assert.doesNotMatch(bad.messages.find((m) => m.kind === "ack" && m.createdAt === bad.messages.at(-1).createdAt).text, /I'll compare/);
+});
