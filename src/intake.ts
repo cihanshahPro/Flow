@@ -16,7 +16,7 @@ const CONTINUES = /^(?:first|then|after that|once|next|it|it'?s|its|he|she|they|
 const HANDS_OFF = /^(.{2,30}?)\s+(?:wants me to|needs me to|asked me to|is asking me to|keeps asking me to)\s+(.+)$/i;
 const ABOUT = /^(.{2,30}?)\s+(?:wants|needs|is asking (?:me )?(?:about|for)|keeps asking (?:me )?(?:about|for)|is chasing (?:me )?(?:about|for))\s+(.+)$/i;
 const STOP = new Set(
-  "i me my mine we our us you your it its this that these those the a an and or but so because to of in on at for with from by as is are was were be been being have has had do does did not no yes if then than about into over just also very really can could would should will shall may might must there here what which who whom when where why how all any some more most other such only own same too s t don ve ll re d m still keep keeps meaning need needs want wants got get".split(" "),
+  "i me my mine we our us you your it its this that these those the a an and or but so because to of in on at for with from by as is are was were be been being have has had do does did not no yes if then than about into over just also very really can could would should will shall may might must there here what which who whom when where why how all any some more most other such only own same too s t don ve ll re d m still keep keeps meaning need needs want wants got get many things thing going lot lots stuff bit much".split(" "),
 );
 
 export function contentWords(text: string): Set<string> {

@@ -15,6 +15,7 @@ test("a two-minute dump is cut into one subject per thing, in order, each with i
 test("filler is dropped, sequence sentences ride along, and a short dump stays one subject", () => {
   const spoken = "So um there's a lot going on. The demo for my manager is on Friday and the designer keeps going quiet, three of five screens are done. Then there's the dentist for the kids, my wife keeps asking. Oh and I still haven't called my mum back, it's been two weeks.";
   assert.deepEqual(segmentDump(spoken).map((s) => s.title), ["The demo for my manager", "The dentist for the kids", "Called my mum back"]);
+  assert.deepEqual(segmentDump("So many things going on. Work project is behind because the designer keeps missing deadlines. Also my landlord is asking about the lease renewal by end of month and I have not decided if we stay. Also I have not called my mum back in two weeks.").map((s) => s.title), ["Work project", "The lease renewal", "Called my mum back in two weeks"]);
   assert.equal(segmentDump("Thinking about the garage situation and how messy it has gotten. The car does not fit any more and winter is coming.").length, 1);
   const tax = segmentDump("I need to finish the tax filing with my accountant before Friday because the deadline is strict, otherwise there is a penalty. First I have to collect the receipts, then tonight I'll email her.");
   assert.equal(tax.length, 1);

@@ -349,7 +349,7 @@ export function routeRecording(
       const title = contentWords(thread.title);
       let named = 0;
       for (const w of words) if (title.has(w)) named++;
-      if (!named) continue;
+      if (named < 2 && !(named && score >= 0.5)) continue;
     }
     if (shared >= 3 && score >= 0.34 && (!best || score > best.score))
       best = { id: thread.id, score };

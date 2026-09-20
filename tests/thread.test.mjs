@@ -447,4 +447,6 @@ test("strict routing needs the subject to name the thread, so a wide old thread 
   assert.equal(routeRecording(sentence, [wide], [], { strict: true }), null);
   assert.equal(routeRecording(sentence, [wide, demo], [], { strict: true }), "demo");
   assert.equal(routeRecording("My landlord is asking about the lease renewal by end of month.", [wide, demo], [], { strict: true }), null);
+  const insurance = { ...thread("The car insurance renewal is due at the end of the month and I have not compared quotes.", "ins"), title: "The car insurance renewal is due at the…" };
+  assert.equal(routeRecording("My landlord is asking about the lease renewal by end of month and I have not decided if we stay.", [insurance], [], { strict: true }), null, "one shared word is not naming the thread");
 });
