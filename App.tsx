@@ -244,7 +244,10 @@ function Flow() {
       const thread = (await loadDrafts()).find((t) => t.id === id);
       if (thread) {
         const woken = wakeThread(thread, { formula, plate: profile.plate });
-        if (woken !== thread) await saveDraft(woken);
+        if (woken !== thread) {
+          await saveDraft(woken);
+          await refresh();
+        }
       }
       await evaluateAll();
     })().catch(() => {});
