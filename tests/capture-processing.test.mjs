@@ -210,6 +210,25 @@ test("a dump about several things becomes one quiet thread starter per thing, an
   assert.equal(wakeThread(woken), woken, "asks once");
 });
 
+test("a subject that belongs to an existing thread goes there; the rest become starters", async () => {
+  harness.reset();
+  const { respondToRecording } = await import("../src/thread.ts");
+  const { suggestDraft } = await import("../src/drafts.ts");
+  const demoText = "Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday.";
+  const demo = respondToRecording({ ...suggestDraft("demo", demoText), title: "Demo for Friday" }, "d0", demoText, {});
+  harness.drafts = [demo];
+  const dump = "The demo for my manager is on Friday and the designer keeps going quiet, three of five screens are done. The landlord wants an answer on the lease by the end of the month. My sister wants me to sort mum's birthday dinner next Saturday. The gym renews next week and I haven't been in months.";
+  const saved = recording({ captureKind: "thought", text: dump, audioUri: undefined, id: "dump2" });
+  harness.notes = [structuredClone(saved)];
+  harness.shape = { title: "x", summary: "x", reply: "", question: "", points: [], choices: [], branches: [] };
+  const result = await processCapturedNote(saved);
+  assert.equal(result.kind, "intake");
+  assert.equal(result.drafts[0].id, "demo", "the demo sentence joined the demo thread");
+  assert.equal(result.drafts[0].messages.filter((m) => m.kind === "transcript").length, 2);
+  assert.deepEqual(result.drafts.slice(1).map((d) => d.title), ["An answer on the lease", "Sort mum's birthday dinner next Saturday", "The gym renews next week"]);
+  assert.equal(harness.drafts.length, 4);
+});
+
 test("a dump about one thing is one ordinary thread", async () => {
   harness.reset();
   const saved = recording({ captureKind: "thought", text: "Thinking about the garage situation and how messy it has gotten. The car does not fit any more.", audioUri: undefined, id: "one" });

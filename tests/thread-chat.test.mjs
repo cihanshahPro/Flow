@@ -191,7 +191,7 @@ test("the intake screen shows every starter with its date, one Record button and
   const opened = [], acts = [];
   const view = await render(React.createElement(Intake, { drafts, now, onOpen: (id) => opened.push(id), onMore: () => acts.push("more"), onDone: () => acts.push("done") }));
   const text = textOf(view);
-  assert.match(text, /I heard ","3"," things and started a thread for each/);
+  assert.match(text, /I heard ","3"," things"," and started a thread for each"/);
   assert.match(text, /And what else\?/);
   assert.match(text, /"Friday"/);
   assert.match(text, /End of the month/);

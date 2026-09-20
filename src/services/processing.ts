@@ -12,7 +12,7 @@ import { loadProfile } from "./profile";
 import { modeFor, DEFAULT_MODE } from "../flow-voice";
 import { formulaFromAnswers, formulaPrompt } from "../formula";
 import { extractDueHints, respondToRecording, routeRecording, threadContextFor } from "../thread";
-import { subjectsOf } from "../intake";
+import { segmentDump, subjectsOf } from "../intake";
 import { profileContext } from "../ai-policy";
 import { shapeText, transcribeAudio, type ShapeOptions } from "./processors";
 
@@ -91,14 +91,44 @@ async function processThoughtNote(
     loadWorkspace().catch(() => ({ tasks: [], notes: [] })),
     loadDrafts(),
   ]);
+  const mode = modeFor(profile?.answers) ?? DEFAULT_MODE;
+  const formula = formulaFromAnswers(profile?.answers);
+  const others = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt).slice(0, 6).map((t) => t.title);
+  // The intake: a dump about several things is never one thread's turn. Each subject is routed on its own —
+  // into the thread it belongs to, or a quiet new starter — and Flow shows the list before it asks anything.
+  if (!note.planId && allowIntake && segmentDump(text).length >= 2) {
+    let listed = shapedVoice(audioShape, text).branches ?? [];
+    if (!audioShape) {
+      const fresh = { title: "", points: [], recent: [], otherThreads: others, script: formulaPrompt(formula), percent: 0, askNext: "And what else?" };
+      const outcome = await shapeText(text, profileContext(profile), { ...options, thread: fresh }).catch(() => ({ shape: null }));
+      listed = shapedVoice(outcome.shape ?? undefined, text).branches ?? [];
+    }
+    const subjects = subjectsOf(text, listed);
+    if (subjects.length >= 2) {
+      const drafts: ThoughtDraft[] = [];
+      for (const [i, subject] of subjects.entries()) {
+        const home = routeRecording(subject.evidence, threads, workspace.tasks);
+        const target = home ? threads.find((t) => t.id === home) : undefined;
+        const started = target
+          ? respondToRecording(appendPlanUpdate(target, suggestDraft(`${note.id}:${i}`, subject.evidence)), note.id, subject.evidence, { mode, formula, plate: profile?.plate, now: options.now })
+          : respondToRecording(
+              { ...suggestDraft(`${note.id}:${i}`, subject.evidence), title: subject.title, sourceNoteIds: [note.id], dueHints: extractDueHints(subject.evidence, options.now) },
+              note.id,
+              subject.evidence,
+              { mode, formula, plate: profile?.plate, quiet: true, now: options.now },
+            );
+        await saveDraft(started);
+        drafts.push(started);
+      }
+      return drafts;
+    }
+  }
   const targetId = note.planId ?? routeRecording(text, threads, workspace.tasks);
   const plan = targetId ? threads.find((d) => d.id === targetId) : undefined;
   let draft = suggestDraft(note.id, text);
   let shape = audioShape;
   let organizer: ThoughtDraft["organizer"] = "apple-local";
   if (!shape) {
-    const others = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt).slice(0, 6).map((t) => t.title);
-    const formula = formulaFromAnswers(profile?.answers);
     // A first dump is still a turn in the script: the model reflects, the app asks "And what else?".
     const fresh = { title: "", points: [], recent: [], otherThreads: others, script: formulaPrompt(formula), percent: 0, askNext: "And what else?" };
     const outcome = await shapeText(text, profileContext(profile), {
@@ -120,23 +150,6 @@ async function processThoughtNote(
   }
   const flow = shapedVoice(shape, text);
   if (note.direction) draft = { ...draft, direction: note.direction };
-  const mode = modeFor(profile?.answers) ?? DEFAULT_MODE;
-  const formula = formulaFromAnswers(profile?.answers);
-  // The intake: a dump about several things becomes one quiet thread starter per thing. Flow shows the list, then asks.
-  if (!plan && allowIntake) {
-    const subjects = subjectsOf(text, flow.branches ?? []);
-    if (subjects.length >= 2) {
-      const drafts: ThoughtDraft[] = [];
-      for (const [i, subject] of subjects.entries()) {
-        const id = `${note.id}:${i}`;
-        const seeded: ThoughtDraft = { ...suggestDraft(id, subject.evidence), title: subject.title, sourceNoteIds: [note.id], dueHints: extractDueHints(subject.evidence, options.now) };
-        const started = respondToRecording(seeded, note.id, subject.evidence, { mode, formula, plate: profile?.plate, quiet: true, now: options.now });
-        await saveDraft(started);
-        drafts.push(started);
-      }
-      return drafts;
-    }
-  }
   // A recording joins the thread it belongs to, then Flow replies. Nothing
   // becomes a goal until the person accepts a move Flow offers.
   if (plan) draft = appendPlanUpdate(plan, draft);

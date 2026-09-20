@@ -24,6 +24,8 @@ export default function Intake({
   now?: Date;
 }) {
   const dated = drafts.filter((d) => d.dueHints?.length).length;
+  const joined = (d: ThoughtDraft) => (d.messages ?? []).filter((m) => m.kind === "transcript").length > 1;
+  const fresh = drafts.filter((d) => !joined(d)).length;
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={s.page}>
@@ -32,7 +34,7 @@ export default function Intake({
           <Text style={s.avatar}>f.</Text>
           <View style={[s.bubble, s.hype]}>
             <Text style={s.hypeText}>
-              ✅ Got all of it. I heard {drafts.length} things and started a thread for each.
+              ✅ Got all of it. I heard {drafts.length} things{fresh === drafts.length ? " and started a thread for each" : fresh ? ` — ${fresh} new thread${fresh === 1 ? "" : "s"}, the rest added to ones you already have` : " and added them to threads you already have"}.
             </Text>
           </View>
         </View>
@@ -53,7 +55,7 @@ export default function Intake({
                   <Text style={s.starterTitle} numberOfLines={2}>
                     {d.title}
                   </Text>
-                  {!!when && <Text style={s.when}>{when}</Text>}
+                  {joined(d) ? <Text style={s.tag}>added</Text> : !!when && <Text style={s.when}>{when}</Text>}
                 </Pressable>
               );
             })}
@@ -106,6 +108,7 @@ const s = StyleSheet.create({
   starter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: C.paper, borderWidth: 1, borderColor: C.line },
   starterTitle: { flex: 1, fontSize: 15, fontWeight: "700", color: C.ink },
   when: { fontSize: 12, fontWeight: "700", color: C.blue },
+  tag: { fontSize: 11, fontWeight: "700", color: C.muted, letterSpacing: 0.6 },
   small: { fontSize: 13, lineHeight: 18, color: C.muted },
   footer: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.paper, gap: 4 },
   record: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: C.blue, borderRadius: 18, paddingVertical: 16 },
