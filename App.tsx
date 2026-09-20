@@ -45,6 +45,7 @@ import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
+import { formulaFromAnswers } from "./src/formula";
 import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks } from "./src/thread";
 import { whenFromAnswer, type When } from "./src/when";
 import { suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
@@ -103,6 +104,8 @@ function Flow() {
   captureOpen.current = !!capture;
 
   const mode = modeFor(profile.answers) ?? DEFAULT_MODE;
+  // The person's roof and rhythm (formula.ts): which words Flow uses and how many times it asks "And what else?".
+  const formula = formulaFromAnswers(profile.answers);
   const current = threads.find((t) => t.id === openId);
   const level = levelForProgress(progress);
   const type = flowType(profile.answers);
@@ -387,7 +390,7 @@ function Flow() {
     if (!current) return;
     void run(async () => {
       const before = level.level?.number ?? 0;
-      const { thread, effects } = answerChip(current, messageId, chipId, { mode, plate: profile.plate });
+      const { thread, effects } = answerChip(current, messageId, chipId, { mode, formula, plate: profile.plate });
       await saveDraft(thread);
       for (const effect of effects) {
         if (effect.type === "accept") {
@@ -415,7 +418,7 @@ function Flow() {
           for (const branch of effect.branches) {
             const id = randomUUID();
             const seeded = { ...suggestDraft(id, branch.evidence), title: branch.title };
-            await saveDraft(respondToRecording(seeded, id, branch.evidence, { mode, plate: profile.plate }));
+            await saveDraft(respondToRecording(seeded, id, branch.evidence, { mode, formula, plate: profile.plate }));
           }
         }
       }
@@ -433,7 +436,7 @@ function Flow() {
       const before = level.level?.number ?? 0;
       await saveTask(completeTask(nextTask));
       const thread = nextThread ? (await loadDrafts()).find((t) => t.id === nextThread.id) : undefined;
-      if (thread) await saveDraft(noteMoveDone(thread, nextTask, { mode, plate: profile.plate }));
+      if (thread) await saveDraft(noteMoveDone(thread, nextTask, { mode, formula, plate: profile.plate }));
       if (profile.activeTaskId === nextTask.id) await updateProfile({ ...profile, activeTaskId: undefined });
       const data = await refresh();
       void syncAll(data, { ...profile, activeTaskId: undefined });
@@ -756,6 +759,7 @@ function Flow() {
             tasks={tasks}
             notes={notes}
             mode={mode}
+            formula={formula}
             busy={busy}
             processing={processing && !capture}
             error={error || processingError}

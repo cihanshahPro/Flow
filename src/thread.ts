@@ -14,6 +14,7 @@ import { whenFromAnswer, type When } from "./when.ts";
 import { areaPhrase, type Plate } from "./personality.ts";
 import type { ThreadContext } from "./ai-policy.ts";
 import { QUESTION_ORDER, voice, type Mode, DEFAULT_MODE } from "./flow-voice.ts";
+import { formulaFor, formulaPrompt, nextStage, progressOf, understood, type Formula, type Stage, type ThreadState } from "./formula.ts";
 
 /**
  * A thread is one conversation between the user and Flow about one subject.
@@ -205,6 +206,46 @@ export function clarity(points: ThreadPoint[] | undefined): { known: number; tot
   return { known, total: TOTAL_POINTS };
 }
 
+/** Where this thread is in the seven-question script, read from its messages. */
+export function scriptState(thread: Pick<ThoughtDraft, "messages" | "threadPoints" | "aweDone" | "steps">): ThreadState {
+  const messages = thread.messages ?? [];
+  const answered: Stage[] = [];
+  if (messages.some((m) => m.kind === "transcript")) answered.push("mind");
+  for (const m of messages) {
+    if (m.from !== "flow" || !m.stage) continue;
+    if ((m.stage === "summary" || m.answered) && !answered.includes(m.stage)) answered.push(m.stage);
+  }
+  const known = (id: PointId) => (thread.threadPoints ?? []).find((p) => p.id === id && p.state === "known")?.value;
+  // A regex hit on "want" or "because" is not an answer: outcome and challenge count only once their question was answered.
+  return {
+    points: {
+      outcome: answered.includes("want") ? known("outcome") : undefined,
+      challenge: answered.includes("challenge") ? known("constraints") : undefined,
+      people: known("people"),
+      timing: known("timing"),
+      dependencies: known("dependencies"),
+      motivation: known("motivation"),
+    },
+    answered,
+    elseAsked: messages.filter((m) => m.from === "flow" && m.stage === "else" && m.answered).length,
+    elseExhausted: !!thread.aweDone,
+    moveAccepted: (thread.steps ?? []).some((s) => s.accepted),
+  };
+}
+
+/** 0–100: how far Flow is from understanding this thread (see formula.ts). */
+export function understoodPercent(thread: Pick<ThoughtDraft, "messages" | "threadPoints" | "aweDone" | "steps">, formula: Pick<Formula, "elseRounds"> = DEFAULT_FORMULA): number {
+  const state = scriptState(thread);
+  return understood(state.points, progressOf(state, formula));
+}
+
+export function isUnderstood(thread: Pick<ThoughtDraft, "messages" | "threadPoints" | "aweDone" | "steps">): boolean {
+  // Q3 is only ever asked after the loop closed, so by Q4 the loop is closed for any rhythm.
+  return understoodPercent(thread, { elseRounds: 1 }) >= 100;
+}
+
+export const DEFAULT_FORMULA: Formula = formulaFor("ISTJ");
+
 export function isReady(points: ThreadPoint[] | undefined): boolean {
   const known = (points ?? []).filter((p) => p.state === "known");
   return known.length >= READY_KNOWN && known.some((p) => p.id === "outcome");
@@ -316,7 +357,7 @@ export function stageFor(thread: ThoughtDraft, tasks: Task[]): ThreadStage {
   if (thread.resolvedAt) return "done";
   const mine = threadTasks(thread, tasks);
   if (mine.some((t) => !t.done)) return "moving";
-  if (isReady(thread.threadPoints)) return "understood";
+  if (isUnderstood(thread)) return "understood";
   return "dumped";
 }
 
@@ -510,8 +551,8 @@ export function moveWhen(thread: Pick<ThoughtDraft, "threadPoints" | "messages">
   return said ?? whenFromAnswer(known("next"), now) ?? whenFromAnswer(known("timing"), now);
 }
 
-/** A move is an if-then plan: a moment the person actually has, then the step. */
-function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?: Plate): ThreadMessage {
+/** A move is an if-then plan: a moment the person actually has, then the step, then the script's trade-off question. Accepted by replying. */
+function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?: Plate, formula: Formula = DEFAULT_FORMULA): ThreadMessage {
   const when = moveWhen(thread, new Date(now))?.label ?? whenLabel(plate?.timeWindow, new Date(now));
   return message(
     thread,
@@ -520,14 +561,78 @@ function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?
       from: "flow",
       kind: "offer",
       stepId: step.id,
-      text: `${when}: ${capitalise(step.title)}`,
-      chips: [
-        { id: "do", label: "Do this" },
-        { id: "skip", label: "Not now" },
-      ],
+      stage: "trade",
+      text: `${when}: ${capitalise(step.title)}. ${formula.script.questions.trade} Say “do it” and it goes on your Today.`,
     },
     now,
   );
+}
+
+const YES = /^(?:yes|yeah|yep|yup|ok(?:ay)?|sure|fine|deal|do it|go|go ahead|go for it|let'?s (?:do it|go)|sounds good|please|on it|👍|✅)\b|\bdo it\b/i;
+const NO = /^(?:no|nope|nah|not now|not yet|skip|later|don'?t|pass|maybe later)\b/i;
+
+/** The person's reply to an open move: accept, decline, or neither (they said something else). */
+export function readAcceptance(text: string): "accept" | "decline" | null {
+  const t = text.trim();
+  if (NO.test(t)) return "decline";
+  if (YES.test(t)) return "accept";
+  return null;
+}
+
+/** The person's own words for every point Flow has, after the roof's lead. */
+export function summaryText(thread: Pick<ThoughtDraft, "threadPoints">, formula: Formula): string {
+  const known = (id: PointId) => (thread.threadPoints ?? []).find((p) => p.id === id && p.state === "known")?.value?.replace(/[.!?…]+$/, "");
+  const bits: string[] = [];
+  const quote = (v: string) => `“${v.length > 110 ? v.slice(0, 109).trimEnd() + "…" : v}”`;
+  const outcome = known("outcome"), challenge = known("constraints"), people = known("people"), timing = known("timing"), deps = known("dependencies"), why = known("motivation");
+  if (outcome) bits.push(`You want ${quote(outcome)}.`);
+  if (challenge) bits.push(`In the way: ${quote(challenge)}.`);
+  const short = (v: string | undefined) => (v && v.length <= 90 ? v : undefined);
+  if (short(people)) bits.push(`Who: ${quote(people!)}.`);
+  if (short(timing)) bits.push(`When: ${quote(timing!)}.`);
+  if (short(deps)) bits.push(`It depends on ${quote(deps!)}.`);
+  if (short(why)) bits.push(`Why it matters: ${quote(why!)}.`);
+  return `${formula.script.summaryLead} ${bits.join(" ")}`.trim();
+}
+
+/** The next script question (or summary + "How can I help?") as messages, or nothing when the script is waiting on the person. */
+function continueScript(
+  thread: ThoughtDraft,
+  added: ThreadMessage[],
+  formula: Formula,
+  at: string,
+  hyped: Set<string>,
+  plate?: Plate,
+): { thread: ThoughtDraft; added: ThreadMessage[] } {
+  let next = thread;
+  const push = (m: Omit<ThreadMessage, "id" | "createdAt"> & { id?: string }) => {
+    added.push(message({ ...next, messages: [...(next.messages ?? []), ...added] }, m, at));
+  };
+  const view = () => ({ ...next, messages: [...(next.messages ?? []), ...added] });
+  const script = formula.script;
+  // One open thing at a time.
+  if (pendingMessage(view())) return { thread: next, added };
+  const stage = nextStage(scriptState(view()), formula);
+  if (stage === "else") push({ from: "flow", kind: "question", stage: "else", text: script.questions.else });
+  else if (stage === "challenge") push({ from: "flow", kind: "question", stage: "challenge", pointId: "constraints", text: script.questions.challenge });
+  else if (stage === "want") push({ from: "flow", kind: "question", stage: "want", pointId: "outcome", text: script.questions.want });
+  else if (stage === "summary" || stage === "help") {
+    if (!hyped.has("ready")) {
+      push({ from: "flow", kind: "hype", text: script.full });
+      hyped.add("ready");
+    }
+    if (stage === "summary") push({ from: "flow", kind: "ack", stage: "summary", text: summaryText(next, formula) });
+    push({ from: "flow", kind: "question", stage: "help", text: script.questions.help });
+  } else if (stage === null && scriptState(view()).answered.includes("help") && !next.steps.some((s) => s.accepted)) {
+    // "How can I help?" is answered and no move is on the table: offer the one move, with its trade-off.
+    next = ensureMoves(next);
+    const step = offerableSteps(view())[0];
+    if (step) added.push(offerMessage(view(), step, at, plate, formula));
+    // Nothing in their words to build a move from: GTD's question, once.
+    else if (!(next.threadPoints ?? []).some((p) => p.id === "next" && p.state === "known") && !(next.messages ?? []).some((m) => m.pointId === "next"))
+      push({ from: "flow", kind: "question", pointId: "next", text: "What's the very next thing you'd do on this?" });
+  }
+  return { thread: next, added };
 }
 
 /**
@@ -613,17 +718,25 @@ function echoesPerson(question: string, text: string): boolean {
 }
 
 /** What the AI needs to reply as a turn in this thread, not to one sentence in isolation. */
-export function threadContextFor(thread: ThoughtDraft, others: ThoughtDraft[] = []): ThreadContext {
+export function threadContextFor(thread: ThoughtDraft, others: ThoughtDraft[] = [], formula: Formula | null = null): ThreadContext {
   const recent = (thread.messages ?? [])
     .filter((m) => ["transcript", "ack", "question", "reply"].includes(m.kind))
     .slice(-8)
     .map((m) => ({ from: m.from, text: m.text }));
   const open = pendingMessage(thread);
+  const f = formula ?? DEFAULT_FORMULA;
+  // What Flow will ask after this reply, so the model reflects and never asks its own question.
+  const upcoming = open?.kind === "question" || open?.kind === "offer" ? null : nextStage(scriptState(thread), f);
+  const askNext = upcoming && upcoming !== "summary" ? f.script.questions[upcoming] : upcoming === "summary" ? f.script.questions.help : undefined;
   return {
     title: thread.title,
     points: (thread.threadPoints ?? []).filter((p) => p.state === "known" && p.value).map((p) => ({ id: p.id, evidence: p.value! })),
     recent,
     ...(open?.kind === "question" ? { openQuestion: open.text } : {}),
+    ...(open?.kind === "offer" ? { openMove: open.text } : {}),
+    ...(askNext ? { askNext } : {}),
+    script: formulaPrompt(formula),
+    percent: understoodPercent(thread, f),
     otherThreads: others
       .filter((t) => t.id !== thread.id && !t.example && t.state !== "parked" && !t.resolvedAt)
       .slice(0, 6)
@@ -637,6 +750,8 @@ export function respondToRecording(
   text: string,
   options: {
     mode?: Mode;
+    /** The person's formula (roof + dials). Defaults to the plainest script, SJ. */
+    formula?: Formula | null;
     now?: Date;
     reply?: string;
     question?: string;
@@ -647,17 +762,21 @@ export function respondToRecording(
   } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
+  const formula = options.formula ?? DEFAULT_FORMULA;
   const at = (options.now ?? new Date()).toISOString();
   if ((thread.messages ?? []).some((m) => m.kind === "transcript" && m.noteId === noteId))
     return thread;
   const previous = thread.messages ?? [];
   const isFirst = !previous.some((m) => m.kind === "transcript");
   const added: ThreadMessage[] = [];
-  // The person's own words, kept verbatim.
+  const openQuestion = [...previous].reverse().find((m) => m.from === "flow" && m.kind === "question" && !m.answered);
+  const openOffer = [...previous].reverse().find((m) => m.from === "flow" && m.kind === "offer" && !m.answered);
+  const acceptance = openOffer ? readAcceptance(text) : null;
+  // The person's own words, kept verbatim. A recording answers Flow's open question; a yes/no answers an open move.
   let next: ThoughtDraft = {
     ...thread,
     messages: previous.map((m) =>
-      m.from === "flow" && !m.answered && m.kind === "question" ? { ...m, answered: noteId } : m,
+      (m.id === openQuestion?.id) || (m.id === openOffer?.id && acceptance) ? { ...m, answered: noteId } : m,
     ),
   };
   const push = (m: Omit<ThreadMessage, "id" | "createdAt"> & { id?: string }) => {
@@ -665,23 +784,45 @@ export function respondToRecording(
     added.push(built);
     return built;
   };
+  const view = () => ({ ...next, messages: [...(next.messages ?? []), ...added] });
   push({ from: "you", kind: "transcript", text, noteId });
   // A recording right after Flow's question answers that question, even when no detector matches its words.
-  const asked = [...previous].reverse().find((m) => m.from === "flow" && m.kind === "question" && !m.answered)?.pointId as PointId | undefined;
+  const asked = openQuestion?.pointId as PointId | undefined;
+  // The person's direct answer to a script question is better evidence than a detector's hit on an earlier sentence.
+  const saidNothing = /^(?:no|nope|nah|nothing|not really|that'?s (?:it|all|everything)|no,? that'?s it|i think that'?s it)\b/i.test(text.trim()) || text.trim().split(/\s+/).length < 3;
   const points = fingerprint(text, thread.threadPoints, noteId, options.evidence).map((p) =>
-    p.id === asked && p.state !== "known"
+    p.id === asked && (p.state !== "known" || openQuestion?.stage) && !saidNothing
       ? { ...p, state: "known" as const, value: clip(text.trim()), sourceNoteIds: [noteId] }
       : p,
   );
   const hints = extractDueHints(text, options.now);
+  // "And what else?" closes when the person says there is nothing else (or the rhythm's cap is reached, see formula.ts).
+  const aweDone = thread.aweDone || (openQuestion?.stage === "else" && saidNothing);
   next = {
     ...next,
     threadPoints: points,
+    aweDone,
     missingPoints: missingQuestions(points, mode),
-    goalsReady: isReady(points),
-    threadStatus: isReady(points) ? "ready" : isFirst ? "dumped" : "understanding",
     dueHints: [...(thread.dueHints ?? []), ...hints.filter((h) => !(thread.dueHints ?? []).some((d) => d.date === h.date))],
   };
+  next = { ...next, goalsReady: isUnderstood(view()), threadStatus: isUnderstood(view()) ? "ready" : isFirst ? "dumped" : "understanding" };
+  const hyped = new Set(thread.hypeGiven ?? []);
+  // The person answered an open move by replying.
+  if (openOffer && acceptance === "accept" && openOffer.stepId) {
+    next = { ...next, steps: next.steps.map((st) => (st.id === openOffer.stepId ? { ...st, accepted: true, deferred: false } : st)) };
+    const when = moveWhen(view(), new Date(at))?.label ?? whenLabel(options.plate?.timeWindow, new Date(at));
+    push({ from: "flow", kind: "ack", text: `Done — it's on your Today (${when.toLowerCase()}). I'll ask how it went after.` });
+    return { ...withMessages(next, added), hypeGiven: [...hyped] };
+  }
+  if (openOffer && acceptance === "decline" && openOffer.stepId) {
+    next = { ...next, declinedStepIds: [...(thread.declinedStepIds ?? []), openOffer.stepId] };
+    const step = offerableSteps(view())[0];
+    if (step) {
+      push({ from: "flow", kind: "ack", text: "Fair." });
+      added.push(offerMessage(view(), step, at, options.plate, formula));
+    } else push({ from: "flow", kind: "ack", text: "Fair. I'll hold this thread and bring it back when something changes." });
+    return { ...withMessages(next, added), hypeGiven: [...hyped] };
+  }
   push({
     from: "flow",
     kind: "ack",
@@ -698,60 +839,44 @@ export function respondToRecording(
     .filter((b) => b.title.trim() && b.evidence.trim())
     .filter((b, i, all) => all.findIndex((o) => same(o.title, b.title) || same(o.evidence, b.evidence)) === i)
     .slice(0, 3);
-  let branched = false;
   if (branches.length && !(thread.messages ?? []).some((m) => m.kind === "branch")) {
-    branched = true;
     push({
       from: "flow",
       kind: "branch",
       text:
         branches.length === 1
-          ? `“${branches[0].title}” sounds like its own thing. Want a separate thread for it?`
-          : `I heard ${branches.length + 1} separate things here. Keep this one on “${next.title}” and start threads for ${branches.map((b) => `“${b.title}”`).join(" and ")}?`,
+          ? `“${branches[0].title}” sounds like its own thing — its own thread?`
+          : `I heard ${branches.length + 1} separate things. Keep this one on “${next.title}” and give ${branches.map((b) => `“${b.title}”`).join(" and ")} their own threads?`,
       branches,
       chips: [
-        { id: "split", label: branches.length === 1 ? "Start a thread" : "Split them" },
-        { id: "keep", label: "Keep together" },
+        { id: "split", label: "Yes" },
+        { id: "keep", label: "No" },
       ],
     });
+    // One decision at a time: while the split question is open, the next question waits a turn.
+    return { ...withMessages(next, added), hypeGiven: [...hyped] };
   }
-  // A shaper question about something the person already answered is noise; fall back to the template.
-  const known = new Set(points.filter((p) => p.state === "known").map((p) => p.id));
-  const asksKnown = (q: string) => {
-    const norm = q.trim().toLowerCase().replace(/[^a-z ]/g, "");
-    return POINTS.some((p) => known.has(p.id) && (norm === p.question.toLowerCase().replace(/[^a-z ]/g, "") || (p.id === "people" && /^who (else )?is involved/.test(norm)) || (p.id === "timing" && /^(when|is there a (real )?(date|time))/.test(norm))));
-  };
-  if (options.question && (asksKnown(options.question) || echoesPerson(options.question, text))) options = { ...options, question: undefined };
-  const hyped = new Set(thread.hypeGiven ?? []);
-  // One decision at a time: while the split question is open, the next question or move waits a turn.
-  if (branched) return { ...withMessages(next, added), hypeGiven: [...hyped] };
-  const ask = (point: { id: PointId; question: string }) =>
-    push({
-      from: "flow",
-      kind: "question",
-      pointId: point.id,
-      text: options.question?.trim() || questionFor(point, points),
-      // The shaper words its own question; fixed chips only fit it when it asks for the outcome.
-      chips: !options.question?.trim() || point.id === "outcome" ? suggestionChips(point.id, options.plate) : undefined,
-    });
-  if (isReady(points)) {
-    next = ensureMoves(next);
-    if (!hyped.has("ready")) {
-      push({ from: "flow", kind: "hype", text: voice.fullPicture(mode) });
-      hyped.add("ready");
-    }
-    const openOffer = (next.messages ?? []).some((m) => m.kind === "offer" && !m.answered);
-    const step = openOffer ? undefined : offerableSteps(next)[0];
-    // The offer must see this recording too: its time words decide when the move lands.
-    if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, options.plate));
-    else if (!openOffer && (!isFirst || !hyped.has("ready"))) {
-      const point = nextMissingPoint(points, mode);
-      if (point) ask(point);
-    }
-  } else {
-    const point = nextMissingPoint(points, mode);
-    if (point) ask(point);
+  // After a finished move, "What was most useful?" is answered: the next move, or the closing check-in.
+  if (openQuestion?.stage === "useful") {
+    const step = offerableSteps(view())[0];
+    if (step) added.push(offerMessage(view(), step, at, options.plate, formula));
+    else
+      push({
+        from: "flow",
+        kind: "checkin",
+        id: `${thread.id}:check:resolved:${noteId}`,
+        text: "That was the last move I had. Is this whole thing resolved now?",
+        chips: [
+          { id: "yes", label: "Resolved 🎉" },
+          { id: "no", label: "There's more" },
+        ],
+      });
+    return { ...withMessages(next, added), hypeGiven: [...hyped] };
   }
+  // A move on the table and a reply that is neither yes nor no: the reflection stands; the move stays open.
+  if (openOffer) return { ...withMessages(next, added), hypeGiven: [...hyped] };
+  const cont = continueScript(next, added, formula, at, hyped, options.plate);
+  next = cont.thread;
   return { ...withMessages(next, added), hypeGiven: [...hyped] };
 }
 
@@ -767,9 +892,10 @@ export function answerChip(
   thread: ThoughtDraft,
   messageId: string,
   chipId: string,
-  options: { mode?: Mode; now?: Date; plate?: Plate } = {},
+  options: { mode?: Mode; formula?: Formula | null; now?: Date; plate?: Plate } = {},
 ): { thread: ThoughtDraft; effects: ChipEffect[] } {
   const mode = options.mode ?? DEFAULT_MODE;
+  const formula = options.formula ?? DEFAULT_FORMULA;
   const at = (options.now ?? new Date()).toISOString();
   const plate = options.plate;
   const target = (thread.messages ?? []).find((m) => m.id === messageId);
@@ -784,42 +910,25 @@ export function answerChip(
   const push = (m: Omit<ThreadMessage, "id" | "createdAt"> & { id?: string }) => {
     added.push(message({ ...next, messages: [...(next.messages ?? []), ...added] }, m, at));
   };
+  const view = () => ({ ...next, messages: [...(next.messages ?? []), ...added] });
   push({ from: "you", kind: "reply", text: label });
   const effects: ChipEffect[] = [];
   const hyped = new Set(thread.hypeGiven ?? []);
+  const carryOn = () => {
+    const cont = continueScript(next, added, formula, at, hyped, plate);
+    next = cont.thread;
+  };
   if (target.kind === "question" && target.pointId) {
-    // A tapped suggestion is a full answer to that point, in the person's chosen words.
+    // A tapped suggestion (older builds) is a full answer to that point, in the person's chosen words.
     const pointId = target.pointId as PointId;
     const unsure = UNSURE_LABELS.has(label);
     const points = (next.threadPoints ?? []).map((p) =>
-      p.id === pointId && p.state !== "known" && !unsure
-        ? { ...p, state: "known" as const, value: NONE_LABELS.has(label) ? label : label, sourceNoteIds: [] }
-        : p,
+      p.id === pointId && p.state !== "known" && !unsure ? { ...p, state: "known" as const, value: label, sourceNoteIds: [] } : p,
     );
-    next = {
-      ...next,
-      threadPoints: points,
-      missingPoints: missingQuestions(points, mode),
-      goalsReady: isReady(points),
-      threadStatus: isReady(points) ? "ready" : "understanding",
-    };
-    if (isReady(points)) {
-      next = ensureMoves(next);
-      if (!hyped.has("ready")) {
-        push({ from: "flow", kind: "hype", text: voice.fullPicture(mode) });
-        hyped.add("ready");
-      }
-      const step = offerableSteps(next)[0];
-      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
-      else {
-        const point = nextMissingPoint(points, mode);
-        if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, points), chips: suggestionChips(point.id, plate) });
-      }
-    } else {
-      push({ from: "flow", kind: "ack", text: voice.replyAck(mode, messageId) });
-      const point = unsure ? nextMissingPoint(points.filter((p) => p.id !== pointId), mode) : nextMissingPoint(points, mode);
-      if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, points), chips: suggestionChips(point.id, plate) });
-    }
+    next = { ...next, threadPoints: points, missingPoints: missingQuestions(points, mode) };
+    next = { ...next, goalsReady: isUnderstood(view()), threadStatus: isUnderstood(view()) ? "ready" : "understanding" };
+    push({ from: "flow", kind: "ack", text: voice.replyAck(mode, messageId) });
+    carryOn();
   } else if (target.kind === "branch") {
     if (chipId === "split" && target.branches?.length) {
       effects.push({ type: "branch", branches: target.branches });
@@ -831,20 +940,10 @@ export function answerChip(
     } else {
       push({ from: "flow", kind: "ack", text: "Okay, keeping it all here." });
     }
-    // Now the conversation continues where it would have: a move if ready, else the next question.
-    if (isReady(next.threadPoints)) {
-      next = ensureMoves(next);
-      if (!hyped.has("ready")) {
-        push({ from: "flow", kind: "hype", text: voice.fullPicture(mode) });
-        hyped.add("ready");
-      }
-      const step = offerableSteps(next)[0];
-      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
-    } else {
-      const point = nextMissingPoint(next.threadPoints, mode);
-      if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, next.threadPoints), chips: suggestionChips(point.id, plate) });
-    }
+    // Now the conversation continues where it would have.
+    carryOn();
   } else if (target.kind === "offer" && target.stepId) {
+    // Offers from older builds still carry chips.
     if (chipId === "do") {
       effects.push({ type: "accept", stepId: target.stepId });
       next = {
@@ -855,7 +954,7 @@ export function answerChip(
     } else {
       next = { ...next, declinedStepIds: [...(thread.declinedStepIds ?? []), target.stepId] };
       const step = offerableSteps(next)[0];
-      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
+      if (step) added.push(offerMessage(view(), step, at, plate, formula));
       else push({ from: "flow", kind: "ack", text: "Fair. I'll hold this thread and bring it back when something changes." });
     }
   } else if (target.kind === "checkin" && target.id.includes(":check:resolved:")) {
@@ -864,15 +963,14 @@ export function answerChip(
       effects.push({ type: "credit", id: target.id });
       push({ from: "flow", kind: "hype", text: voice.resolved(mode) });
     } else {
-      push({ from: "flow", kind: "question", pointId: "next", text: "Okay. What's the next move on this, and when?", chips: suggestionChips("next", plate) });
+      push({ from: "flow", kind: "question", stage: "help", text: `Okay. ${formula.script.questions.help}` });
     }
   } else if (target.kind === "checkin") {
     if (chipId === "yes") {
       if (target.taskId) effects.push({ type: "complete", taskId: target.taskId });
       effects.push({ type: "credit", id: target.id });
-      push({ from: "flow", kind: "hype", text: voice.done(mode, target.id) });
-      const step = isReady(next.threadPoints) ? offerableSteps(next)[0] : undefined;
-      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
+      push({ from: "flow", kind: "hype", text: formula.script.done });
+      push({ from: "flow", kind: "question", stage: "useful", text: formula.script.questions.useful });
     } else {
       push({ from: "flow", kind: "ack", text: "No problem. I'll ask again later, not every hour." });
     }
@@ -883,11 +981,7 @@ export function answerChip(
       push({ from: "flow", kind: "ack", text: "Parked. It stays here; nothing is lost." });
     } else {
       push({ from: "flow", kind: "ack", text: voice.back(mode) });
-      const point = nextMissingPoint(next.threadPoints, mode);
-      const step = offerableSteps(next)[0];
-      if (isReady(next.threadPoints) && step)
-        added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
-      else if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, next.threadPoints), chips: suggestionChips(point.id, plate) });
+      carryOn();
     }
   }
   return { thread: { ...withMessages(next, added), hypeGiven: [...hyped] }, effects };
@@ -974,39 +1068,25 @@ export function evaluateThread(
   return { ...withMessages(thread, added), lastEvaluatedAt: at };
 }
 
-/** The person finished a move from the Next card. Flow celebrates once and offers the next move if there is one. */
+/** The person finished a move from the Next card. Flow celebrates once, then asks the script's last question. */
 export function noteMoveDone(
   thread: ThoughtDraft,
   task: Task,
-  options: { mode?: Mode; now?: Date; plate?: Plate } = {},
+  options: { mode?: Mode; formula?: Formula | null; now?: Date; plate?: Plate } = {},
 ): ThoughtDraft {
-  const mode = options.mode ?? DEFAULT_MODE;
+  const formula = options.formula ?? DEFAULT_FORMULA;
   const at = (options.now ?? new Date()).toISOString();
   const id = `${thread.id}:done:${task.id}`;
   if ((thread.messages ?? []).some((m) => m.id === id)) return thread;
-  let next: ThoughtDraft = {
+  const next: ThoughtDraft = {
     ...thread,
     messages: (thread.messages ?? []).map((m) =>
       m.kind === "checkin" && m.taskId === task.id && !m.answered ? { ...m, answered: "yes" } : m,
     ),
   };
-  const added: ThreadMessage[] = [
-    { id, createdAt: at, from: "flow", kind: "hype", text: voice.done(mode, task.id) },
-  ];
-  const step = isReady(next.threadPoints) && !pendingMessage(next) ? offerableSteps(next)[0] : undefined;
-  if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, options.plate));
-  else if (!pendingMessage(next))
-    added.push({
-      id: `${thread.id}:check:resolved:${task.id}`,
-      createdAt: at,
-      from: "flow",
-      kind: "checkin",
-      text: "That was the last move I had. Is this whole thing resolved now?",
-      chips: [
-        { id: "yes", label: "Resolved 🎉" },
-        { id: "no", label: "There's more" },
-      ],
-    });
+  const added: ThreadMessage[] = [{ id, createdAt: at, from: "flow", kind: "hype", text: formula.script.done }];
+  if (!pendingMessage(next))
+    added.push({ id: `${thread.id}:useful:${task.id}`, createdAt: at, from: "flow", kind: "question", stage: "useful", text: formula.script.questions.useful });
   return withMessages(next, added);
 }
 

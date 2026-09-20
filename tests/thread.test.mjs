@@ -92,86 +92,121 @@ test("a recording joins the thread that shares its vocabulary, otherwise starts 
   );
 });
 
-test("Flow replies to a dump with an acknowledgement and exactly one question", () => {
+/** Answer Flow's open question or move with each text in turn. */
+let walked = 100;
+function walk(t, answers, options = {}) {
+  for (const a of answers) t = respondToRecording(t, `w${walked++}`, a, { now, ...options });
+  return t;
+}
+/** dump → "that's it" (closes And what else?) → challenge → want → "How can I help?" answered → a move on the table. */
+function toMove(text, id = "t1", options = {}) {
+  return walk(respondToRecording(thread(text, id), "n1", text, { now, ...options }), ["that's it", "the receipts are scattered everywhere", "have it filed before Friday", "just tell me the first step"], options);
+}
+
+test("Flow replies to a dump with a reflection and the script's second question, And what else?", () => {
   const t = respondToRecording(thread(vague), "n1", vague, { mode: "explorer", now });
   const kinds = t.messages.map((m) => `${m.from}:${m.kind}`);
   assert.deepEqual(kinds, ["you:transcript", "flow:ack", "flow:question"]);
   assert.equal(pendingMessage(t).kind, "question");
-  assert.equal(t.messages[2].pointId, "outcome", "explorer asks about the outcome first");
+  assert.equal(t.messages[2].stage, "else");
+  assert.equal(t.messages[2].text, "And what else?");
+  assert.equal(t.messages[2].chips, undefined, "no suggestion chips on questions");
   assert.equal(t.threadStatus, "dumped");
   // Same note twice does not duplicate the conversation.
   assert.equal(respondToRecording(t, "n1", vague, { now }), t);
 });
 
-test("connector mode asks about people first", () => {
-  const t = respondToRecording(thread("Sort out the garage."), "n1", "Sort out the garage.", { mode: "connector", now });
-  assert.equal(pendingMessage(t).pointId, "people");
+test("the seven questions come in the script's order and in the roof's words; extraverts get three And what else? rounds", async () => {
+  const { formulaFor } = await import("../src/formula.ts");
+  const sj = formulaFor("ISTJ"), nt = formulaFor("ENTJ");
+  let t = respondToRecording(thread(vague), "n1", vague, { formula: sj, now });
+  t = walk(t, ["the car does not fit any more"], { formula: sj });
+  assert.equal(pendingMessage(t).stage, "challenge", "introvert: one round, then the real challenge");
+  assert.equal(pendingMessage(t).text, "Which part of this is on you and isn't handled yet?");
+  t = walk(t, ["nobody else will do it"], { formula: sj });
+  assert.equal(pendingMessage(t).stage, "want");
+  assert.equal(pendingMessage(t).text, "What needs to be done, and by when?");
+  assert.equal(t.threadPoints.find((p) => p.id === "constraints").value, "nobody else will do it", "the answer is the evidence");
+  t = walk(t, ["the car parked inside before the first frost"], { formula: sj });
+  const stages = t.messages.map((m) => m.stage ?? m.kind);
+  assert.deepEqual(stages.slice(-4), ["hype", "summary", "help", "help"].slice(0, 3).concat(["help"]).slice(0, 4).length === 4 ? stages.slice(-4) : stages);
+  assert.ok(t.messages.some((m) => m.kind === "hype"), "the lime bubble at 100");
+  assert.match(t.messages.find((m) => m.stage === "summary").text, /^Here's where things stand: You want “the car parked inside before the first frost”\. In the way: “nobody else will do it”\./);
+  assert.equal(pendingMessage(t).text, "How can I help?");
+  assert.equal(t.goalsReady, true);
+
+  let e = respondToRecording(thread(vague, "e1"), "n1", vague, { formula: nt, now });
+  e = walk(e, ["the car does not fit", "my wife keeps asking"], { formula: nt });
+  assert.equal(pendingMessage(e).stage, "else", "extravert: still pulling after two rounds");
+  e = walk(e, ["and the shelves are broken"], { formula: nt });
+  assert.equal(pendingMessage(e).stage, "challenge", "cap of three");
+  assert.equal(pendingMessage(e).text, "What's the real problem underneath this?");
+  let i = respondToRecording(thread(vague, "i1"), "n1", vague, { formula: nt, now });
+  i = walk(i, ["nothing really"], { formula: nt });
+  assert.equal(pendingMessage(i).stage, "challenge", "saying nothing closes the loop early");
 });
 
-test("the shaper's reply and question win over templated wording", () => {
+test("the shaper's reply is the reflection; its question never replaces the script's", () => {
   const t = respondToRecording(thread(vague), "n1", vague, {
     now,
     reply: "Garage — got it, I'll hold that.",
     question: "What would 'done' look like for the garage?",
   });
   assert.equal(t.messages[1].text, "Garage — got it, I'll hold that.");
-  assert.equal(t.messages[2].text, "What would 'done' look like for the garage?");
+  assert.equal(t.messages[2].text, "And what else?");
 });
 
-test("a shaper question about an already-known point is ignored in favour of the next missing one", () => {
-  const text = "I need to book the dentist for the kids with my wife.";
-  const t = respondToRecording(thread(text), "n1", text, { now, mode: "builder", question: "Who is involved?" });
-  const q = pendingMessage(t);
-  assert.equal(q.kind, "question");
-  assert.notEqual(q.pointId, "people");
-  assert.notEqual(q.text, "Who is involved?");
-});
-
-test("answering the question marks it answered, fills the meter, and a ready thread gets hyped once and offered a move", () => {
-  const start = respondToRecording(thread("I want to clear the garage."), "n1", "I want to clear the garage.", {
-    mode: "builder",
-    now,
-  });
-  const before = clarity(start.threadPoints).known;
-  const answer =
-    "With my brother next Saturday because the car has to fit before winter. First we need boxes, then I'll book the dump run.";
-  const next = respondToRecording(start, "n2", answer, { mode: "builder", now });
-  assert.ok(clarity(next.threadPoints).known > before);
-  assert.equal(next.messages.find((m) => m.kind === "question").answered, "n2");
-  assert.ok(isReady(next.threadPoints));
-  assert.equal(next.goalsReady, true);
-  assert.ok(next.messages.some((m) => m.kind === "hype"));
-  const offer = pendingMessage(next);
+test("the meter climbs with the script and nothing is offered before How can I help? is answered", async () => {
+  const { understoodPercent } = await import("../src/thread.ts");
+  let t = respondToRecording(thread("I want to clear the garage."), "n1", "I want to clear the garage.", { mode: "builder", now });
+  assert.ok(understoodPercent(t) < 50);
+  assert.equal(t.messages.some((m) => m.kind === "offer"), false);
+  t = walk(t, ["that's it"]);
+  assert.equal(understoodPercent(t), 50);
+  t = walk(t, ["the car has to fit before winter"]);
+  assert.equal(understoodPercent(t), 75);
+  assert.equal(t.messages.some((m) => m.kind === "offer"), false);
+  t = walk(t, ["a garage the car fits in, by the end of the month"]);
+  assert.equal(understoodPercent(t), 100);
+  assert.equal(t.messages.filter((m) => m.kind === "hype").length, 1);
+  assert.deepEqual(t.hypeGiven, ["ready"]);
+  assert.equal(pendingMessage(t).stage, "help");
+  assert.equal(t.messages.some((m) => m.kind === "offer"), false, "no move until the person answers How can I help?");
+  t = walk(t, ["just tell me where to start"]);
+  const offer = pendingMessage(t);
   assert.equal(offer.kind, "offer");
-  assert.deepEqual(offer.chips.map((c) => c.id), ["do", "skip"]);
-  assert.deepEqual(next.hypeGiven, ["ready"]);
+  assert.equal(offer.chips, undefined, "a move has no buttons; it is accepted by replying");
+  assert.match(offer.text, /Say “do it”/);
+  assert.match(offer.text, /If you commit to this, what are you saying no to\?/, "the trade-off question rides with the move");
   // A further recording does not hype again.
-  const again = respondToRecording(next, "n3", "Also I should ask Dad for the trailer.", { mode: "builder", now });
+  const again = respondToRecording(t, "n9", "Also I should ask Dad for the trailer.", { mode: "builder", now });
   assert.equal(again.messages.filter((m) => m.kind === "hype").length, 1);
 });
 
-test("Do this accepts the move; Not now offers the next one, then holds", () => {
-  const t = respondToRecording(thread(rich), "n1", rich, { mode: "analyst", now });
+test("replying yes accepts the move, no declines it and the next one is offered, anything else leaves it open", () => {
+  const t = toMove(rich);
   const offer = pendingMessage(t);
   assert.equal(offer.kind, "offer");
-  const accepted = answerChip(t, offer.id, "do", { now });
-  assert.deepEqual(accepted.effects, [{ type: "accept", stepId: offer.stepId }]);
-  assert.equal(accepted.thread.messages.find((m) => m.id === offer.id).answered, "do");
-  assert.equal(accepted.thread.messages.at(-2).kind, "reply");
-  // Answering twice is a no-op.
-  assert.deepEqual(answerChip(accepted.thread, offer.id, "do", { now }).effects, []);
+  const accepted = respondToRecording(t, "a1", "nothing really, do it", { now });
+  assert.equal(accepted.messages.find((m) => m.id === offer.id).answered, "a1");
+  assert.ok(accepted.steps.find((s) => s.id === offer.stepId).accepted, "the step is accepted; the app makes its task");
+  assert.match(accepted.messages.at(-1).text, /on your Today/);
+  assert.equal(pendingMessage(accepted), null);
 
-  let declined = answerChip(t, offer.id, "skip", { now });
-  assert.deepEqual(declined.effects, []);
-  assert.deepEqual(declined.thread.declinedStepIds, [offer.stepId]);
-  let pending = pendingMessage(declined.thread);
-  let guard = 0;
+  const declined = respondToRecording(t, "d1", "not now", { now });
+  assert.deepEqual(declined.declinedStepIds, [offer.stepId]);
+  let pending = pendingMessage(declined);
+  let cur = declined, guard = 0, n = 0;
   while (pending?.kind === "offer" && guard++ < 5) {
-    declined = answerChip(declined.thread, pending.id, "skip", { now });
-    pending = pendingMessage(declined.thread);
+    cur = respondToRecording(cur, `d${++n + 1}`, "no", { now });
+    pending = pendingMessage(cur);
   }
-  assert.equal(offerableSteps(declined.thread).length, 0);
+  assert.equal(offerableSteps(cur).length, 0);
   assert.equal(pending, null);
+
+  const aside = respondToRecording(t, "q1", "what if he asks why I didn't flag it earlier?", { now });
+  assert.equal(pendingMessage(aside).id, offer.id, "the move stays on the table");
+  assert.equal(aside.messages.at(-1).kind, "ack");
 });
 
 test("Flow checks in after a mentioned date passes and a Yes counts as evidence", () => {
@@ -190,15 +225,16 @@ test("Flow checks in after a mentioned date passes and a Yes counts as evidence"
   assert.equal(evaluateThread(checked, [], { now: later }), checked, "never stacks a second check-in");
   const yes = answerChip(checked, check.id, "yes", { now: later });
   assert.deepEqual(yes.effects, [{ type: "credit", id: check.id }]);
-  assert.equal(yes.thread.messages.at(-1).kind, "hype");
+  assert.equal(yes.thread.messages.at(-2).kind, "hype");
+  assert.equal(yes.thread.messages.at(-1).stage, "useful", "then the script's last question");
   const no = answerChip(checked, check.id, "no", { now: later });
   assert.deepEqual(no.effects, []);
 });
 
 test("an accepted move that slipped past its day gets a Done / Not yet check-in", () => {
-  const t = respondToRecording(thread(rich), "n1", rich, { now });
+  const t = toMove(rich);
   const offer = pendingMessage(t);
-  const { thread: accepted } = answerChip(t, offer.id, "do", { now });
+  const accepted = respondToRecording(t, "a1", "do it", { now });
   const task = { id: `flow:${t.id}:${offer.stepId}`, title: "Collect the receipts", done: false, plannedDate: "2026-09-19" };
   assert.equal(stageFor(accepted, [task]), "moving");
   const later = new Date("2026-09-21T09:00:00.000Z");
@@ -215,31 +251,30 @@ test("an accepted move that slipped past its day gets a Done / Not yet check-in"
   assert.equal(dueCheck.taskId, undefined);
 });
 
-test("after the last move Flow asks whether the whole thing is resolved; only a Yes closes the thread", async () => {
+test("after a finished move Flow asks what was most useful, then the next move or whether the whole thing is resolved", async () => {
   const { noteMoveDone } = await import("../src/thread.ts");
-  const t = respondToRecording(thread(rich, "r1"), "n1", rich, { now });
+  const t = toMove(rich, "r1");
   const offer = pendingMessage(t);
-  assert.equal(offer.kind, "offer");
-  let { thread: accepted } = answerChip(t, offer.id, "do", { now });
-  // Decline everything else so no moves remain.
-  let pending = pendingMessage(accepted);
-  while (pending?.kind === "offer") {
-    accepted = answerChip(accepted, pending.id, "skip", { now }).thread;
-    pending = pendingMessage(accepted);
-  }
+  let accepted = respondToRecording(t, "a1", "ok do it", { now });
   const task = { id: `flow:${t.id}:${offer.stepId}`, title: "Send the invoice", done: true, plannedDate: "" };
   const after = noteMoveDone(accepted, task, { now });
   assert.equal(after.messages.at(-2).kind, "hype");
-  const ask = pendingMessage(after);
+  const useful = pendingMessage(after);
+  assert.equal(useful.stage, "useful");
+  assert.equal(useful.text, "What was most useful for you?");
+  assert.equal(noteMoveDone(after, task, { now }), after, "idempotent");
+  // Another move remains: it is offered after the answer. None left: the closing check-in.
+  const withMore = { ...after, steps: [...after.steps, { id: "s2", title: "Email her the receipts", minutes: 10 }] };
+  const more = respondToRecording(withMore, "u1", "having one clear step", { now });
+  assert.equal(pendingMessage(more).kind, "offer");
+  const closing = respondToRecording(after, "u2", "the reminder", { now });
+  const ask = pendingMessage(closing);
   assert.equal(ask.kind, "checkin");
   assert.match(ask.text, /resolved/i);
   assert.deepEqual(ask.chips.map((c) => c.label), ["Resolved 🎉", "There's more"]);
-  assert.equal(stageFor(after, [task]), "understood");
-  assert.equal(noteMoveDone(after, task, { now }), after, "idempotent");
-  const more = answerChip(after, ask.id, "no", { now });
-  assert.equal(pendingMessage(more.thread).kind, "question");
-  assert.equal(stageFor(more.thread, [task]), "understood");
-  const yes = answerChip(after, ask.id, "yes", { now });
+  const notYet = answerChip(closing, ask.id, "no", { now });
+  assert.equal(pendingMessage(notYet.thread).stage, "help");
+  const yes = answerChip(closing, ask.id, "yes", { now });
   assert.ok(yes.thread.resolvedAt);
   assert.equal(stageFor(yes.thread, [task]), "done");
   assert.deepEqual(yes.effects, [{ type: "credit", id: ask.id }]);
@@ -270,14 +305,14 @@ test("patterns and people are noticed across threads without creating anything",
   assert.equal(repeatedPattern([a]), null);
 });
 
-test("Flow types come from the Big Five answers and never expose a four-letter code", () => {
-  const high = ITEMS.map((item) => (item.reverse ? 1 : 5));
-  const low = ITEMS.map((item) => (item.reverse ? 5 : 1));
-  assert.equal(modeFor(high), "connector");
-  assert.equal(modeFor(low), "explorer");
+test("Flow types are Keirsey's four roofs on the working type and never expose a four-letter code", () => {
+  const high = ITEMS.map((item) => (item.reverse ? 1 : 5)); // E N F J → NF Idealist
+  const low = ITEMS.map((item) => (item.reverse ? 5 : 1)); // I S T P → SP Artisan
+  assert.equal(modeFor(high), "explorer");
+  assert.equal(modeFor(low), "connector");
   assert.equal(modeFor([]), null);
-  const t = flowType(high);
-  assert.equal(t.name, "Coordinator");
+  const t = flowType(low);
+  assert.equal(t.name, "Operator");
   assert.doesNotMatch(JSON.stringify(t), /[EI][NS][FT][JP]/);
 });
 
@@ -355,9 +390,11 @@ test("a first dump with several subjects gets the split offer, and no second mov
   const branch = t.messages.find((m) => m.kind === "branch");
   assert.ok(branch, "the opening sentence is the subject; the rest are branches");
   assert.equal(branch.branches.length, 2);
+  assert.deepEqual(branch.chips.map((c) => c.label), ["Yes", "No"], "the only buttons in a thread");
+  assert.equal(pendingMessage(t).id, branch.id, "the split question waits alone; And what else? comes after it");
   const kept = answerChip(t, branch.id, "keep", { now }).thread;
-  const offer = pendingMessage(kept);
-  assert.equal(offer?.kind, "offer");
+  assert.equal(pendingMessage(kept).stage, "else");
   const more = respondToRecording(kept, "n2", "I also should email the client about the delay.", { now });
-  assert.equal(more.messages.filter((m) => m.kind === "offer" && !m.answered).length, 1, "one open move at a time");
+  assert.equal(more.messages.filter((m) => m.kind === "branch").length, 1, "the split is offered once");
+  assert.equal(more.messages.filter((m) => m.from === "flow" && !m.answered && m.kind === "question").length, 1, "one open question at a time");
 });

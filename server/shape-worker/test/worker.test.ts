@@ -52,6 +52,9 @@ describe("shape worker", () => {
       points: [{ id: "people", evidence: "contact Alex" }],
       recent: [{ from: "you", text: "I should contact Alex" }, { from: "flow", text: "Alex, got it. What would you want out of it?" }],
       openQuestion: "What would you want out of it?",
+      askNext: "And what else?",
+      percent: 25,
+      script: "SCRIPT: 1 What's on your mind? 2 And what else?",
       otherThreads: ["Taxes"],
     };
     const res = await handle(req({ ...valid, text: "A paid site. Also the lease renewal is due.", thread }), mkEnv(), NOW);
@@ -60,9 +63,12 @@ describe("shape worker", () => {
     expect(body.shape.branches).toEqual([{ title: "Lease renewal", evidence: "lease renewal" }]);
     const sent = JSON.parse((fetchMock.mock.calls[0] as any)[1].body);
     expect(sent.messages[0].content).toContain("THREAD SO FAR — title: Website for Alex");
-    expect(sent.messages[0].content).toContain("Flow's open question: What would you want out of it?");
+    expect(sent.messages[0].content).toContain("Flow's open question (the person is answering it): What would you want out of it?");
+    expect(sent.messages[0].content).toContain("Understood so far: 25% — no advice, no moves yet");
+    expect(sent.messages[0].content).toContain('The app will ask next, after your reply: "And what else?"');
+    expect(sent.messages[0].content).toContain("SCRIPT: 1 What's on your mind?");
     expect(sent.messages[0].content).toContain("other open threads: Taxes");
-    expect(sent.system).toContain("next turn of that conversation");
+    expect(sent.system).toContain("the question field is always an empty string when a thread is given");
   });
 
   it("uses MODEL from config", async () => {

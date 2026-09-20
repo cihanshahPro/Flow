@@ -58,7 +58,11 @@ function threadText(t: NonNullable<ReturnType<typeof requestSchema.parse>["threa
     lines.push("Recent turns:");
     for (const m of t.recent) lines.push(`${m.from === "you" ? "Person" : "Flow"}: ${m.text.slice(0, 300)}`);
   }
-  if (t.openQuestion) lines.push(`Flow's open question: ${t.openQuestion}`);
+  if (t.openQuestion) lines.push(`Flow's open question (the person is answering it): ${t.openQuestion}`);
+  if (t.openMove) lines.push(`Move on the table, waiting for yes or no: ${t.openMove}`);
+  if (typeof t.percent === "number") lines.push(`Understood so far: ${t.percent}%${t.percent >= 100 ? " — Flow gets it; help is allowed now" : " — no advice, no moves yet"}`);
+  if (t.askNext) lines.push(`The app will ask next, after your reply: "${t.askNext}". Do not ask it yourself; do not ask anything else.`);
+  if (t.script) lines.push(t.script);
   if (t.otherThreads?.length) lines.push("Person's other open threads: " + t.otherThreads.join(" | "));
   return lines.join("\n");
 }

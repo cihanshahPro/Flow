@@ -149,7 +149,7 @@ test("a processed recording opens a conversation: transcript, Flow's reply, and 
   assert.equal(draft.threadPoints.length, 7);
 });
 
-test("the shaper's reply, question and grounded evidence shape Flow's turn; ungrounded evidence is ignored", async () => {
+test("the shaper's reply and grounded evidence shape Flow's turn; its question and ungrounded evidence are ignored", async () => {
   harness.reset();
   harness.shape = {
     ...shape,
@@ -162,7 +162,7 @@ test("the shaper's reply, question and grounded evidence shape Flow's turn; ungr
   };
   const draft = await processVoiceNote(note);
   assert.equal(draft.messages[1].text, "Alex and the designer — got it.");
-  assert.equal(draft.messages[2].text, "When does the designer need the brief?");
+  assert.equal(draft.messages[2].text, "And what else?", "the script asks; the model reflects");
   assert.equal(draft.threadPoints.find((p) => p.id === "people").state, "known");
   assert.equal(draft.threadPoints.find((p) => p.id === "timing").state, "missing");
 });

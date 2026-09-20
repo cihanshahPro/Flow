@@ -27,7 +27,12 @@ async function render(element) {
   return view;
 }
 
-test("a dumped thread shows the transcript, Flow's reply, one question, and only Record as the primary action", async () => {
+/** dump → "that's it" → challenge → want → help answered: a move on the table. */
+let n = 50;
+const answer = (t, text) => respondToRecording(t, `a${n++}`, text, { now });
+const toMove = (t) => ["that's it", "the receipts are all over the place", "the filing done before Friday", "just tell me the first step"].reduce(answer, t);
+
+test("a dumped thread shows the transcript, Flow's reply, the script's question with no buttons, and a message bar", async () => {
   const thread = respondToRecording(suggestDraft("t1", vague, now), "n1", vague, { now });
   const view = await render(
     React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "explorer", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
@@ -35,50 +40,54 @@ test("a dumped thread shows the transcript, Flow's reply, one question, and only
   const text = textOf(view);
   const found = labels(view);
   assert.match(text, /garage situation/);
-  assert.match(text, /What would you want to come out of this/);
-  // Suggested answers ride along with the question; recording is still the other way.
-  assert.ok(found.includes("Get it done and off my list"));
+  assert.match(text, /And what else\?/);
+  assert.ok(!found.includes("Get it done and off my list"), "no suggestion chips: the person types or speaks");
   assert.ok(found.includes("Record"));
   assert.ok(found.includes("Send"));
   assert.ok(view.root.findAllByType("TextInput").some((n) => n.props.accessibilityLabel === "Message Flow"), "a real message bar");
-  assert.ok(!found.includes("Do this"), "no move offered before the thread is ready");
+  assert.ok(!found.includes("Do this"), "no move offered before the thread is understood");
   assert.ok(!found.some((l) => /mark done|add task|classify/i.test(l)));
+  assert.match(text, /Getting to know this/);
   await act(async () => view.unmount());
 });
 
-test("a ready thread shows the hype bubble and a move with exactly two chips; tapping calls back with the chip", async () => {
-  const thread = respondToRecording(suggestDraft("t2", rich, now), "n1", rich, { mode: "builder", now });
+test("an understood thread shows the hype bubble, Flow gets it, and a move with no buttons", async () => {
+  const thread = toMove(respondToRecording(suggestDraft("t2", rich, now), "n1", rich, { mode: "builder", now }));
   const offer = pendingMessage(thread);
   assert.equal(offer.kind, "offer");
-  const taps = [];
   const view = await render(
-    React.createElement(ThreadChat, {
-      thread, tasks: [], notes: [], mode: "builder", onRecord() {}, onSend() {}, onClose() {},
-      onChip: (id, chip) => taps.push([id, chip]),
-    }),
+    React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "builder", onRecord() {}, onSend() {}, onClose() {}, onChip() {} }),
   );
   const found = labels(view);
-  assert.ok(found.includes("Do this"));
-  assert.ok(found.includes("Not now"));
+  assert.ok(!found.includes("Do this"), "a move is accepted by replying, not by a button");
   assert.match(textOf(view), /Clear picture/);
-  const doThis = view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Do this");
-  await act(async () => doThis.props.onPress());
-  assert.deepEqual(taps, [[offer.id, "do"]]);
+  assert.match(textOf(view), /Flow gets it/);
+  assert.match(textOf(view), /Say “do it”/);
   await act(async () => view.unmount());
 });
 
-test("answered chips disappear and the reply shows as the user's bubble", async () => {
-  const thread = respondToRecording(suggestDraft("t3", rich, now), "n1", rich, { now });
-  const offer = pendingMessage(thread);
-  const { thread: after } = answerChip(thread, offer.id, "skip", { now });
+test("the split question is the only place with buttons, and answered ones disappear", async () => {
+  const multi = "Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday. Also my landlord is asking about the lease renewal by end of month.";
+  const thread = respondToRecording(suggestDraft("t3", multi, now), "n1", multi, { now });
+  const branch = pendingMessage(thread);
+  assert.equal(branch.kind, "branch");
+  const taps = [];
   const view = await render(
+    React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "analyst", onRecord() {}, onSend() {}, onClose() {}, onChip: (id, chip) => taps.push([id, chip]) }),
+  );
+  const found = labels(view);
+  assert.ok(found.includes("Yes") && found.includes("No"));
+  const yes = view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Yes");
+  await act(async () => yes.props.onPress());
+  assert.deepEqual(taps, [[branch.id, "split"]]);
+  await act(async () => view.unmount());
+  const { thread: after } = answerChip(thread, branch.id, "keep", { now });
+  const view2 = await render(
     React.createElement(ThreadChat, { thread: after, tasks: [], notes: [], mode: "analyst", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
   );
-  const chips = view.root.findAllByType("Pressable").filter((n) => ["Do this", "Not now"].includes(n.props.accessibilityLabel));
-  // Only the newest offer keeps live chips.
-  assert.equal(chips.filter((c) => !c.props.disabled).length <= 2, true);
-  assert.match(textOf(view), /Not now/);
-  await act(async () => view.unmount());
+  assert.ok(!labels(view2).includes("Yes"), "answered buttons are gone");
+  assert.match(textOf(view2), /"No"/, "the reply shows as the person's bubble");
+  await act(async () => view2.unmount());
 });
 
 test("the meter reflects the fingerprint and expands to the person's own evidence", async () => {
@@ -86,7 +95,7 @@ test("the meter reflects the fingerprint and expands to the person's own evidenc
   const view = await render(
     React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "connector", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
   );
-  const meter = view.root.findAllByType("Pressable").find((n) => /Flow has \d of 7 points/.test(n.props.accessibilityLabel));
+  const meter = view.root.findAllByType("Pressable").find((n) => /Flow is \d+% of the way/.test(n.props.accessibilityLabel));
   assert.ok(meter);
   await act(async () => meter.props.onPress());
   assert.match(textOf(view), /Outcome/);
@@ -96,7 +105,7 @@ test("the meter reflects the fingerprint and expands to the person's own evidenc
 
 test("Today is the Next card, Flow's suggestion with one Record button, and only the threads that need you", async () => {
   const a = respondToRecording(suggestDraft("a", vague, now), "n1", vague, { now });
-  const b = respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now });
+  const b = toMove(respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now }));
   const task = { id: "flow:b:auto", title: "Collect the receipts", done: false, createdAt: now.toISOString(), plannedDate: "" };
   const opened = [];
   const view = await render(
@@ -145,17 +154,21 @@ test("an empty Today is Flow's suggested prompt with one Record button", async (
   await act(async () => view.unmount());
 });
 
-test("Threads lists every conversation, needs-you first, quiet ones last, with one New thread button; the tab bar has four tabs and a badge", async () => {
+test("Threads is a Messages-style list: newest first, quiet ones last, a dot when Flow is waiting, one New thread button; the tab bar has four tabs and a badge", async () => {
   const a = respondToRecording(suggestDraft("a", vague, now), "n1", vague, { now });
-  const b = { ...respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now }), state: "parked" };
+  const b = { ...respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now: new Date(now.getTime() + 60_000) }), state: "parked" };
   const c = { ...suggestDraft("c", "Clean the garage this weekend.", now), messages: [], resolvedAt: now.toISOString() };
-  const view = await render(React.createElement(Threads, { threads: [a, b, c], tasks: [], onOpenThread() {}, onNew() {} }));
+  const view = await render(React.createElement(Threads, { threads: [a, b, c], tasks: [], now: new Date(now.getTime() + 3_600_000), onOpenThread() {}, onNew() {} }));
   const cards = labels(view).filter((l) => l.startsWith("Open thread "));
   assert.equal(cards.length, 3);
-  assert.equal(cards[0], `Open thread ${a.title}`, "the thread that needs you comes first");
+  assert.equal(cards[0], `Open thread ${a.title}`, "the live thread comes first even though the parked one is newer");
   assert.ok(labels(view).includes("New thread"));
+  assert.equal(textOf(view).split('"Needs you"').length - 1, 1, "one unread dot: the thread with an open question");
   assert.match(textOf(view), /"1"," open"/);
   assert.match(textOf(view), /Parked/);
+  assert.match(textOf(view), /"Done"/);
+  assert.match(textOf(view), /And what else\?/, "the last message is the preview, like Messages");
+  assert.doesNotMatch(textOf(view), /ACTIVE|WAITING/, "no groups, no labels to learn");
   await act(async () => view.unmount());
   const picked = [];
   const bar = await render(React.createElement(TabBar, { active: "today", badge: 2, onSelect: (t) => picked.push(t) }));

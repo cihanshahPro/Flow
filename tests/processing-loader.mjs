@@ -13,7 +13,7 @@ export async function resolve(specifier, context, next) {
   if (parent.endsWith("/services/processing.ts") || parent.endsWith("/services/processors.ts")) {
     if (MOCKED.includes(specifier)) return { url: mocks, shortCircuit: true };
     if (["./processors"].includes(specifier)) return next(specifier + ".ts", context);
-    if (["../drafts", "../flow-voice", "../thread", "../ai-policy", "../ai-quality"].includes(specifier))
+    if (["../drafts", "../flow-voice", "../thread", "../ai-policy", "../ai-quality", "../formula"].includes(specifier))
       return next(specifier + ".ts", context);
   }
   return next(specifier, context);

@@ -10,26 +10,31 @@ function run() {
   let t = { id: "t1", title: "Renew my passport before the Lisbon…", steps: [], messages: [], threadPoints: [] };
   t = respondToRecording(t, "n1", "Renew my passport before the Lisbon trip in November.", { now });
   const asked = [];
+  const answers = {
+    else: "that's it",
+    challenge: "The appointment slots are always full.",
+    want: "renew my passport before the Lisbon trip in November",
+    help: "Tell me what to do. This weekend",
+  };
   for (let i = 0; i < 8; i++) {
     const q = pending(t);
     if (!q || q.kind === "offer") return { t, offer: q, asked };
-    asked.push(q.pointId);
-    if (q.pointId === "constraints") t = respondToRecording(t, `n${i + 2}`, "The appointment slots are always full.", { now });
-    else t = answerChip(t, q.id, (q.chips.find((c) => c.label === "This weekend") ?? q.chips[0]).id, { now }).thread;
+    asked.push(q.stage);
+    t = respondToRecording(t, `n${i + 2}`, answers[q.stage], { now });
   }
   return { t, offer: undefined, asked };
 }
 
 test("a written answer counts for the question asked, so it is not asked again", () => {
   const { asked, t } = run();
-  assert.equal(asked.filter((p) => p === "constraints").length, 1);
+  assert.deepEqual(asked, ["else", "challenge", "want", "help"]);
   assert.equal(t.threadPoints.find((p) => p.id === "constraints").value, "The appointment slots are always full.");
 });
 
 test("the chosen time reaches the move, and the move is a clean second-person sentence", () => {
   const { t, offer } = run();
   assert.ok(offer, "Flow offers a move");
-  assert.equal(offer.text, "This weekend: Renew your passport before the Lisbon trip in November");
+  assert.match(offer.text, /^This weekend: Renew your passport before the Lisbon trip in November\. /);
   assert.deepEqual(moveWhen(t, now), { date: "2026-09-26", time: "10:00", label: "This weekend" });
   const title = t.steps[0].title;
   assert.ok(title.length <= 60);
@@ -40,7 +45,7 @@ test("second person keeps the person's casing and long moves cut at a word with 
   assert.equal(secondPerson("renew my passport before I fly to Lisbon"), "Renew your passport before you fly to Lisbon");
 });
 
-test("a time said in the same recording that completes the thread reaches the move", () => {
+test("an older build's question is answered in place, the time said is kept for the move, and the script carries on", () => {
   // State taken from the simulator: the cloud filled timing with a non-time phrase and asked its own question.
   const known = (id, value) => ({ id, label: id, state: "known", value });
   const missing = (id) => ({ id, label: id, state: "missing", value: "?" });
@@ -63,7 +68,8 @@ test("a time said in the same recording that completes the thread reaches the mo
     now,
     evidence: { constraints: "Just me and nothing is in the way" },
   });
-  const offer = t.messages.find((m) => m.kind === "offer");
-  assert.ok(offer, "Flow offers a move");
-  assert.match(offer.text, /^This weekend: /);
+  assert.equal(t.messages.find((m) => m.id === "m1").answered, "b");
+  assert.equal(t.threadPoints.find((p) => p.id === "constraints").value, "Just me and nothing is in the way");
+  assert.equal(pending(t).stage, "else", "no move before the script is answered");
+  assert.equal(moveWhen(t, now).label, "This weekend");
 });

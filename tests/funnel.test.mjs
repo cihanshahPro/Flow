@@ -144,7 +144,7 @@ test("Profile shows the Flow type and an editable plate; Progress shows the leve
     React.createElement(Profile, { profile, threads, notes: [{ id: "f", captureKind: "feedback", title: "x", text: "x", createdAt: "" }], onRetake() {}, onFeedback: (m) => fb.push(m), onPlate: (p) => plates.push(p) }),
   );
   let text = textOf(view);
-  assert.match(text, /Coordinator/);
+  assert.match(text, /Catalyst/);
   assert.match(text, /Work project/);
   assert.match(text, /Boss/);
   assert.match(text, /Sam/);

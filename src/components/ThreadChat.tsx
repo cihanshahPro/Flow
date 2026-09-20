@@ -3,7 +3,8 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import type { ThoughtDraft, ThreadMessage } from "../drafts.ts";
 import type { Note, Task } from "../model.ts";
 import { celebrationEmoji, type Mode } from "../flow-voice.ts";
-import { clarity, pendingMessage, stageFor, STAGE_LABEL, threadTasks } from "../thread.ts";
+import { pendingMessage, stageFor, threadTasks, understoodPercent } from "../thread.ts";
+import type { Formula } from "../formula.ts";
 import { AudioPlayback } from "./VoiceCapture.tsx";
 import EmojiRain from "./EmojiRain.tsx";
 import { C } from "./theme.ts";
@@ -21,6 +22,7 @@ export default function ThreadChat({
   tasks,
   notes,
   mode,
+  formula,
   busy = false,
   processing = false,
   onSend,
@@ -33,6 +35,8 @@ export default function ThreadChat({
   tasks: Task[];
   notes: Note[];
   mode: Mode;
+  /** The person's roof and rhythm; sets how fast the meter fills. */
+  formula?: Formula | null;
   busy?: boolean;
   processing?: boolean;
   /** Typed message: saved and answered without leaving the chat. */
@@ -45,7 +49,7 @@ export default function ThreadChat({
 }) {
   const messages = thread.messages ?? [];
   const pending = pendingMessage(thread);
-  const meter = clarity(thread.threadPoints);
+  const percent = understoodPercent(thread, formula ?? undefined);
   const stage = stageFor(thread, tasks);
   const [showPoints, setShowPoints] = useState(false);
   const [titleOpen, setTitleOpen] = useState(false);
@@ -80,8 +84,7 @@ export default function ThreadChat({
     setDraft("");
     onSend(text);
   };
-  const placeholder =
-    pending?.kind === "question" ? "Answer here, or tap a suggestion above" : stage === "done" ? "Anything new on this?" : "Message Flow";
+  const placeholder = stage === "done" ? "Anything new on this?" : "Message Flow";
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={0}>
       <View style={s.header}>
@@ -93,20 +96,18 @@ export default function ThreadChat({
             {thread.title}
           </Text>
           <View style={s.subRow}>
-            <Text style={s.stage}>{STAGE_LABEL[stage]}</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Flow has ${meter.known} of ${meter.total} points`}
+              accessibilityLabel={percent >= 100 ? "Flow gets it" : `Flow is ${percent}% of the way to getting this`}
               onPress={() => setShowPoints((v) => !v)}
               hitSlop={8}
               style={s.meterChip}
             >
+              <Text style={s.stage}>{percent >= 100 ? "Flow gets it" : "Getting to know this"}</Text>
               <View style={s.miniTrack}>
-                <View style={[s.miniFill, { width: `${Math.round((meter.known / meter.total) * 100)}%` }]} />
+                <View style={[s.miniFill, { width: `${Math.min(100, percent)}%` }]} />
               </View>
-              <Text style={s.meterCount}>
-                {meter.known}/{meter.total} {showPoints ? "▾" : "▸"}
-              </Text>
+              <Text style={s.meterCount}>{percent}%</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -242,10 +243,7 @@ function Bubble({
         )}
         {message.kind === "transcript" && !!note?.audioUri && <AudioPlayback uri={note.audioUri} />}
         {message.kind === "checkin" && task && !message.answered && <Text style={s.small}>Your move: {task.title}</Text>}
-        {message.kind === "question" && !message.answered && !!message.chips?.length && (
-          <Text style={s.small}>Tap one, or just reply below.</Text>
-        )}
-        {!!message.chips && !message.answered && (
+        {!!message.chips && !message.answered && message.kind !== "question" && (
           <View style={s.chips}>
             {message.chips.map((chip, i) => (
               <Pressable
@@ -254,9 +252,9 @@ function Bubble({
                 accessibilityLabel={chip.label}
                 onPress={() => onChip(chip.id)}
                 disabled={busy || !active}
-                style={({ pressed }) => [s.chip, i === 0 && message.kind !== "question" && s.chipPrimary, (pressed || busy) && { opacity: 0.6 }]}
+                style={({ pressed }) => [s.chip, i === 0 && s.chipPrimary, (pressed || busy) && { opacity: 0.6 }]}
               >
-                <Text style={[s.chipText, i === 0 && message.kind !== "question" && s.chipPrimaryText]}>{chip.label}</Text>
+                <Text style={[s.chipText, i === 0 && s.chipPrimaryText]}>{chip.label}</Text>
               </Pressable>
             ))}
           </View>
@@ -273,7 +271,7 @@ const s = StyleSheet.create({
   title: { fontSize: 20, lineHeight: 25, fontWeight: "700", color: C.ink },
   subRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   stage: { fontSize: 13, fontWeight: "600", color: C.blue },
-  meterChip: { flexDirection: "row", alignItems: "center", gap: 6 },
+  meterChip: { flexDirection: "row", alignItems: "center", gap: 8 },
   miniTrack: { width: 56, height: 6, borderRadius: 3, backgroundColor: C.line, overflow: "hidden" },
   miniFill: { height: 6, backgroundColor: C.blue, borderRadius: 3 },
   meterCount: { fontSize: 12, fontWeight: "700", color: C.muted },

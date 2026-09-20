@@ -1,9 +1,10 @@
-import { scoreAnswers, ITEMS } from "./personality.ts";
+import { scoreAnswers, ITEMS, workingType } from "./personality.ts";
+import { roofFor, type Roof } from "./formula.ts";
 
 /**
- * Flow's four interaction modes. They change wording, order and density of
- * prompts only. The quiz is the Mini-IPIP (Big Five); the mode is Flow's own
- * adaptation of those scores, not a validated type.
+ * Flow's four interaction modes: Keirsey's four temperaments (Please
+ * Understand Me II), one per roof of the 16 working types. They change
+ * wording, order and density of prompts only.
  */
 export type Mode = "explorer" | "builder" | "analyst" | "connector";
 
@@ -32,26 +33,24 @@ const TYPES: Record<Mode, Omit<FlowType, "mode">> = {
     promise: "Flow will map what's blocking what, then show the move.",
   },
   connector: {
-    name: "Coordinator",
-    line: "People and promises are what your days are made of.",
-    promise: "Flow will keep who, when and what together for you.",
+    name: "Operator",
+    line: "You move fast and want to see it work.",
+    promise: "Flow will give you one move at a time and get out of the way.",
   },
 };
 
+const MODE_FOR_ROOF: Record<Roof, Mode> = { SP: "connector", SJ: "builder", NF: "explorer", NT: "analyst" };
+
+/** Keirsey's rule on the 16-letter working type: SP Artisan, SJ Guardian, NF Idealist, NT Rational. */
 export function modeFor(answers: number[] | undefined): Mode | null {
   if (!Array.isArray(answers) || answers.length !== ITEMS.length) return null;
-  let scores;
   try {
-    scores = scoreAnswers(answers);
+    scoreAnswers(answers);
   } catch {
     return null;
   }
-  if (scores.Extraversion >= 3.25 && scores.Agreeableness >= 3.25)
-    return "connector";
-  if (scores.Conscientiousness >= 3.25 && scores.Agreeableness < 3.25)
-    return "analyst";
-  if (scores.Conscientiousness >= 3.25) return "builder";
-  return "explorer";
+  const type = workingType(answers);
+  return type ? MODE_FOR_ROOF[roofFor(type.code)] : null;
 }
 
 export function flowType(answers: number[] | undefined): FlowType | null {

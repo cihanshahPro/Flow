@@ -13,12 +13,16 @@ export const requestSchema = z.object({
       points: z.array(z.object({ id: z.enum(POINT_IDS), evidence: z.string().max(400) })).max(7),
       recent: z.array(z.object({ from: z.enum(["flow", "you"]), text: z.string().max(1200) })).max(8),
       openQuestion: z.string().max(400).optional(),
+      openMove: z.string().max(600).optional(),
+      askNext: z.string().max(200).optional(),
+      script: z.string().max(2500).optional(),
+      percent: z.number().min(0).max(100).optional(),
       otherThreads: z.array(z.string().max(200)).max(6).optional(),
     })
     .optional(),
   profile: z
     .object({
-      type: z.enum(["Catalyst", "Steward", "Architect", "Coordinator"]).optional(),
+      type: z.enum(["Catalyst", "Steward", "Architect", "Operator", "Coordinator"]).optional(),
       typeLine: z.string().max(400).optional(),
       focus: z.string().max(200).optional(),
       areas: z.array(z.string().max(120)).max(8).optional(),
@@ -70,7 +74,7 @@ export const SHAPE_TOOL = {
           properties: { title: { type: "string", description: "2 to 6 words" }, evidence: { type: "string", description: "3 to 10 consecutive words copied exactly from the input" } },
         },
       },
-      question: { type: "string", description: "One question, at most 16 words, about the most important missing point; empty if none" },
+      question: { type: "string", description: "Empty string whenever THREAD SO FAR is given (the app asks the script). Otherwise one question, at most 16 words, about the most important missing point; empty if none" },
       points: {
         type: "array",
         maxItems: 7,

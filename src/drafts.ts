@@ -54,6 +54,8 @@ export type ThoughtDraft = {
   dueHints?: DueHint[];
   hypeGiven?: string[];
   declinedStepIds?: string[];
+  /** The "And what else?" loop is closed for this thread: the last answer added nothing new. */
+  aweDone?: boolean;
   lastEvaluatedAt?: string;
   lastOpenedAt?: string;
   /** Set only when the person confirms the whole thread is resolved. */
@@ -81,6 +83,8 @@ export type ThreadMessage = {
   branches?: { title: string; evidence: string }[];
   noteId?: string;
   pointId?: string;
+  /** Which of the script's seven questions this message is (see formula.ts). */
+  stage?: "mind" | "else" | "challenge" | "want" | "summary" | "help" | "trade" | "useful";
   stepId?: string;
   taskId?: string;
   chips?: ThreadChip[];

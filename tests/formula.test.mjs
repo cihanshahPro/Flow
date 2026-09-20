@@ -49,6 +49,9 @@ test("the meter needs both the challenge and the want to reach 100", () => {
   assert.equal(understood({ ...facts, challenge: "looks like it's on me" }), 75);
   assert.equal(understood({ ...facts, challenge: "x", outcome: "credible demo" }), 100);
   assert.equal(understood({ outcome: "   " }), 0);
+  // once "And what else?" is exhausted, what is still empty is not in this thread
+  assert.equal(understood({ people: "manager" }, { aweDone: true }), 50);
+  assert.equal(understood({}, { aweDone: true, challengeAnswered: true, wantAnswered: true }), 100);
 });
 
 test("extraverts get three rounds of AWE, introverts one, and it stops when nothing new comes", () => {
@@ -70,9 +73,8 @@ test("the script never skips ahead and nothing is suggested below 100", () => {
   s.answered.push("challenge"); s.points.challenge = "c";
   assert.equal(nextStage(s, f), "want");
   s.answered.push("want"); s.points.outcome = "d";
-  assert.equal(understood(s.points), 75);
-  assert.equal(nextStage(s, f), null, "waits; never drills for the missing point");
-  s.points.dependencies = "e"; s.points.motivation = "f";
+  assert.equal(understood(s.points), 75, "evidence alone");
+  // the introvert's one AWE round is done, so the empty points are not in this thread: the meter is full
   assert.equal(nextStage(s, f), "summary");
   s.answered.push("summary");
   assert.equal(nextStage(s, f), "help");

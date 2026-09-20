@@ -52,13 +52,31 @@ export const FILLS: Record<Stage, readonly UnderstandingPoint[]> = {
   useful: [],
 };
 
-/** 0–100. A point counts only with evidence (a quote from the person). */
-export function understood(points: Partial<Record<UnderstandingPoint, string | undefined>>): number {
+export type Progress = {
+  /** The "And what else?" loop is finished: the person had every chance to add people, dates and dependencies. */
+  aweDone?: boolean;
+  /** Rounds of "And what else?" answered so far, out of the rhythm's cap: the bar moves with every answer. */
+  elseAnswered?: number;
+  elseRounds?: number;
+  challengeAnswered?: boolean;
+  wantAnswered?: boolean;
+};
+
+/**
+ * 0–100. Before the AWE loop closes, a point counts only with evidence (a
+ * quote from the person). Once it closes, whatever is still empty is not in
+ * this thread — Flow never drills for it — and the minor half is complete.
+ * Q3 and Q4 are the other half, so 100 means the script was answered.
+ */
+export function understood(points: Partial<Record<UnderstandingPoint, string | undefined>>, progress: Progress = {}): number {
+  const has = (k: UnderstandingPoint) => !!points[k]?.trim();
   let total = 0;
-  for (const key of Object.keys(WEIGHTS) as UnderstandingPoint[]) {
-    if (points[key]?.trim()) total += WEIGHTS[key];
-  }
-  return Math.round(total);
+  if (has("outcome") || progress.wantAnswered) total += WEIGHTS.outcome;
+  if (has("challenge") || progress.challengeAnswered) total += WEIGHTS.challenge;
+  const minor: UnderstandingPoint[] = ["people", "timing", "dependencies", "motivation"];
+  const rounds = progress.elseRounds && progress.elseAnswered ? Math.min(50, (progress.elseAnswered / progress.elseRounds) * 50) : 0;
+  total += progress.aweDone ? 50 : Math.max(minor.filter(has).length * 12.5, rounds);
+  return Math.round(Math.min(100, total));
 }
 
 // ---------------------------------------------------------------- roofs
@@ -254,6 +272,17 @@ export type ThreadState = {
   moveDone?: boolean;
 };
 
+/** Script progress as the meter sees it. */
+export function progressOf(state: ThreadState, formula: Pick<Formula, "elseRounds">): Progress {
+  return {
+    aweDone: !!state.elseExhausted || state.elseAsked >= formula.elseRounds,
+    elseAnswered: state.elseAsked,
+    elseRounds: formula.elseRounds,
+    challengeAnswered: state.answered.includes("challenge"),
+    wantAnswered: state.answered.includes("want"),
+  };
+}
+
 /**
  * The next thing Flow says. Fixed order; never skips ahead; "And what else?"
  * repeats within the rhythm cap until it stops adding points. Summary and the
@@ -265,7 +294,7 @@ export function nextStage(state: ThreadState, formula: Pick<Formula, "elseRounds
   if (state.elseAsked < formula.elseRounds && !state.elseExhausted) return "else";
   if (!has("challenge")) return "challenge";
   if (!has("want")) return "want";
-  if (understood(state.points) < 100) return null; // wait; live with an empty point rather than drill down
+  if (understood(state.points, progressOf(state, formula)) < 100) return null; // never drills for a missing point
   if (!has("summary")) return "summary";
   if (!has("help")) return "help";
   if (state.moveAccepted && !has("trade")) return "trade";

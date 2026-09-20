@@ -10,6 +10,7 @@ import {
 import type { DirectionContext, Note } from "../model";
 import { loadProfile } from "./profile";
 import { modeFor, DEFAULT_MODE } from "../flow-voice";
+import { formulaFromAnswers } from "../formula";
 import { respondToRecording, routeRecording, threadContextFor } from "../thread";
 import { profileContext } from "../ai-policy";
 import { shapeText, transcribeAudio, type ShapeOptions } from "./processors";
@@ -92,7 +93,7 @@ async function processThoughtNote(
     const others = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt).slice(0, 6).map((t) => t.title);
     const outcome = await shapeText(text, profileContext(profile), {
       ...options,
-      thread: plan ? threadContextFor(plan, threads) : others.length ? { title: "", points: [], recent: [], otherThreads: others } : null,
+      thread: plan ? threadContextFor(plan, threads, formulaFromAnswers(profile?.answers)) : others.length ? { title: "", points: [], recent: [], otherThreads: others } : null,
     });
     shape = outcome.shape ?? undefined;
     organizer = outcome.kind === "cloud" ? "cloud" : "apple-local";
@@ -112,9 +113,11 @@ async function processThoughtNote(
   // A recording joins the thread it belongs to, then Flow replies. Nothing
   // becomes a goal until the person accepts a move Flow offers.
   const mode = modeFor(profile?.answers) ?? DEFAULT_MODE;
+  const formula = formulaFromAnswers(profile?.answers);
   if (plan) draft = appendPlanUpdate(plan, draft);
   draft = respondToRecording(draft, note.id, text, {
     mode,
+    formula,
     reply: flow.reply,
     question: flow.question,
     evidence: flow.evidence,

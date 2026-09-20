@@ -134,7 +134,7 @@ function safeJson(s: string): unknown {
 
 /** What the shaper may know about the person. Never raw quiz answers. */
 export type ProfileContext = {
-  type?: "Catalyst" | "Steward" | "Architect" | "Coordinator";
+  type?: "Catalyst" | "Steward" | "Architect" | "Operator";
   typeLine?: string;
   focus?: string;
   areas?: string[];
@@ -167,6 +167,14 @@ export type ThreadContext = {
   /** Oldest first; at most the last eight turns. */
   recent: { from: "flow" | "you"; text: string }[];
   openQuestion?: string;
+  /** A move Flow has put on the table, waiting for a yes or no. */
+  openMove?: string;
+  /** The script question Flow will ask after this reply (the app asks it; the model only reflects). */
+  askNext?: string;
+  /** The person's formula: roof wording, rhythm, the seven questions (formula.ts). */
+  script?: string;
+  /** How far Flow is from understanding this thread, 0–100. */
+  percent?: number;
   /** Titles of the person's other open threads, so the AI can say when something belongs elsewhere. */
   otherThreads?: string[];
 };
@@ -182,7 +190,11 @@ export function threadContextText(t: ThreadContext | null | undefined): string {
     lines.push("Recent turns:");
     for (const m of t.recent.slice(-THREAD_RECENT)) lines.push(`${m.from === "you" ? "Person" : "Flow"}: ${m.text.slice(0, 300)}`);
   }
-  if (t.openQuestion) lines.push(`Flow's open question: ${t.openQuestion}`);
+  if (t.openQuestion) lines.push(`Flow's open question (the person is answering it): ${t.openQuestion}`);
+  if (t.openMove) lines.push(`Move on the table, waiting for yes or no: ${t.openMove}`);
+  if (typeof t.percent === "number") lines.push(`Understood so far: ${t.percent}%${t.percent >= 100 ? " — Flow gets it; help is allowed now" : " — no advice, no moves yet"}`);
+  if (t.askNext) lines.push(`The app will ask next, after your reply: "${t.askNext}". Do not ask it yourself; do not ask anything else.`);
+  if (t.script) lines.push(t.script);
   if (t.otherThreads?.length) lines.push("Person's other open threads: " + t.otherThreads.slice(0, 6).join(" | "));
   return lines.join("\n");
 }
