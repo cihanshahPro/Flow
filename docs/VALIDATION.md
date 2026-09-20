@@ -1,5 +1,26 @@
 # Validation record — September 18, 2026
 
+## Test build 12 — iOS simulator walkthrough (2026-09-19)
+
+Run by Claude on the Mac mini: Xcode 26.6, iOS 26.5 simulator runtime, "Flow iPhone" (iPhone 17), Expo Go SDK 57 from the `10.0.0.153:8083` dev server, the real voice processor and Apple Foundation Models shaper on the same machine. Driven over SSH with `idb` (taps, text, accessibility tree, screenshots). Text input only: the simulator's recorder cannot prepare an audio session (`AudioRecordingException: Failed to prepare recorder`), so the microphone path remains a physical-device check.
+
+Verified on the simulator, in this order:
+
+- Intro shows `TEST 12`; the test cannot be skipped; twenty taps produce the reveal ("You're a Catalyst.") with no four-letter code.
+- Five profile questions save on every tap (areas, Partner, Evenings, two obstacles, dated soon); "Let's start with money & bills." with one Record button and a write link.
+- A written dump goes to the Mac mini: title "Get receipts for tax filing", Flow's reply from the shaper, 6/7, celebration, a move "This evening → …" with Do this / Not now, and the Building level-up in the thread. The reminder permission prompt appears here because a date was mentioned.
+- A 4/7 dump ("mum's birthday dinner") gets the WOOP outcome question quoting the person's sentence with four suggested answers; tapping one adds the reply bubble, reaches 5/7, celebrates once, and offers a move.
+- Do this creates the task and the Next card on Today with Done and "Put it on my calendar" (after the fix below). Done leaves Flow's note and the Follow-through level-up in the thread and asks "Is this whole thing resolved?"; Resolved closes the thread ("Thread closed"), and the Threads tab shows it done.
+- Today suggests the next uncovered profile area (Health once Money & bills had a thread; "Anything new?" once all were covered). Threads orders needs-you first and badges the count. Progress shows the level, counters and ladder. Profile shows the type, the plate and Edit. Reload keeps everything.
+
+Fixed during the walkthrough:
+
+- The thread's close control sat under Expo Go's floating dev button; it is now "‹ Back" at the top-left and all tab headers keep the top-right clear.
+- Accepting a move created no task on native: the accepted flag was saved before `acceptStep` looked for the step, and a move created in the same turn (`auto-next`) was not in the saved draft yet. The app now saves the new step, runs `acceptStep`, writes the task directly if the exclusive transaction produced none, and `evaluateAll` repairs any accepted step without a task.
+- The shaper's title is kept even when its moves fail grounding; move titles stop at the reason clause and drop "I will"; the moment named in the step ("Tomorrow morning", "On Saturday morning") wins over the profile time window.
+
+Not verified: microphone recording and playback, the emoji shower's motion, notification delivery, Apple Calendar from the Next card. Note for testers: `simctl openurl` with the same project URL does not reload the JavaScript — terminate Expo Go or use the dev menu's Reload.
+
 ## Test build 12 — the Flow loop
 
 Completed on this Mac (Node 22, macOS 26) on 2026-09-19:

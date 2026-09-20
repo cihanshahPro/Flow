@@ -46,7 +46,7 @@ import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
 import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks } from "./src/thread";
 import { whenFromAnswer, type When } from "./src/when";
-import type { ThoughtDraft } from "./src/drafts";
+import { taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
 type Screen = Tab | "thread";
@@ -137,6 +137,14 @@ function Flow() {
     const data = source ?? { tasks: (await loadWorkspace()).tasks, threads: await loadDrafts() };
     let changed = false;
     for (const thread of data.threads) {
+      // A step marked accepted must have its task; repair any that a failed write left behind.
+      for (const step of thread.steps) {
+        const id = `flow:${thread.id}:${step.id}`;
+        if (step.accepted && !thread.example && !data.tasks.some((t) => t.id === id)) {
+          await saveTask(taskForStep(thread, step, plannedDateFor(profile.plate?.timeWindow)));
+          changed = true;
+        }
+      }
       // Threads from older builds get their conversation first, then the usual check-ins.
       const next = evaluateThread(backfillConversation(thread, { mode, plate: profile.plate }), data.tasks, { mode });
       if (next !== thread) {
