@@ -438,3 +438,13 @@ test("splitting renames a title that named the split-off subject", () => {
   assert.match(split.title, /extractor fan/i);
   assert.match(split.messages.at(-2).text, /has its own thread now/);
 });
+
+test("strict routing needs the subject to name the thread, so a wide old thread cannot swallow a dump", () => {
+  const wide = { ...thread("Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday. Also my landlord is asking about the lease renewal by end of month. And I keep meaning to book a dentist for the kids.", "wide"), title: "Prioritize Tasks" };
+  const demo = { ...thread("Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday.", "demo"), title: "Demo for Friday" };
+  const sentence = "The demo for my manager is on Friday and the designer keeps going quiet.";
+  assert.equal(routeRecording(sentence, [wide]), "wide", "the old rule would swallow it");
+  assert.equal(routeRecording(sentence, [wide], [], { strict: true }), null);
+  assert.equal(routeRecording(sentence, [wide, demo], [], { strict: true }), "demo");
+  assert.equal(routeRecording("My landlord is asking about the lease renewal by end of month.", [wide, demo], [], { strict: true }), null);
+});

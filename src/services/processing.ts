@@ -106,12 +106,22 @@ async function processThoughtNote(
     const subjects = subjectsOf(text, listed);
     if (subjects.length >= 2) {
       const drafts: ThoughtDraft[] = [];
+      const joined = new Map<string, ThoughtDraft>();
       for (const [i, subject] of subjects.entries()) {
-        const home = routeRecording(subject.evidence, threads, workspace.tasks);
-        const target = home ? threads.find((t) => t.id === home) : undefined;
-        const started = target
-          ? respondToRecording(appendPlanUpdate(target, suggestDraft(`${note.id}:${i}`, subject.evidence)), note.id, subject.evidence, { mode, formula, plate: profile?.plate, now: options.now })
-          : respondToRecording(
+        const home = routeRecording(subject.evidence, threads, workspace.tasks, { strict: true });
+        const target = home ? joined.get(home) ?? threads.find((t) => t.id === home) : undefined;
+        if (target) {
+          // Two subjects for the same thread are one update to it, with the person's sentences for both.
+          const updated = respondToRecording(appendPlanUpdate(target, suggestDraft(`${note.id}:${i}`, subject.evidence)), `${note.id}:${i}`, subject.evidence, { mode, formula, plate: profile?.plate, now: options.now });
+          const withSource = { ...updated, sourceNoteIds: [...new Set([...(updated.sourceNoteIds ?? []), note.id])] };
+          joined.set(target.id, withSource);
+          await saveDraft(withSource);
+          const at = drafts.findIndex((d) => d.id === target.id);
+          if (at >= 0) drafts[at] = withSource;
+          else drafts.push(withSource);
+          continue;
+        }
+        const started = respondToRecording(
               { ...suggestDraft(`${note.id}:${i}`, subject.evidence), title: subject.title, sourceNoteIds: [note.id], dueHints: extractDueHints(subject.evidence, options.now) },
               note.id,
               subject.evidence,

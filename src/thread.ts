@@ -332,6 +332,8 @@ export function routeRecording(
   text: string,
   threads: ThoughtDraft[],
   tasks: Task[] = [],
+  /** Strict: one subject out of a dump joins a thread only when it clearly names that thread's subject, so a wide old thread cannot swallow everything. */
+  options: { strict?: boolean } = {},
 ): string | null {
   const words = contentWords(text);
   if (words.size < 3) return null;
@@ -343,6 +345,12 @@ export function routeRecording(
     let shared = 0;
     for (const w of words) if (theirs.has(w)) shared++;
     const score = shared / Math.min(words.size, Math.max(theirs.size, 1));
+    if (options.strict) {
+      const title = contentWords(thread.title);
+      let named = 0;
+      for (const w of words) if (title.has(w)) named++;
+      if (!named) continue;
+    }
     if (shared >= 3 && score >= 0.34 && (!best || score > best.score))
       best = { id: thread.id, score };
   }
