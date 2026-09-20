@@ -1,9 +1,31 @@
 {
-  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
-  "build": {
-    "development": { "developmentClient": true, "distribution": "internal" },
-    "preview": { "distribution": "internal" },
-    "production": { "autoIncrement": true }
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
-  "submit": { "production": {} }
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_BUNDLE_ID": "com.cihanshah.flow"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "APP_BUNDLE_ID": "com.cihanshah.flow"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "APP_BUNDLE_ID": "com.cihanshah.flow"
+      },
+      "distribution": "store"
+    }
+  },
+  "submit": {
+    "production": {}
+  }
 }
