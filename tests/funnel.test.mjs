@@ -167,3 +167,15 @@ test("Profile shows the Flow type and an editable plate; Progress shows the leve
   assert.match(text, /came up in ","2"," threads/);
   await act(async () => prog.unmount());
 });
+
+test("profile completion is one honest number", async () => {
+  const { profileProgress } = await import("../src/profile-progress.ts");
+  assert.equal(profileProgress(newProfile(), []).percent, 0);
+  const tested = { ...newProfile(), answers: Array(20).fill(3) };
+  assert.equal(profileProgress(tested, []).percent, 40);
+  assert.equal(profileProgress(tested, []).next, "What's on your plate");
+  const full = { ...tested, plate: { areas: ["Health"], people: ["Partner"], timeWindow: "Evenings", obstacles: ["Money"], datedSoon: "Not really" } };
+  assert.equal(profileProgress(full, []).percent, 90);
+  assert.equal(profileProgress(full, [{ ...suggestDraft("t", "Fix the tap.", new Date()), messages: [{ id: "m", from: "you", kind: "transcript", text: "x", createdAt: "" }] }]).percent, 100);
+  assert.equal(profileProgress(full, []).next, "First thread");
+});

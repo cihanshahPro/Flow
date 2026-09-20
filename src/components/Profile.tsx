@@ -5,6 +5,7 @@ import type { Note } from "../model.ts";
 import { emptyPlate, OBSTACLES, PLATE_AREAS, PLATE_PEOPLE, TIME_WINDOWS, type Plate, type Profile } from "../personality.ts";
 import { flowType } from "../flow-voice.ts";
 import { peopleMentioned } from "../thread.ts";
+import { profileProgress } from "../profile-progress.ts";
 import { C } from "./theme.ts";
 import { sendTestReminder } from "../services/reminders.ts";
 
@@ -59,6 +60,7 @@ export default function Profile({
 }) {
   const type = flowType(profile.answers);
   const plate = profile.plate ?? emptyPlate();
+  const progress = profileProgress(profile, threads);
   const real = threads.filter((t) => !t.example);
   const people = peopleMentioned(real);
   const feedback = notes.filter((n) => n.captureKind === "feedback").length;
@@ -84,6 +86,28 @@ export default function Profile({
       <View style={s.header}>
         <Text style={s.brand}>Profile</Text>
         <Text style={s.kicker}>{type ? type.name.toUpperCase() : "NOT SET"}</Text>
+      </View>
+      <View style={s.card} accessibilityLabel={`Profile ${progress.percent} percent complete`}>
+        <View style={s.rowBetween}>
+          <Text style={s.kicker}>PROFILE COMPLETE</Text>
+          <Text style={s.percent}>{progress.percent}%</Text>
+        </View>
+        <View style={s.track} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: progress.percent }}>
+          <View style={[s.fill, { width: `${progress.percent}%` }]} />
+        </View>
+        {progress.next ? (
+          <Text style={s.body}>
+            Next: <Text style={s.bodyStrong}>{progress.next}</Text>
+            {progress.next === "Personality test" ? " — 2 minutes, and Flow talks to you in your own style." : ""}
+          </Text>
+        ) : (
+          <Text style={s.body}>Flow has what it needs. Edit anything below whenever it changes.</Text>
+        )}
+        {!progress.parts[0].done && (
+          <Pressable accessibilityRole="button" accessibilityLabel="Take the test" onPress={onRetake} disabled={busy} style={({ pressed }) => [s.primary, (pressed || busy) && { opacity: 0.6 }]}>
+            <Text style={s.primaryText}>Take the test · 2 min</Text>
+          </Pressable>
+        )}
       </View>
       <View style={s.card}>
         <Text style={s.kicker}>YOUR FLOW TYPE</Text>
@@ -217,6 +241,9 @@ const s = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, paddingRight: 56 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  percent: { fontSize: 22, fontWeight: "800", color: C.ink },
+  track: { height: 8, borderRadius: 4, backgroundColor: C.line, overflow: "hidden" },
+  fill: { height: 8, backgroundColor: C.blue, borderRadius: 4 },
   chipOn: { backgroundColor: C.blue, borderColor: C.blue },
   chipOnSoft: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: C.blueSoft },
   chipTextSoft: { fontSize: 13, fontWeight: "600", color: C.blue },
@@ -227,8 +254,6 @@ const s = StyleSheet.create({
   bodyStrong: { fontSize: 15, lineHeight: 22, color: C.ink, fontWeight: "600" },
   small: { fontSize: 12, lineHeight: 17, color: C.faint },
   link: { color: C.blue, fontSize: 15, fontWeight: "700", paddingVertical: 4 },
-  track: { height: 8, borderRadius: 4, backgroundColor: C.line, overflow: "hidden" },
-  fill: { height: 8, backgroundColor: C.blue, borderRadius: 4 },
   stats: { flexDirection: "row", gap: 8, marginTop: 4 },
   statN: { fontSize: 22, fontWeight: "800", color: C.ink },
   statLabel: { fontSize: 12, color: C.muted },

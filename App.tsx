@@ -40,6 +40,7 @@ import { exportAllData, deleteAllData } from "./src/services/data";
 import Constants from "expo-constants";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
 import { newProfile, needsFunnel, shouldInviteAssessment, type Profile as ProfileModel } from "./src/personality";
+import { profileProgress } from "./src/profile-progress";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
@@ -663,6 +664,7 @@ function Flow() {
                       setFunnel(true);
                     },
                     onLater: () => void run(() => updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() })),
+                    percent: profileProgress(profile, threads).percent,
                   }
                 : null
             }

@@ -51,7 +51,7 @@ export default function Today({
   processing?: boolean;
   onCancelProcessing?: () => void;
   /** The soft "let Flow get to know you" card; null once done or snoozed. */
-  invite?: { onStart: () => void; onLater: () => void } | null;
+  invite?: { onStart: () => void; onLater: () => void; percent?: number } | null;
   notice?: string;
   error?: string;
   onRecord: () => void;
@@ -149,6 +149,7 @@ export default function Today({
           <View style={s.suggest}>
             <Text style={s.kickerBlue}>MAKE FLOW FIT YOU</Text>
             <Text style={s.headline}>Let Flow get to know you</Text>
+            {typeof invite.percent === "number" && <Text style={s.kicker}>PROFILE {invite.percent}% COMPLETE</Text>}
             <Text style={s.body}>2 minutes — makes its questions fit you.</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Get to know me" onPress={invite.onStart} disabled={busy} style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}>
               <Text style={s.recordText}>Start</Text>

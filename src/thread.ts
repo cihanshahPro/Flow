@@ -590,7 +590,10 @@ export function detectBranches(text: string, thread: Pick<ThoughtDraft, "title" 
       .replace(SIDE_OPENERS, "")
       .replace(/^[,\s]+/, "")
       .replace(/^(?:i )?(?:keep meaning to|meaning to|keep forgetting to|still need to|need to|have to|want to|should|must) /i, "");
-    const title = shortTitle(body, 40).replace(/…$/, "");
+    // The subject is the noun phrase before the verb ("The car insurance renewal"), not a clipped sentence.
+    const head = body.split(/\s+(?:is|are|was|were|keeps?|needs?|wants?|has|have|by|at|because|so|but)\b/i)[0].trim();
+    const raw = (head.split(/\s+/).length >= 3 && head.length <= 48 ? head : shortTitle(body, 40)).replace(/…$/, "").replace(/[.,;:]+$/, "");
+    const title = raw.charAt(0).toUpperCase() + raw.slice(1);
     if (title.length >= 4 && !out.some((b) => b.title.toLowerCase() === title.toLowerCase())) out.push({ title, evidence: clip(sentence, 200) });
     if (out.length === 3) break;
   }
