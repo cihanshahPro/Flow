@@ -29,7 +29,7 @@ export function extractShape(data: unknown): Shape {
   return shapeSchema.parse(tool?.input);
 }
 
-async function callAnthropic(env: Env, text: string, context: string): Promise<Shape> {
+async function callAnthropic(env: Env, text: string, context: string, thread = ""): Promise<Shape> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
@@ -40,7 +40,7 @@ async function callAnthropic(env: Env, text: string, context: string): Promise<S
       system: INSTRUCTIONS,
       tools: [SHAPE_TOOL],
       tool_choice: { type: "tool", name: SHAPE_TOOL.name },
-      messages: [{ role: "user", content: buildUserPrompt(text, context) }],
+      messages: [{ role: "user", content: buildUserPrompt(text, context, thread) }],
     }),
   });
   if (!res.ok) {
@@ -48,6 +48,19 @@ async function callAnthropic(env: Env, text: string, context: string): Promise<S
     throw new Error("upstream " + res.status);
   }
   return extractShape(await res.json());
+}
+
+function threadText(t: NonNullable<ReturnType<typeof requestSchema.parse>["thread"]>): string {
+  const lines: string[] = [];
+  if (t.title.trim()) lines.push(`THREAD SO FAR — title: ${t.title}`);
+  if (t.points.length) lines.push("Known: " + t.points.map((p) => `${p.id}: "${p.evidence.slice(0, 120)}"`).join("; "));
+  if (t.recent.length) {
+    lines.push("Recent turns:");
+    for (const m of t.recent) lines.push(`${m.from === "you" ? "Person" : "Flow"}: ${m.text.slice(0, 300)}`);
+  }
+  if (t.openQuestion) lines.push(`Flow's open question: ${t.openQuestion}`);
+  if (t.otherThreads?.length) lines.push("Person's other open threads: " + t.otherThreads.join(" | "));
+  return lines.join("\n");
 }
 
 function contextText(p: NonNullable<ReturnType<typeof requestSchema.parse>["profile"]>): string {
@@ -96,7 +109,7 @@ export async function handle(request: Request, env: Env, now = new Date()): Prom
 
   let shape: Shape;
   try {
-    shape = await callAnthropic(env, text, body.profile ? contextText(body.profile) : "");
+    shape = await callAnthropic(env, text, body.profile ? contextText(body.profile) : "", body.thread ? threadText(body.thread) : "");
   } catch {
     return fail("unavailable", "Could not shape this note"); // failures do not count against the quota
   }

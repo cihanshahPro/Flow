@@ -17,6 +17,7 @@ import {
   type Capabilities,
   type ProfileContext,
   type Selection,
+  type ThreadContext,
   type Shape,
   type ShaperKind,
 } from "../ai-policy";
@@ -25,7 +26,7 @@ import { installId, loadAiState, setCloudConsent, setQuota } from "./ai-state";
 
 declare const __DEV__: boolean | undefined;
 
-export type ShapeInput = { text: string; locale: string; profile: ProfileContext | null };
+export type ShapeInput = { text: string; locale: string; profile: ProfileContext | null; thread?: ThreadContext | null };
 export interface Processor {
   kind: ShaperKind;
   /** null means "no shape": the caller keeps the template draft. */
@@ -114,18 +115,18 @@ async function lanTranscribe(lan: { url: string; token: string }, uri: string) {
 
 export const OnDeviceProcessor: Processor = {
   kind: "on-device",
-  async shape({ text, profile }) {
+  async shape({ text, profile, thread }) {
     if (!FlowIntelligence) throw new Error("no native module");
-    return parseShape(await FlowIntelligence.shapeThought(text, contextText(profile)));
+    return parseShape(await FlowIntelligence.shapeThought(text, contextText(profile, thread)));
   },
 };
 
 export const CloudProcessor: Processor = {
   kind: "cloud",
-  async shape({ text, locale, profile }) {
+  async shape({ text, locale, profile, thread }) {
     const base = process.env.EXPO_PUBLIC_SHAPE_URL;
     if (!base) throw new CloudError("unavailable", "cloud not configured");
-    const body = cloudRequest(text, locale, profile);
+    const body = cloudRequest(text, locale, profile, thread);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
     let response;
@@ -155,7 +156,7 @@ export const CloudProcessor: Processor = {
 
 export const DevLanProcessor: Processor = {
   kind: "dev-lan",
-  async shape({ text }) {
+  async shape({ text, profile, thread }) {
     const lan = devLanConfig();
     if (!lan) throw new Error("dev lan not configured");
     const controller = new AbortController();
@@ -164,12 +165,12 @@ export const DevLanProcessor: Processor = {
       const response = await fetch(lan.url + "/process", {
         method: "POST",
         headers: { Authorization: "Bearer " + lan.token, "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(contextText(profile, thread) ? { text, context: contextText(profile, thread) } : { text }),
         signal: controller.signal,
       });
       const result = (await response.json()) as { shape?: unknown; error?: string };
       if (!response.ok || !result.shape) throw new Error(result.error || "no shape");
-      return result.shape as Shape;
+      return parseShape(result.shape);
     } finally {
       clearTimeout(timer);
     }
@@ -201,6 +202,8 @@ export const shaperLog = (): readonly ShaperLogEntry[] => log;
 export type ShapeOptions = {
   /** Shows the one-time cloud consent sheet; resolves true for Allow. */
   askCloudConsent?: () => Promise<boolean>;
+  /** The thread this text continues, so the reply is a turn in a conversation. */
+  thread?: ThreadContext | null;
   now?: Date;
   /** Abort to stop waiting: Flow falls back to the template draft. */
   signal?: AbortSignal;
@@ -235,7 +238,7 @@ export async function shapeText(
   }
   try {
     const shape = await raceShape(
-      PROCESSORS[selection.kind].shape({ text, locale: deviceLocale(), profile }),
+      PROCESSORS[selection.kind].shape({ text, locale: deviceLocale(), profile, thread: options.thread ?? null }),
       options.timeoutMs ?? SHAPE_TIMEOUT_MS,
       options.signal,
     );

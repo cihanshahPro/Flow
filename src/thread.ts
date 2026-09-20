@@ -12,6 +12,7 @@ import type { Task } from "./model.ts";
 import { localDate } from "./model.ts";
 import { whenFromAnswer, type When } from "./when.ts";
 import { areaPhrase, type Plate } from "./personality.ts";
+import type { ThreadContext } from "./ai-policy.ts";
 import { QUESTION_ORDER, voice, type Mode, DEFAULT_MODE } from "./flow-voice.ts";
 
 /**
@@ -330,7 +331,7 @@ export const STAGE_LABEL: Record<ThreadStage, string> = {
 /** The Flow message that still needs the user, if any. */
 export function pendingMessage(thread: ThoughtDraft): ThreadMessage | null {
   const open = (thread.messages ?? []).filter(
-    (m) => m.from === "flow" && !m.answered && ["question", "offer", "checkin", "stale"].includes(m.kind),
+    (m) => m.from === "flow" && !m.answered && ["question", "offer", "checkin", "stale", "branch"].includes(m.kind),
   );
   return open[open.length - 1] ?? null;
 }
@@ -343,6 +344,7 @@ export function attentionLabel(thread: ThoughtDraft, tasks: Task[]): string {
   if (pending?.kind === "offer") return "Flow has a move for you";
   if (pending?.kind === "checkin") return "Quick check-in";
   if (pending?.kind === "stale") return "Still on this?";
+  if (pending?.kind === "branch") return "Flow heard more than one thing";
   const stage = stageFor(thread, tasks);
   if (stage === "understood" && offerableSteps(thread).length) return "Ready — Flow has moves";
   return STAGE_LABEL[stage];
@@ -533,6 +535,94 @@ function offerMessage(thread: ThoughtDraft, step: DraftStep, now: string, plate?
  * recording; `text` is its transcript. The optional `reply` and `question`
  * come from the shaper (on-device or cloud) and win over templated wording.
  */
+/**
+ * Flow's reply when no AI reply is available: it reflects back what this
+ * message settled, in the person's own words, so the turn still reads as a
+ * conversation rather than a receipt.
+ */
+export function templateReply(
+  text: string,
+  before: ThreadPoint[] | undefined,
+  after: ThreadPoint[],
+  isFirst: boolean,
+  mode: Mode,
+  seed: string,
+): string {
+  const wasKnown = new Set((before ?? []).filter((p) => p.state === "known").map((p) => p.id));
+  const fresh = after.filter((p) => p.state === "known" && !wasKnown.has(p.id));
+  const asked = /\?\s*$/.test(text.trim()) || /^(what|how|why|when|which|who|should|can|could|do you|is it|any idea)\b/i.test(text.trim());
+  if (asked) {
+    const known = after.filter((p) => p.state === "known");
+    if (!known.length) return "Fair question. I don't have enough yet to say — tell me what you'd want out of this and I'll work from there.";
+    const bits = known.slice(0, 3).map((p) => `${p.label.toLowerCase()}: “${(p.value ?? "").slice(0, 60)}”`);
+    return `Here's what I have so far — ${bits.join("; ")}. Tell me the piece that's missing and I'll give you a move.`;
+  }
+  if (isFirst) return voice.ack(mode, seed);
+  if (fresh.length) {
+    const bits = fresh.slice(0, 2).map((p) => `${p.label.toLowerCase()} is “${(p.value ?? "").slice(0, 60)}”`);
+    return `Got it — so ${bits.join(", and ")}.`;
+  }
+  return voice.replyAck(mode, seed);
+}
+
+const SIDE_OPENERS = /^(?:oh,? and|also|and also|plus|separately|another thing|on top of that|and then there'?s|and i (?:also|still)|and i keep|i also|unrelated,?|different thing,?)\b/i;
+
+/**
+ * Sentences that start like a change of subject ("Also…", "Plus…") and share
+ * no vocabulary with the thread are other subjects. Local and deterministic,
+ * so splitting works even when the model misses it.
+ */
+export function detectBranches(text: string, thread: Pick<ThoughtDraft, "title" | "source" | "threadPoints">): { title: string; evidence: string }[] {
+  const subject = contentWords([thread.title, thread.source, ...(thread.threadPoints ?? []).map((p) => p.value ?? "")].join(" "));
+  const out: { title: string; evidence: string }[] = [];
+  for (const sentence of sentences(text)) {
+    if (!SIDE_OPENERS.test(sentence)) continue;
+    const words = contentWords(sentence);
+    let shared = 0;
+    for (const w of words) if (subject.has(w)) shared++;
+    if (words.size < 3 || shared / words.size > 0.34) continue;
+    const body = sentence
+      .replace(SIDE_OPENERS, "")
+      .replace(/^[,\s]+/, "")
+      .replace(/^(?:i )?(?:keep meaning to|meaning to|keep forgetting to|still need to|need to|have to|want to|should|must) /i, "");
+    const title = shortTitle(body, 40).replace(/…$/, "");
+    if (title.length >= 4 && !out.some((b) => b.title.toLowerCase() === title.toLowerCase())) out.push({ title, evidence: clip(sentence, 200) });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+
+/** True when the shaper's question just repeats what the person said. */
+function echoesPerson(question: string, text: string): boolean {
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const q = norm(question), t = norm(text);
+  if (!q) return false;
+  if (t.includes(q)) return true;
+  const qw = new Set(q.split(" ").filter((w) => w.length > 3)), tw = new Set(t.split(" "));
+  let shared = 0;
+  for (const w of qw) if (tw.has(w)) shared++;
+  return qw.size >= 4 && shared / qw.size >= 0.8;
+}
+
+/** What the AI needs to reply as a turn in this thread, not to one sentence in isolation. */
+export function threadContextFor(thread: ThoughtDraft, others: ThoughtDraft[] = []): ThreadContext {
+  const recent = (thread.messages ?? [])
+    .filter((m) => ["transcript", "ack", "question", "reply", "offer"].includes(m.kind))
+    .slice(-8)
+    .map((m) => ({ from: m.from, text: m.text }));
+  const open = pendingMessage(thread);
+  return {
+    title: thread.title,
+    points: (thread.threadPoints ?? []).filter((p) => p.state === "known" && p.value).map((p) => ({ id: p.id, evidence: p.value! })),
+    recent,
+    ...(open?.kind === "question" ? { openQuestion: open.text } : {}),
+    otherThreads: others
+      .filter((t) => t.id !== thread.id && !t.example && t.state !== "parked" && !t.resolvedAt)
+      .slice(0, 6)
+      .map((t) => t.title),
+  };
+}
+
 export function respondToRecording(
   thread: ThoughtDraft,
   noteId: string,
@@ -544,6 +634,8 @@ export function respondToRecording(
     question?: string;
     evidence?: Partial<Record<PointId, string>>;
     plate?: Plate;
+    /** Other subjects the shaper heard in this message; Flow offers to split them off. */
+    branches?: { title: string; evidence: string }[];
   } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
@@ -585,16 +677,41 @@ export function respondToRecording(
   push({
     from: "flow",
     kind: "ack",
-    text: options.reply?.trim() || (isFirst ? voice.ack(mode, noteId) : voice.replyAck(mode, noteId)),
+    text: options.reply?.trim() || templateReply(text, thread.threadPoints, points, isFirst, mode, noteId),
   });
+  // Several subjects in one breath: offer to give the others their own thread, once.
+  const heard = [...(options.branches ?? []), ...detectBranches(text, next)];
+  const branches = heard
+    .filter((b) => b.title.trim() && b.evidence.trim())
+    .filter((b, i, all) => all.findIndex((o) => o.title.toLowerCase() === b.title.toLowerCase() || o.evidence.toLowerCase().includes(b.evidence.toLowerCase().slice(0, 30))) === i)
+    .slice(0, 3);
+  let branched = false;
+  if (branches.length && !(thread.messages ?? []).some((m) => m.kind === "branch")) {
+    branched = true;
+    push({
+      from: "flow",
+      kind: "branch",
+      text:
+        branches.length === 1
+          ? `“${branches[0].title}” sounds like its own thing. Want a separate thread for it?`
+          : `I heard ${branches.length + 1} separate things here. Keep this one on “${next.title}” and start threads for ${branches.map((b) => `“${b.title}”`).join(" and ")}?`,
+      branches,
+      chips: [
+        { id: "split", label: branches.length === 1 ? "Start a thread" : "Split them" },
+        { id: "keep", label: "Keep together" },
+      ],
+    });
+  }
   // A shaper question about something the person already answered is noise; fall back to the template.
   const known = new Set(points.filter((p) => p.state === "known").map((p) => p.id));
   const asksKnown = (q: string) => {
     const norm = q.trim().toLowerCase().replace(/[^a-z ]/g, "");
     return POINTS.some((p) => known.has(p.id) && (norm === p.question.toLowerCase().replace(/[^a-z ]/g, "") || (p.id === "people" && /^who (else )?is involved/.test(norm)) || (p.id === "timing" && /^(when|is there a (real )?(date|time))/.test(norm))));
   };
-  if (options.question && asksKnown(options.question)) options = { ...options, question: undefined };
+  if (options.question && (asksKnown(options.question) || echoesPerson(options.question, text))) options = { ...options, question: undefined };
   const hyped = new Set(thread.hypeGiven ?? []);
+  // One decision at a time: while the split question is open, the next question or move waits a turn.
+  if (branched) return { ...withMessages(next, added), hypeGiven: [...hyped] };
   const ask = (point: { id: PointId; question: string }) =>
     push({
       from: "flow",
@@ -628,7 +745,8 @@ export type ChipEffect =
   | { type: "accept"; stepId: string }
   | { type: "complete"; taskId: string }
   | { type: "park" }
-  | { type: "credit"; id: string };
+  | { type: "credit"; id: string }
+  | { type: "branch"; branches: { title: string; evidence: string }[] };
 
 /** The user tapped one of two chips. Returns the updated thread and what the app must do. */
 export function answerChip(
@@ -687,6 +805,30 @@ export function answerChip(
       push({ from: "flow", kind: "ack", text: voice.replyAck(mode, messageId) });
       const point = unsure ? nextMissingPoint(points.filter((p) => p.id !== pointId), mode) : nextMissingPoint(points, mode);
       if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, points), chips: suggestionChips(point.id, plate) });
+    }
+  } else if (target.kind === "branch") {
+    if (chipId === "split" && target.branches?.length) {
+      effects.push({ type: "branch", branches: target.branches });
+      push({
+        from: "flow",
+        kind: "ack",
+        text: `Done — ${target.branches.map((b) => `“${b.title}”`).join(" and ")} ${target.branches.length === 1 ? "has" : "have"} their own thread now. This one stays on “${next.title}”.`,
+      });
+    } else {
+      push({ from: "flow", kind: "ack", text: "Okay, keeping it all here." });
+    }
+    // Now the conversation continues where it would have: a move if ready, else the next question.
+    if (isReady(next.threadPoints)) {
+      next = ensureMoves(next);
+      if (!hyped.has("ready")) {
+        push({ from: "flow", kind: "hype", text: voice.fullPicture(mode) });
+        hyped.add("ready");
+      }
+      const step = offerableSteps(next)[0];
+      if (step) added.push(offerMessage({ ...next, messages: [...(next.messages ?? []), ...added] }, step, at, plate));
+    } else {
+      const point = nextMissingPoint(next.threadPoints, mode);
+      if (point) push({ from: "flow", kind: "question", pointId: point.id, text: questionFor(point, next.threadPoints), chips: suggestionChips(point.id, plate) });
     }
   } else if (target.kind === "offer" && target.stepId) {
     if (chipId === "do") {

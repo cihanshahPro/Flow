@@ -43,6 +43,28 @@ describe("shape worker", () => {
     expect(JSON.stringify([...env.store.m])).not.toMatch(/Alex|test/);
   });
 
+  it("passes the thread so far into the prompt and returns branches", async () => {
+    const withBranches = { ...SHAPE, branches: [{ title: "Lease renewal", evidence: "lease renewal" }] };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "tool_use", name: "submit_shape", input: withBranches }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const thread = {
+      title: "Website for Alex",
+      points: [{ id: "people", evidence: "contact Alex" }],
+      recent: [{ from: "you", text: "I should contact Alex" }, { from: "flow", text: "Alex, got it. What would you want out of it?" }],
+      openQuestion: "What would you want out of it?",
+      otherThreads: ["Taxes"],
+    };
+    const res = await handle(req({ ...valid, text: "A paid site. Also the lease renewal is due.", thread }), mkEnv(), NOW);
+    const body = (await res.json()) as any;
+    expect(res.status).toBe(200);
+    expect(body.shape.branches).toEqual([{ title: "Lease renewal", evidence: "lease renewal" }]);
+    const sent = JSON.parse((fetchMock.mock.calls[0] as any)[1].body);
+    expect(sent.messages[0].content).toContain("THREAD SO FAR — title: Website for Alex");
+    expect(sent.messages[0].content).toContain("Flow's open question: What would you want out of it?");
+    expect(sent.messages[0].content).toContain("other open threads: Taxes");
+    expect(sent.system).toContain("next turn of that conversation");
+  });
+
   it("uses MODEL from config", async () => {
     const fetchMock = vi.fn(async () => anthropicOk());
     vi.stubGlobal("fetch", fetchMock);

@@ -44,9 +44,9 @@ import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, backfillConversation, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks } from "./src/thread";
+import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks } from "./src/thread";
 import { whenFromAnswer, type When } from "./src/when";
-import { taskForStep, type ThoughtDraft } from "./src/drafts";
+import { suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
 type Screen = Tab | "thread";
@@ -364,6 +364,24 @@ function Flow() {
     });
   }
 
+  /** A typed message in a thread: saved as a note on that thread and answered in place. */
+  function sendMessage(threadId: string, text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    void run(async () => {
+      const n: Note = {
+        id: randomUUID(),
+        planId: threadId,
+        captureKind: "thought",
+        title: trimmed.slice(0, 80),
+        text: trimmed,
+        createdAt: new Date().toISOString(),
+      };
+      await saveNote(n);
+      await processRecording(n);
+    });
+  }
+
   function chip(messageId: string, chipId: string) {
     if (!current) return;
     void run(async () => {
@@ -391,6 +409,13 @@ function Flow() {
         } else if (effect.type === "complete") {
           const task = tasks.find((t) => t.id === effect.taskId);
           if (task && !task.done) await saveTask(completeTask(task));
+        } else if (effect.type === "branch") {
+          // Each other subject becomes its own thread, opened with the person's own words for it.
+          for (const branch of effect.branches) {
+            const id = randomUUID();
+            const seeded = { ...suggestDraft(id, branch.evidence), title: branch.title };
+            await saveDraft(respondToRecording(seeded, id, branch.evidence, { mode, plate: profile.plate }));
+          }
         }
       }
       const data = await refresh();
@@ -733,7 +758,7 @@ function Flow() {
             processing={processing && !capture}
             error={error || processingError}
             onRecord={() => startCapture("voice", current.id, "thought", pendingQuestion(current))}
-            onWrite={() => startCapture("text", current.id, "thought", pendingQuestion(current))}
+            onSend={(text) => sendMessage(current.id, text)}
             onChip={chip}
             onClose={closeThread}
           />

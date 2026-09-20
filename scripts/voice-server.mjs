@@ -62,7 +62,7 @@ export async function transcribeAudio(bytes, config) {
     await rm(folder, { recursive: true, force: true });
   }
 }
-export function shapeText(text, binary) {
+export function shapeText(text, binary, context = "") {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, [], { stdio: ["pipe", "pipe", "pipe"] });
     let output = "",
@@ -96,7 +96,7 @@ export function shapeText(text, binary) {
         finish(error);
       }
     });
-    child.stdin.end(text);
+    child.stdin.end(context ? JSON.stringify({ text, context }) : text);
   });
 }
 export function createVoiceServer({
@@ -183,6 +183,7 @@ export function createVoiceServer({
       const isText =
         req.headers["content-type"]?.startsWith("application/json");
       let text;
+      let context = "";
       if (isText) {
         let input;
         try {
@@ -200,6 +201,8 @@ export function createVoiceServer({
           return;
         }
         text = input.text.trim();
+        // The thread so far, when the text continues a thread; never logged.
+        if (typeof input.context === "string" && input.context.length <= 8000) context = input.context;
       } else {
         log(JSON.stringify({ id, stage: "transcribing", bytes }));
         text = (await transcribe(Buffer.concat(chunks)))
@@ -224,7 +227,7 @@ export function createVoiceServer({
       if (shape) {
         try {
           log(JSON.stringify({ id, stage: "organizing" }));
-          organization = await shape(text);
+          organization = await shape(text, context);
         } catch {
           log(JSON.stringify({ id, stage: "organizer-unavailable" }));
         }
@@ -280,7 +283,7 @@ if (
     webOrigin: process.env.FLOW_PROCESSOR_WEB_ORIGIN,
     transcribe: (bytes) => transcribeAudio(bytes, config),
     shape: process.env.FLOW_SHAPER_BIN
-      ? (text) => shapeText(text, process.env.FLOW_SHAPER_BIN)
+      ? (text, context) => shapeText(text, process.env.FLOW_SHAPER_BIN, context)
       : undefined,
   });
   server.listen(

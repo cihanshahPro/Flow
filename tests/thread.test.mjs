@@ -292,3 +292,59 @@ test("a thread saved by an older build gets Flow's conversation backfilled from 
   assert.equal(backfillConversation(filled, { now }), filled, "already has a conversation");
   assert.equal(backfillConversation({ ...legacy, example: true }, { now }).messages, undefined);
 });
+
+test("Flow's template reply reflects what the message settled, answers a question from what it knows, and offers to split other subjects", async () => {
+  const { templateReply, threadContextFor } = await import("../src/thread.ts");
+  const start = respondToRecording(thread("I want to clear the garage."), "n1", "I want to clear the garage.", { mode: "builder", now });
+  const answer = "With my brother next Saturday because the car has to fit before winter.";
+  const next = respondToRecording(start, "n2", answer, { mode: "builder", now });
+  const ack = next.messages.filter((m) => m.kind === "ack").at(-1);
+  assert.match(ack.text, /^Got it — so /, "reflects the newly known points");
+  assert.match(ack.text, /brother|saturday|winter/i);
+  const q = templateReply("What do you think I should do first?", start.threadPoints, start.threadPoints, false, "builder", "x");
+  assert.match(q, /Here's what I have so far/);
+  assert.match(q, /clear the garage/);
+  const ctx = threadContextFor(next, [thread("Taxes with the accountant", "t2"), { ...thread("Old", "t3"), state: "parked" }]);
+  assert.equal(ctx.title, next.title);
+  assert.ok(ctx.points.some((p) => p.id === "outcome"));
+  assert.ok(ctx.recent.length >= 3 && ctx.recent.length <= 8);
+  assert.deepEqual(ctx.otherThreads, ["Taxes with the accountant"]);
+
+  const multi = "Work project is behind because the designer keeps missing deadlines. Also my landlord is asking about the lease renewal. And I need to book the dentist for the kids.";
+  const t = respondToRecording(thread(multi, "m"), "n1", multi, {
+    now,
+    branches: [
+      { title: "Lease renewal", evidence: "my landlord is asking about the lease renewal" },
+      { title: "Dentist for the kids", evidence: "book the dentist for the kids" },
+    ],
+  });
+  const branch = t.messages.find((m) => m.kind === "branch");
+  assert.ok(branch, "Flow offers to split");
+  assert.match(branch.text, /3 separate things/);
+  assert.deepEqual(branch.chips.map((c) => c.id), ["split", "keep"]);
+  assert.equal(pendingMessage(t).kind, "branch", "the split question comes before anything else");
+  const split = answerChip(t, branch.id, "split", { now });
+  assert.deepEqual(split.effects, [{ type: "branch", branches: branch.branches }]);
+  assert.match(split.thread.messages.find((m) => /own thread now/.test(m.text)).text, /own thread now/);
+  assert.ok(["question", "offer"].includes(pendingMessage(split.thread).kind), "the conversation carries on after the split");
+  const keep = answerChip(t, branch.id, "keep", { now });
+  assert.deepEqual(keep.effects, []);
+  assert.equal(respondToRecording(split.thread, "n2", "more on the project", { now, branches: branch.branches }).messages.filter((m) => m.kind === "branch").length, 1, "never re-offers the same split");
+});
+
+test("side subjects are detected locally and an echoed question is dropped", async () => {
+  const { detectBranches } = await import("../src/thread.ts");
+  const t = thread("Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday.", "w");
+  const found = detectBranches("The demo is fine. Also my landlord is asking about the lease renewal by end of month. And I keep meaning to book a dentist for the kids.", t);
+  assert.equal(found.length, 2);
+  assert.match(found[1].title, /^Book a dentist/);
+  assert.match(found[0].title, /lease/i);
+  assert.match(found[1].title, /dentist/i);
+  assert.deepEqual(detectBranches("Also the designer sent the new mockups for the demo.", t), [], "same subject is not a branch");
+  const vague = thread("Thinking about the designer situation.", "v");
+  const asked = "What should I do about the designer first?";
+  const r = respondToRecording(vague, "n1", asked, { now, question: "What should you do about the designer first?" });
+  const q = r.messages.find((m) => m.kind === "question");
+  assert.ok(q, "a question is still asked");
+  assert.notEqual(q.text, "What should you do about the designer first?", "the parroted question is replaced");
+});

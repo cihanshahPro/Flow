@@ -74,6 +74,8 @@ export const POINT_IDS = ["outcome", "people", "timing", "constraints", "motivat
 export type ShapeChoice = { label: string; action: string; smallAction: string; evidence: string; reason: string };
 export type ShapePoint = { id: (typeof POINT_IDS)[number]; evidence: string };
 /** Identical to the JSON the processor server and the native module return. */
+/** Another subject the person raised in the same breath that deserves its own thread. */
+export type ShapeBranch = { title: string; evidence: string };
 export type Shape = {
   title: string;
   summary: string;
@@ -81,6 +83,7 @@ export type Shape = {
   question: string;
   points: ShapePoint[];
   choices: ShapeChoice[];
+  branches?: ShapeBranch[];
 };
 
 const str = (v: unknown, max: number) => (typeof v === "string" && v.length <= max ? v : null);
@@ -112,7 +115,12 @@ export function parseShape(value: unknown): Shape {
     const evidence = str(r.evidence, 1000);
     return POINT_IDS.includes(id) && evidence ? [{ id, evidence }] : [];
   });
-  return { title, summary, reply, question, points: parsedPoints, choices };
+  const branches = (Array.isArray(o.branches) ? o.branches : []).slice(0, 3).flatMap((b) => {
+    const r = (b ?? {}) as Record<string, unknown>;
+    const title = str(r.title, 120), evidence = str(r.evidence, 600);
+    return title?.trim() && evidence?.trim() ? [{ title: title.trim(), evidence: evidence.trim() }] : [];
+  });
+  return { title, summary, reply, question, points: parsedPoints, choices, ...(branches.length ? { branches } : {}) };
 }
 function safeJson(s: string): unknown {
   try {
@@ -152,8 +160,40 @@ export function profileContext(profile: Profile | null | undefined): ProfileCont
   return Object.keys(ctx).length ? ctx : null;
 }
 
+/** The conversation so far, so the AI replies to the thread rather than to one sentence. */
+export type ThreadContext = {
+  title: string;
+  points: { id: string; evidence: string }[];
+  /** Oldest first; at most the last eight turns. */
+  recent: { from: "flow" | "you"; text: string }[];
+  openQuestion?: string;
+  /** Titles of the person's other open threads, so the AI can say when something belongs elsewhere. */
+  otherThreads?: string[];
+};
+
+export const THREAD_RECENT = 8;
+
+export function threadContextText(t: ThreadContext | null | undefined): string {
+  if (!t) return "";
+  const lines: string[] = [];
+  if (t.title.trim()) lines.push(`THREAD SO FAR — title: ${t.title}`);
+  if (t.points.length) lines.push("Known: " + t.points.map((p) => `${p.id}: "${p.evidence.slice(0, 120)}"`).join("; "));
+  if (t.recent.length) {
+    lines.push("Recent turns:");
+    for (const m of t.recent.slice(-THREAD_RECENT)) lines.push(`${m.from === "you" ? "Person" : "Flow"}: ${m.text.slice(0, 300)}`);
+  }
+  if (t.openQuestion) lines.push(`Flow's open question: ${t.openQuestion}`);
+  if (t.otherThreads?.length) lines.push("Person's other open threads: " + t.otherThreads.slice(0, 6).join(" | "));
+  return lines.join("\n");
+}
+
 /** Plain-text context for the on-device prompt. */
-export function contextText(ctx: ProfileContext | null): string {
+export function contextText(ctx: ProfileContext | null, thread?: ThreadContext | null): string {
+  const parts = [profileText(ctx), threadContextText(thread)].filter(Boolean);
+  return parts.join("\n\n");
+}
+
+function profileText(ctx: ProfileContext | null): string {
   if (!ctx) return "";
   const lines: string[] = [];
   if (ctx.type) lines.push(`Working type: ${ctx.type}. ${ctx.typeLine ?? ""}`.trim());
@@ -178,6 +218,8 @@ export type CloudShapeRequest = {
   locale: string;
   profile: ProfileContext | null;
   tier: "free";
+  /** Present when the text continues an existing thread. */
+  thread?: ThreadContext;
 };
 export type CloudErrorCode =
   | "quota_exceeded"
@@ -190,10 +232,15 @@ export type CloudShapeResponse =
   | { version: 1; shape: Shape; quota?: { limit: number; used: number; resetsAt: string } }
   | { error: { code: CloudErrorCode; message: string } };
 
-export function cloudRequest(text: string, locale: string, profile: ProfileContext | null): CloudShapeRequest {
+export function cloudRequest(
+  text: string,
+  locale: string,
+  profile: ProfileContext | null,
+  thread?: ThreadContext | null,
+): CloudShapeRequest {
   if (!text.trim()) throw new Error("cloud: empty text");
   if (text.length > CLOUD_MAX_TEXT) throw new Error("cloud: text too long");
-  return { version: 1, text, locale, profile, tier: "free" };
+  return { version: 1, text, locale, profile, tier: "free", ...(thread ? { thread } : {}) };
 }
 
 export class CloudError extends Error {

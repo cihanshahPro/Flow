@@ -73,9 +73,12 @@ export type ThreadMessage = {
     | "offer"
     | "checkin"
     | "stale"
-    | "reply";
+    | "reply"
+    | "branch";
   text: string;
   createdAt: string;
+  /** For a branch offer: the other subjects Flow heard, with the person's words for each. */
+  branches?: { title: string; evidence: string }[];
   noteId?: string;
   pointId?: string;
   stepId?: string;
@@ -319,6 +322,7 @@ export type ShapedVoice = {
   reply?: string;
   question?: string;
   evidence: Partial<Record<string, string>>;
+  branches?: { title: string; evidence: string }[];
 };
 export function shapedVoice(value: unknown, source: string): ShapedVoice {
   const out: ShapedVoice = { evidence: {} };
@@ -326,12 +330,24 @@ export function shapedVoice(value: unknown, source: string): ShapedVoice {
   const plan = value as Record<string, unknown>;
   const bounded = (v: unknown, max: number) =>
     typeof v === "string" && v.trim().length > 0 && v.trim().length <= max ? v.trim() : "";
-  const reply = bounded(plan.reply, 200);
-  const question = bounded(plan.question, 160);
+  const reply = bounded(plan.reply, 600);
+  const question = bounded(plan.question, 200);
   // A reply must not smuggle in advice or facts: keep it short and free of URLs.
   if (reply && !/https?:\/\//i.test(reply)) out.reply = reply;
   if (question && /\?$/.test(question)) out.question = question;
   const normalized = source.replace(/\s+/g, " ").toLowerCase();
+  if (Array.isArray(plan.branches)) {
+    const branches: { title: string; evidence: string }[] = [];
+    for (const raw of plan.branches.slice(0, 3)) {
+      if (!raw || typeof raw !== "object") continue;
+      const title = bounded((raw as Record<string, unknown>).title, 80);
+      const evidence = bounded((raw as Record<string, unknown>).evidence, 400).replace(/^["“]|["”]$/g, "");
+      // A branch is real only when it quotes the person's own words.
+      if (title && evidence && normalized.includes(evidence.replace(/\s+/g, " ").toLowerCase()))
+        branches.push({ title, evidence });
+    }
+    if (branches.length) out.branches = branches;
+  }
   if (Array.isArray(plan.points)) {
     for (const raw of plan.points.slice(0, 7)) {
       if (!raw || typeof raw !== "object") continue;

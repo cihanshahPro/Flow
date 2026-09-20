@@ -10,7 +10,7 @@ import {
 import type { DirectionContext, Note } from "../model";
 import { loadProfile } from "./profile";
 import { modeFor, DEFAULT_MODE } from "../flow-voice";
-import { respondToRecording, routeRecording } from "../thread";
+import { respondToRecording, routeRecording, threadContextFor } from "../thread";
 import { profileContext } from "../ai-policy";
 import { shapeText, transcribeAudio, type ShapeOptions } from "./processors";
 
@@ -78,11 +78,22 @@ async function processThoughtNote(
   const { note: transcribed, shape: audioShape } = await transcribeNote(note);
   const text = transcribed.text;
   const profile = await loadProfile().catch(() => null);
+  // Find the thread this message continues before shaping, so the AI answers as a turn in that thread.
+  const [workspace, threads] = await Promise.all([
+    loadWorkspace().catch(() => ({ tasks: [], notes: [] })),
+    loadDrafts(),
+  ]);
+  const targetId = note.planId ?? routeRecording(text, threads, workspace.tasks);
+  const plan = targetId ? threads.find((d) => d.id === targetId) : undefined;
   let draft = suggestDraft(note.id, text);
   let shape = audioShape;
   let organizer: ThoughtDraft["organizer"] = "apple-local";
   if (!shape) {
-    const outcome = await shapeText(text, profileContext(profile), options);
+    const others = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt).slice(0, 6).map((t) => t.title);
+    const outcome = await shapeText(text, profileContext(profile), {
+      ...options,
+      thread: plan ? threadContextFor(plan, threads) : others.length ? { title: "", points: [], recent: [], otherThreads: others } : null,
+    });
     shape = outcome.shape ?? undefined;
     organizer = outcome.kind === "cloud" ? "cloud" : "apple-local";
   }
@@ -100,13 +111,7 @@ async function processThoughtNote(
   if (note.direction) draft = { ...draft, direction: note.direction };
   // A recording joins the thread it belongs to, then Flow replies. Nothing
   // becomes a goal until the person accepts a move Flow offers.
-  const [workspace, threads] = await Promise.all([
-    loadWorkspace().catch(() => ({ tasks: [], notes: [] })),
-    loadDrafts(),
-  ]);
   const mode = modeFor(profile?.answers) ?? DEFAULT_MODE;
-  const targetId = note.planId ?? routeRecording(text, threads, workspace.tasks);
-  const plan = targetId ? threads.find((d) => d.id === targetId) : undefined;
   if (plan) draft = appendPlanUpdate(plan, draft);
   draft = respondToRecording(draft, note.id, text, {
     mode,
@@ -114,6 +119,7 @@ async function processThoughtNote(
     question: flow.question,
     evidence: flow.evidence,
     plate: profile?.plate,
+    branches: flow.branches,
   });
   await saveDraft(draft);
   return draft;

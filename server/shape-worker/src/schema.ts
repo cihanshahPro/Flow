@@ -7,6 +7,15 @@ export const requestSchema = z.object({
   text: z.string(),
   locale: z.string().max(35).default("en-US"),
   tier: z.literal("free").default("free"),
+  thread: z
+    .object({
+      title: z.string().max(200),
+      points: z.array(z.object({ id: z.enum(POINT_IDS), evidence: z.string().max(400) })).max(7),
+      recent: z.array(z.object({ from: z.enum(["flow", "you"]), text: z.string().max(1200) })).max(8),
+      openQuestion: z.string().max(400).optional(),
+      otherThreads: z.array(z.string().max(200)).max(6).optional(),
+    })
+    .optional(),
   profile: z
     .object({
       type: z.enum(["Catalyst", "Steward", "Architect", "Coordinator"]).optional(),
@@ -36,6 +45,7 @@ export const shapeSchema = z.object({
   question: z.string().max(400),
   points: z.array(z.object({ id: z.enum(POINT_IDS), evidence: z.string().min(1).max(1000) })).max(7),
   choices: z.array(choice).max(3),
+  branches: z.array(z.object({ title: z.string().trim().min(1).max(120), evidence: z.string().trim().min(1).max(600) })).max(3).default([]),
 });
 export type Shape = z.infer<typeof shapeSchema>;
 
@@ -45,11 +55,21 @@ export const SHAPE_TOOL = {
   description: "Submit the shaped draft of the person's thought.",
   input_schema: {
     type: "object",
-    required: ["title", "summary", "reply", "question", "points", "choices"],
+    required: ["title", "summary", "reply", "question", "points", "choices", "branches"],
     properties: {
       title: { type: "string", description: "Main direction in at most 7 words" },
       summary: { type: "string", description: "A short contiguous excerpt of the most important original words, verbatim" },
-      reply: { type: "string", description: "One short warm sentence naming the subject; no advice, no question; at most 20 words" },
+      reply: { type: "string", description: "The next turn of the conversation: one to three plain sentences responding to what the person just said; answers their question if they asked one; at most 60 words" },
+      branches: {
+        type: "array",
+        maxItems: 3,
+        description: "Other subjects in the person's words that are clearly separate from the thread's subject; empty when everything is one subject",
+        items: {
+          type: "object",
+          required: ["title", "evidence"],
+          properties: { title: { type: "string", description: "2 to 6 words" }, evidence: { type: "string", description: "3 to 10 consecutive words copied exactly from the input" } },
+        },
+      },
       question: { type: "string", description: "One question, at most 16 words, about the most important missing point; empty if none" },
       points: {
         type: "array",

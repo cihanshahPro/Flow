@@ -30,7 +30,7 @@ async function render(element) {
 test("a dumped thread shows the transcript, Flow's reply, one question, and only Record as the primary action", async () => {
   const thread = respondToRecording(suggestDraft("t1", vague, now), "n1", vague, { now });
   const view = await render(
-    React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "explorer", onRecord() {}, onWrite() {}, onChip() {}, onClose() {} }),
+    React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "explorer", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
   );
   const text = textOf(view);
   const found = labels(view);
@@ -39,10 +39,10 @@ test("a dumped thread shows the transcript, Flow's reply, one question, and only
   // Suggested answers ride along with the question; recording is still the other way.
   assert.ok(found.includes("Get it done and off my list"));
   assert.ok(found.includes("Record"));
-  assert.ok(found.includes("Write instead"));
+  assert.ok(found.includes("Send"));
+  assert.ok(view.root.findAllByType("TextInput").some((n) => n.props.accessibilityLabel === "Message Flow"), "a real message bar");
   assert.ok(!found.includes("Do this"), "no move offered before the thread is ready");
   assert.ok(!found.some((l) => /mark done|add task|classify/i.test(l)));
-  assert.match(text, /Record the answer/);
   await act(async () => view.unmount());
 });
 
@@ -53,7 +53,7 @@ test("a ready thread shows the hype bubble and a move with exactly two chips; ta
   const taps = [];
   const view = await render(
     React.createElement(ThreadChat, {
-      thread, tasks: [], notes: [], mode: "builder", onRecord() {}, onWrite() {}, onClose() {},
+      thread, tasks: [], notes: [], mode: "builder", onRecord() {}, onSend() {}, onClose() {},
       onChip: (id, chip) => taps.push([id, chip]),
     }),
   );
@@ -72,7 +72,7 @@ test("answered chips disappear and the reply shows as the user's bubble", async 
   const offer = pendingMessage(thread);
   const { thread: after } = answerChip(thread, offer.id, "skip", { now });
   const view = await render(
-    React.createElement(ThreadChat, { thread: after, tasks: [], notes: [], mode: "analyst", onRecord() {}, onWrite() {}, onChip() {}, onClose() {} }),
+    React.createElement(ThreadChat, { thread: after, tasks: [], notes: [], mode: "analyst", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
   );
   const chips = view.root.findAllByType("Pressable").filter((n) => ["Do this", "Not now"].includes(n.props.accessibilityLabel));
   // Only the newest offer keeps live chips.
@@ -84,7 +84,7 @@ test("answered chips disappear and the reply shows as the user's bubble", async 
 test("the meter reflects the fingerprint and expands to the person's own evidence", async () => {
   const thread = respondToRecording(suggestDraft("t4", rich, now), "n1", rich, { now });
   const view = await render(
-    React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "connector", onRecord() {}, onWrite() {}, onChip() {}, onClose() {} }),
+    React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "connector", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
   );
   const meter = view.root.findAllByType("Pressable").find((n) => /Flow has \d of 7 points/.test(n.props.accessibilityLabel));
   assert.ok(meter);
