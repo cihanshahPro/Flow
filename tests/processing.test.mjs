@@ -102,7 +102,11 @@ test("draft-write retry retains direction without adding it to source or the tex
   const textRequest = harness.requests.find(
     (r) => r.headers["Content-Type"] === "application/json",
   );
-  assert.deepEqual(JSON.parse(textRequest.body), { text: transcript });
+  const sent = JSON.parse(textRequest.body);
+  assert.equal(sent.text, transcript);
+  assert.match(sent.context, /Understood so far: 0%/, "a first dump is a turn in the script");
+  assert.match(sent.context, /The app will ask next, after your reply: "And what else\?"/);
+  assert.doesNotMatch(sent.context, /direction|Dubai/, "direction never reaches the request");
   assert.equal(
     harness.requests.filter(
       (r) => r.headers["Content-Type"] === "application/octet-stream",

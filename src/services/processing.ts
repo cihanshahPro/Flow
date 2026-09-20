@@ -10,7 +10,7 @@ import {
 import type { DirectionContext, Note } from "../model";
 import { loadProfile } from "./profile";
 import { modeFor, DEFAULT_MODE } from "../flow-voice";
-import { formulaFromAnswers } from "../formula";
+import { formulaFromAnswers, formulaPrompt } from "../formula";
 import { respondToRecording, routeRecording, threadContextFor } from "../thread";
 import { profileContext } from "../ai-policy";
 import { shapeText, transcribeAudio, type ShapeOptions } from "./processors";
@@ -91,9 +91,12 @@ async function processThoughtNote(
   let organizer: ThoughtDraft["organizer"] = "apple-local";
   if (!shape) {
     const others = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt).slice(0, 6).map((t) => t.title);
+    const formula = formulaFromAnswers(profile?.answers);
+    // A first dump is still a turn in the script: the model reflects, the app asks "And what else?".
+    const fresh = { title: "", points: [], recent: [], otherThreads: others, script: formulaPrompt(formula), percent: 0, askNext: "And what else?" };
     const outcome = await shapeText(text, profileContext(profile), {
       ...options,
-      thread: plan ? threadContextFor(plan, threads, formulaFromAnswers(profile?.answers)) : others.length ? { title: "", points: [], recent: [], otherThreads: others } : null,
+      thread: plan ? threadContextFor(plan, threads, formula) : fresh,
     });
     shape = outcome.shape ?? undefined;
     organizer = outcome.kind === "cloud" ? "cloud" : "apple-local";
