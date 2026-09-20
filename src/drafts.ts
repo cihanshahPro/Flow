@@ -342,7 +342,7 @@ export function shapedVoice(value: unknown, source: string): ShapedVoice {
   const normalized = source.replace(/\s+/g, " ").toLowerCase();
   if (Array.isArray(plan.branches)) {
     const branches: { title: string; evidence: string }[] = [];
-    for (const raw of plan.branches.slice(0, 3)) {
+    for (const raw of plan.branches.slice(0, 8)) {
       if (!raw || typeof raw !== "object") continue;
       const title = bounded((raw as Record<string, unknown>).title, 80);
       const evidence = bounded((raw as Record<string, unknown>).evidence, 400).replace(/^["“]|["”]$/g, "");

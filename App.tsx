@@ -24,6 +24,7 @@ import Progress from "./src/components/Progress";
 import Profile from "./src/components/Profile";
 import TabBar, { type Tab } from "./src/components/TabBar";
 import ThreadChat from "./src/components/ThreadChat";
+import Intake from "./src/components/Intake";
 import Thinking from "./src/components/Thinking";
 import Funnel, { type FunnelStep } from "./src/components/Funnel";
 import { C } from "./src/components/theme";
@@ -46,12 +47,12 @@ import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
 import { formulaFromAnswers } from "./src/formula";
-import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks } from "./src/thread";
+import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks, wakeThread } from "./src/thread";
 import { whenFromAnswer, type When } from "./src/when";
 import { suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
-type Screen = Tab | "thread";
+type Screen = Tab | "thread" | "intake";
 type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback"; prompt?: string };
 const EVALUATE_EVERY_MS = 15 * 60 * 1000;
 
@@ -76,6 +77,8 @@ function Flow() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [screen, setScreen] = useState<Screen>("today");
+  /** The thread starters from the last dump, shown once, then the person records more or moves on. */
+  const [intake, setIntake] = useState<ThoughtDraft[]>([]);
   const [lastTab, setLastTab] = useState<Tab>("today");
   const [openId, setOpenId] = useState<string | null>(null);
   const [funnel, setFunnel] = useState(false);
@@ -236,7 +239,15 @@ function Flow() {
     setNotice("");
     setError("");
     setProcessingError("");
-    void evaluateAll().catch(() => {});
+    void (async () => {
+      // A starter Flow has not asked anything in yet gets its first question now, on opening.
+      const thread = (await loadDrafts()).find((t) => t.id === id);
+      if (thread) {
+        const woken = wakeThread(thread, { formula, plate: profile.plate });
+        if (woken !== thread) await saveDraft(woken);
+      }
+      await evaluateAll();
+    })().catch(() => {});
   }
   function closeThread() {
     setScreen(lastTab);
@@ -334,6 +345,14 @@ function Flow() {
       }
       const stayedHere = captureOpen.current;
       setCapture(null);
+      if (result.kind === "intake") {
+        // Several things in one breath: show they were all caught and sorted, then ask for more.
+        setIntake(result.drafts);
+        if (stayedHere) setScreen("intake");
+        else setNotice(`Flow started ${result.drafts.length} threads from that. They're in your threads.`);
+        await evaluateAll(data);
+        return;
+      }
       // Someone who walked away is not pulled into the thread; it is simply in their list.
       if (!stayedHere) setNotice(`Flow shaped “${result.draft.title}”. It's in your threads.`);
       else if (openId !== result.draft.id) reveal(result.draft.id);
@@ -753,6 +772,18 @@ function Flow() {
             }
           />
         )}
+        {screen === "intake" && (
+          <Intake
+            drafts={intake.map((d) => threads.find((t) => t.id === d.id) ?? d)}
+            busy={busy}
+            onOpen={openThread}
+            onMore={() => startCapture("voice", null, "thought", "And what else?")}
+            onDone={() => {
+              setIntake([]);
+              selectTab("threads");
+            }}
+          />
+        )}
         {screen === "thread" && current && (
           <ThreadChat
             thread={current}
@@ -778,7 +809,7 @@ function Flow() {
           </View>
         )}
       </View>
-      {screen !== "thread" && (
+      {screen !== "thread" && screen !== "intake" && (
         <TabBar
           active={screen}
           badge={threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt && pendingMessage(t)).length}

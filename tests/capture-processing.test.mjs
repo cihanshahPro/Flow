@@ -183,3 +183,39 @@ test("an empty non-audio capture fails without writing a note or plan", async ()
   assert.deepEqual(harness.writes, []);
   assert.deepEqual(harness.drafts, []);
 });
+
+test("a dump about several things becomes one quiet thread starter per thing, and opening one asks the first question", async () => {
+  harness.reset();
+  const dump =
+    "Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday. The landlord wants an answer on the lease by the end of the month. My sister wants me to sort mum's birthday dinner next Saturday. The gym renews next week and I haven't been in months. And I need to renew my passport before Lisbon in November.";
+  const saved = recording({ captureKind: "thought", text: dump, audioUri: undefined, id: "dump" });
+  harness.notes = [structuredClone(saved)];
+  harness.shape = { title: "x", summary: "x", reply: "", question: "", points: [], choices: [], branches: [{ title: "Demo for Friday", evidence: "manager wants a demo Friday" }] };
+  const result = await processCapturedNote(saved);
+  assert.equal(result.kind, "intake");
+  assert.deepEqual(result.drafts.map((d) => d.title), ["Demo for Friday", "An answer on the lease", "Sort mum's birthday dinner next Saturday", "The gym renews next week", "Renew my passport"]);
+  for (const d of result.drafts) {
+    assert.deepEqual(d.sourceNoteIds, ["dump"]);
+    assert.deepEqual(d.messages.map((m) => m.kind), ["transcript", "ack"], "quiet: no question until the thread is opened");
+  }
+  assert.ok(result.drafts[0].dueHints.some((h) => /friday/i.test(h.phrase)));
+  assert.equal(harness.drafts.length, 5, "all five saved");
+  // Processing the same note again returns the same starters.
+  const again = await processCapturedNote(saved);
+  assert.equal(again.kind, "intake");
+  assert.equal(again.drafts.length, 5);
+  const { wakeThread, pendingMessage } = await import("../src/thread.ts");
+  const woken = wakeThread(result.drafts[1]);
+  assert.equal(pendingMessage(woken).text, "And what else?");
+  assert.equal(wakeThread(woken), woken, "asks once");
+});
+
+test("a dump about one thing is one ordinary thread", async () => {
+  harness.reset();
+  const saved = recording({ captureKind: "thought", text: "Thinking about the garage situation and how messy it has gotten. The car does not fit any more.", audioUri: undefined, id: "one" });
+  harness.notes = [structuredClone(saved)];
+  harness.shape = { title: "Garage", summary: "x", reply: "", question: "", points: [], choices: [], branches: [] };
+  const result = await processCapturedNote(saved);
+  assert.equal(result.kind, "draft");
+  assert.equal(result.draft.messages.at(-1).text, "And what else?");
+});

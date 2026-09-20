@@ -49,7 +49,7 @@ export const shapeSchema = z.object({
   question: z.string().max(400),
   points: z.array(z.object({ id: z.enum(POINT_IDS), evidence: z.string().min(1).max(1000) })).max(7),
   choices: z.array(choice).max(3),
-  branches: z.array(z.object({ title: z.string().trim().min(1).max(120), evidence: z.string().trim().min(1).max(600) })).max(3).default([]),
+  branches: z.array(z.object({ title: z.string().trim().min(1).max(120), evidence: z.string().trim().min(1).max(600) })).max(8).default([]),
 });
 export type Shape = z.infer<typeof shapeSchema>;
 
@@ -66,8 +66,8 @@ export const SHAPE_TOOL = {
       reply: { type: "string", description: "The next turn of the conversation: one to three plain sentences responding to what the person just said; answers their question if they asked one; at most 60 words" },
       branches: {
         type: "array",
-        maxItems: 3,
-        description: "Other subjects in the person's words that are clearly separate from the thread's subject; empty when everything is one subject",
+        maxItems: 8,
+        description: "Every distinct subject in the person's words on a first dump (INTAKE); inside a thread, only subjects clearly separate from it; empty when everything is one subject",
         items: {
           type: "object",
           required: ["title", "evidence"],

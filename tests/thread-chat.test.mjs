@@ -8,6 +8,7 @@ const { default: ThreadChat } = await import("../src/components/ThreadChat.tsx")
 const { default: Today } = await import("../src/components/Today.tsx");
 const { default: Threads } = await import("../src/components/Threads.tsx");
 const { default: TabBar } = await import("../src/components/TabBar.tsx");
+const { default: Intake } = await import("../src/components/Intake.tsx");
 const { respondToRecording, answerChip, pendingMessage } = await import("../src/thread.ts");
 const { suggestDraft } = await import("../src/drafts.ts");
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -178,4 +179,27 @@ test("Threads is a Messages-style list: newest first, quiet ones last, a dot whe
   await act(async () => bar.root.findAllByType("Pressable")[3].props.onPress());
   assert.deepEqual(picked, ["profile"]);
   await act(async () => bar.unmount());
+});
+
+test("the intake screen shows every starter with its date, one Record button and a quiet way out", async () => {
+  const mk = (id, title, evidence, hints = []) => respondToRecording({ ...suggestDraft(id, evidence, now), title, dueHints: hints }, "dump", evidence, { now, quiet: true });
+  const drafts = [
+    mk("d0", "Demo for Friday", "My manager wants a demo Friday.", [{ date: "2026-09-25", phrase: "friday" }]),
+    mk("d1", "An answer on the lease", "The landlord wants an answer on the lease by the end of the month.", [{ date: "2026-09-30", phrase: "end of the month" }]),
+    mk("d2", "Renew my passport", "I need to renew my passport before Lisbon in November."),
+  ];
+  const opened = [], acts = [];
+  const view = await render(React.createElement(Intake, { drafts, now, onOpen: (id) => opened.push(id), onMore: () => acts.push("more"), onDone: () => acts.push("done") }));
+  const text = textOf(view);
+  assert.match(text, /I heard ","3"," things and started a thread for each/);
+  assert.match(text, /And what else\?/);
+  assert.match(text, /"Friday"/);
+  assert.match(text, /End of the month/);
+  assert.match(text, /2 have a date/);
+  const found = labels(view);
+  assert.deepEqual(found.filter((l) => !l.startsWith("Open thread")), ["Record more", "That's all for now"]);
+  await act(async () => view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Open thread Renew my passport").props.onPress());
+  assert.deepEqual(opened, ["d2"]);
+  assert.equal(drafts[2].messages.some((m) => m.kind === "question"), false, "starters are quiet until opened");
+  await act(async () => view.unmount());
 });

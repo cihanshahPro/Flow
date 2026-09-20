@@ -115,7 +115,7 @@ export function parseShape(value: unknown): Shape {
     const evidence = str(r.evidence, 1000);
     return POINT_IDS.includes(id) && evidence ? [{ id, evidence }] : [];
   });
-  const branches = (Array.isArray(o.branches) ? o.branches : []).slice(0, 3).flatMap((b) => {
+  const branches = (Array.isArray(o.branches) ? o.branches : []).slice(0, 8).flatMap((b) => {
     const r = (b ?? {}) as Record<string, unknown>;
     const title = str(r.title, 120), evidence = str(r.evidence, 600);
     return title?.trim() && evidence?.trim() ? [{ title: title.trim(), evidence: evidence.trim() }] : [];

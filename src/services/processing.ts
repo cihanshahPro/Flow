@@ -11,12 +11,16 @@ import type { DirectionContext, Note } from "../model";
 import { loadProfile } from "./profile";
 import { modeFor, DEFAULT_MODE } from "../flow-voice";
 import { formulaFromAnswers, formulaPrompt } from "../formula";
-import { respondToRecording, routeRecording, threadContextFor } from "../thread";
+import { extractDueHints, respondToRecording, routeRecording, threadContextFor } from "../thread";
+import { subjectsOf } from "../intake";
 import { profileContext } from "../ai-policy";
 import { shapeText, transcribeAudio, type ShapeOptions } from "./processors";
 
 export type CapturedNoteResult =
-  { kind: "draft"; draft: ThoughtDraft } | { kind: "note"; note: Note };
+  | { kind: "draft"; draft: ThoughtDraft }
+  /** A dump with several subjects: one thread starter per subject, quiet until opened. */
+  | { kind: "intake"; drafts: ThoughtDraft[]; note: Note }
+  | { kind: "note"; note: Note };
 
 async function savedNote(note: Note): Promise<Note> {
   return (await loadWorkspace()).notes.find((n) => n.id === note.id) ?? note;
@@ -53,7 +57,8 @@ export async function processCapturedNote(
     const result = await transcribeNote(stored);
     return { kind: "note", note: result.note };
   }
-  return { kind: "draft", draft: await processThoughtNote(stored, options) };
+  const result = await processThoughtNote(stored, options, true);
+  return Array.isArray(result) ? { kind: "intake", drafts: result, note: stored } : { kind: "draft", draft: result };
 }
 
 /** Compatibility entry point for callers that explicitly need a thought draft. */
@@ -61,21 +66,23 @@ export async function processVoiceNote(
   note: Note,
   options: ShapeOptions = {},
 ): Promise<ThoughtDraft> {
-  return processThoughtNote(await savedNote(note), options);
+  const result = await processThoughtNote(await savedNote(note), options, false);
+  return Array.isArray(result) ? result[0] : result;
 }
 
+async function processThoughtNote(note: Note, options: ShapeOptions, allowIntake: false): Promise<ThoughtDraft>;
+async function processThoughtNote(note: Note, options: ShapeOptions, allowIntake: boolean): Promise<ThoughtDraft | ThoughtDraft[]>;
 async function processThoughtNote(
   note: Note,
   options: ShapeOptions,
-): Promise<ThoughtDraft> {
+  allowIntake: boolean,
+): Promise<ThoughtDraft | ThoughtDraft[]> {
   if (note.captureKind === "note" || note.captureKind === "feedback")
     throw new Error(
       "This capture is kept as a note, not a plan. Open it in Library.",
     );
-  const existing = (await loadDrafts()).find(
-    (d) => d.id === note.id || d.sourceNoteIds?.includes(note.id),
-  );
-  if (existing) return existing;
+  const already = (await loadDrafts()).filter((d) => d.id === note.id || d.sourceNoteIds?.includes(note.id));
+  if (already.length) return allowIntake && already.length > 1 ? already : already[0];
   const { note: transcribed, shape: audioShape } = await transcribeNote(note);
   const text = transcribed.text;
   const profile = await loadProfile().catch(() => null);
@@ -113,10 +120,25 @@ async function processThoughtNote(
   }
   const flow = shapedVoice(shape, text);
   if (note.direction) draft = { ...draft, direction: note.direction };
-  // A recording joins the thread it belongs to, then Flow replies. Nothing
-  // becomes a goal until the person accepts a move Flow offers.
   const mode = modeFor(profile?.answers) ?? DEFAULT_MODE;
   const formula = formulaFromAnswers(profile?.answers);
+  // The intake: a dump about several things becomes one quiet thread starter per thing. Flow shows the list, then asks.
+  if (!plan && allowIntake) {
+    const subjects = subjectsOf(text, flow.branches ?? []);
+    if (subjects.length >= 2) {
+      const drafts: ThoughtDraft[] = [];
+      for (const [i, subject] of subjects.entries()) {
+        const id = `${note.id}:${i}`;
+        const seeded: ThoughtDraft = { ...suggestDraft(id, subject.evidence), title: subject.title, sourceNoteIds: [note.id], dueHints: extractDueHints(subject.evidence, options.now) };
+        const started = respondToRecording(seeded, note.id, subject.evidence, { mode, formula, plate: profile?.plate, quiet: true, now: options.now });
+        await saveDraft(started);
+        drafts.push(started);
+      }
+      return drafts;
+    }
+  }
+  // A recording joins the thread it belongs to, then Flow replies. Nothing
+  // becomes a goal until the person accepts a move Flow offers.
   if (plan) draft = appendPlanUpdate(plan, draft);
   draft = respondToRecording(draft, note.id, text, {
     mode,

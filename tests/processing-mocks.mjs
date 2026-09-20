@@ -68,7 +68,8 @@ export async function loadDrafts() {
 export async function saveDraft(draft) {
   if (harness.failDraft) throw Error("draft storage busy");
   harness.writes.push("draft");
-  harness.drafts = [structuredClone(draft)];
+  // Upsert by id, like the real store.
+  harness.drafts = [...harness.drafts.filter((d) => d.id !== draft.id), structuredClone(draft)];
 }
 
 export async function loadAiState() {

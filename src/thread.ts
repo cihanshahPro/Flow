@@ -771,6 +771,8 @@ export function respondToRecording(
     plate?: Plate;
     /** Other subjects the shaper heard in this message; Flow offers to split them off. */
     branches?: { title: string; evidence: string }[];
+    /** An intake starter: the transcript and Flow's reflection, no question until the person opens the thread. */
+    quiet?: boolean;
   } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
@@ -843,6 +845,7 @@ export function respondToRecording(
     kind: "ack",
     text: reply || templateReply(text, thread.threadPoints, points, isFirst, mode, noteId),
   });
+  if (options.quiet && isFirst) return { ...withMessages(next, added), hypeGiven: [...hyped] };
   // Several subjects in one breath: offer to give the others their own thread, once.
   const heard = [...(options.branches ?? []), ...detectBranches(text, next)];
   const same = (a: string, b: string) => {
@@ -896,6 +899,17 @@ export function respondToRecording(
   const cont = continueScript(next, added, formula, at, hyped, options.plate, reply);
   next = cont.thread;
   return { ...withMessages(next, added), hypeGiven: [...hyped] };
+}
+
+/** The person opened a thread Flow had not asked anything in yet (an intake starter): ask now. */
+export function wakeThread(thread: ThoughtDraft, options: { formula?: Formula | null; now?: Date; plate?: Plate } = {}): ThoughtDraft {
+  if (thread.example || thread.state === "parked" || thread.resolvedAt) return thread;
+  if (!(thread.messages ?? []).some((m) => m.kind === "transcript")) return thread;
+  if ((thread.messages ?? []).some((m) => m.from === "flow" && (m.kind === "question" || m.kind === "offer"))) return thread;
+  const added: ThreadMessage[] = [];
+  const hyped = new Set(thread.hypeGiven ?? []);
+  const cont = continueScript(thread, added, options.formula ?? DEFAULT_FORMULA, (options.now ?? new Date()).toISOString(), hyped, options.plate);
+  return added.length ? { ...withMessages(cont.thread, added), hypeGiven: [...hyped] } : thread;
 }
 
 export type ChipEffect =

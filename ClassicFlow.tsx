@@ -346,7 +346,7 @@ function Flow() {
         setNotice("Recording and transcript saved here. No task created.");
         return;
       }
-      const draft = result.draft;
+      const draft = result.kind === "draft" ? result.draft : result.drafts[0];
       setSelected(null);
       if (origin === "capture") setComposer(null);
       else setNote(null);
