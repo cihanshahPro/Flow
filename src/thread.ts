@@ -689,7 +689,8 @@ export function detectBranches(text: string, thread: Pick<ThoughtDraft, "title" 
   const firstDump = (thread.source ?? "").trim() === text.trim();
   const opening = sentences(text).filter((x) => !SIDE_OPENERS.test(x)).slice(0, 2).join(" ");
   const subject = contentWords(
-    firstDump ? [thread.title, opening].join(" ") : [thread.title, thread.source ?? "", ...(thread.threadPoints ?? []).map((p) => p.value ?? "")].join(" "),
+    // Long evidence (a whole answer) would smuggle a side subject's words into the thread's vocabulary.
+    firstDump ? [thread.title, opening].join(" ") : [thread.title, thread.source ?? "", ...(thread.threadPoints ?? []).map((p) => (p.state === "known" && (p.value ?? "").length <= 80 ? p.value! : ""))].join(" "),
   );
   const out: { title: string; evidence: string }[] = [];
   for (const sentence of sentences(text)) {

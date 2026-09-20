@@ -399,6 +399,9 @@ test("a first dump with several subjects gets the split offer, and no second mov
   const later = respondToRecording(kept, "n3", "Also the gym membership renews next week and I have not been in months.", { now });
   assert.equal(later.messages.filter((m) => m.kind === "branch").length, 2, "a new side subject in a later message is offered its own thread");
   assert.match(pendingMessage(later).text, /gym membership/i);
+  // A whole answer stored as evidence must not hide a later side subject.
+  const wide = { ...kept, threadPoints: kept.threadPoints.map((p) => (p.id === "motivation" ? { ...p, state: "known", value: "My sister wants me to organise a birthday dinner for mum next Saturday and I have not booked anywhere yet. Also the gym membership renews next week and I have not been in months." } : p)) };
+  assert.equal(respondToRecording(wide, "n5", "Also the gym membership renews next week and I have not been in months.", { now }).messages.filter((m) => m.kind === "branch").length, 2);
   const again = respondToRecording(kept, "n4", "Also my landlord is asking about the lease renewal by end of month.", { now });
   assert.equal(again.messages.filter((m) => m.kind === "branch").length, 1, "the same subject is never offered twice");
   assert.equal(more.messages.filter((m) => m.from === "flow" && !m.answered && m.kind === "question").length, 1, "one open question at a time");
