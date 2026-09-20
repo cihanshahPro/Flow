@@ -669,7 +669,11 @@ export function templateReply(
     const bits = known.slice(0, 3).map((p) => `${p.label.toLowerCase()}: “${(p.value ?? "").slice(0, 60)}”`);
     return `Here's what I have so far — ${bits.join("; ")}. Tell me the piece that's missing and I'll give you a move.`;
   }
-  if (isFirst) return voice.ack(mode, seed);
+  if (isFirst) {
+    // Say back the concrete bits the dump already holds, in the person's words; the generic ack only when there are none.
+    const bits = fresh.filter((p) => p.id !== "outcome" && p.id !== "next" && (p.value ?? "").length <= 60).slice(0, 2).map((p) => `${p.label.toLowerCase()}: “${p.value}”`);
+    return bits.length ? `So — ${bits.join("; ")}. I've got that.` : voice.ack(mode, seed);
+  }
   if (fresh.length) {
     const bits = fresh.slice(0, 2).map((p) => `${p.label.toLowerCase()} is “${(p.value ?? "").slice(0, 60)}”`);
     return `Got it — so ${bits.join(", and ")}.`;
