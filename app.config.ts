@@ -3,6 +3,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "Flow",
   slug: "anchor-mobile",
+  owner: "cihanshah",
   version: "0.1.0",
   orientation: "portrait",
   scheme: "anchor",

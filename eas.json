@@ -8,19 +8,22 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "APP_BUNDLE_ID": "com.cihanshah.flow"
+        "APP_BUNDLE_ID": "com.cihanshah.flow",
+        "EAS_PROJECT_ID": "1fdc788d-5717-4cfb-b801-d9e1f3fdec5a"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "APP_BUNDLE_ID": "com.cihanshah.flow"
+        "APP_BUNDLE_ID": "com.cihanshah.flow",
+        "EAS_PROJECT_ID": "1fdc788d-5717-4cfb-b801-d9e1f3fdec5a"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "APP_BUNDLE_ID": "com.cihanshah.flow"
+        "APP_BUNDLE_ID": "com.cihanshah.flow",
+        "EAS_PROJECT_ID": "1fdc788d-5717-4cfb-b801-d9e1f3fdec5a"
       },
       "distribution": "store"
     }
