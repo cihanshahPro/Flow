@@ -950,10 +950,18 @@ export function answerChip(
   } else if (target.kind === "branch") {
     if (chipId === "split" && target.branches?.length) {
       effects.push({ type: "branch", branches: target.branches });
+      // A title that named the split-off subject too ("Fan and passport renewal") is renamed after the opening sentence.
+      const stems = (text: string) => new Set([...contentWords(text)].map((w) => w.slice(0, 5)));
+      const titleStems = stems(next.title);
+      const namesBranch = target.branches.some((b) => [...stems(b.title)].filter((w) => titleStems.has(w)).length >= 2);
+      if (namesBranch) {
+        const opening = sentences((next.messages ?? []).find((m) => m.kind === "transcript")?.text ?? "").find((x) => !SIDE_OPENERS.test(x));
+        if (opening) next = { ...next, title: shortTitle(opening, 40) };
+      }
       push({
         from: "flow",
         kind: "ack",
-        text: `Done — ${target.branches.map((b) => `“${b.title}”`).join(" and ")} ${target.branches.length === 1 ? "has" : "have"} their own thread now. This one stays on “${next.title}”.`,
+        text: `Done — ${target.branches.map((b) => `“${b.title}”`).join(" and ")} ${target.branches.length === 1 ? "has its own thread" : "have their own threads"} now. This one stays on “${next.title}”.`,
       });
     } else {
       push({ from: "flow", kind: "ack", text: "Okay, keeping it all here." });

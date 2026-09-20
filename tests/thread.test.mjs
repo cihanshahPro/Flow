@@ -360,7 +360,7 @@ test("Flow's template reply reflects what the message settled, answers a questio
   assert.equal(pendingMessage(t).kind, "branch", "the split question comes before anything else");
   const split = answerChip(t, branch.id, "split", { now });
   assert.deepEqual(split.effects, [{ type: "branch", branches: branch.branches }]);
-  assert.match(split.thread.messages.find((m) => /own thread now/.test(m.text)).text, /own thread now/);
+  assert.match(split.thread.messages.find((m) => /own threads? now/.test(m.text)).text, /have their own threads now/);
   assert.ok(["question", "offer"].includes(pendingMessage(split.thread).kind), "the conversation carries on after the split");
   const keep = answerChip(t, branch.id, "keep", { now });
   assert.deepEqual(keep.effects, []);
@@ -426,4 +426,15 @@ test("Flow's own answer to How can I help? becomes the move when it starts with 
   assert.match(offer.text, /: Visit the three main comparison websites/);
   const bad = respondToRecording(t, "h2", "just tell me where to start", { now, reply: "I'll compare the quotes for the next three days and let you know." });
   assert.doesNotMatch(bad.messages.find((m) => m.kind === "ack" && m.createdAt === bad.messages.at(-1).createdAt).text, /I'll compare/);
+});
+
+test("splitting renames a title that named the split-off subject", () => {
+  const dump = "The bathroom extractor fan has been rattling for a week and the landlord ignores my emails about it. Also I need to renew my passport before Lisbon in November.";
+  const t = respondToRecording({ ...thread(dump, "fan"), title: "Bathroom extractor fan and passport renewal" }, "n1", dump, { now });
+  const branch = pendingMessage(t);
+  assert.equal(branch.kind, "branch");
+  const { thread: split } = answerChip(t, branch.id, "split", { now });
+  assert.doesNotMatch(split.title, /passport/i);
+  assert.match(split.title, /extractor fan/i);
+  assert.match(split.messages.at(-2).text, /has its own thread now/);
 });
