@@ -834,7 +834,7 @@ const s = StyleSheet.create({
   link: { color: C.blue, fontSize: 15, fontWeight: "700", paddingVertical: 6 },
   card: { padding: 16, borderRadius: 18, backgroundColor: C.white, gap: 10 },
   cardTitle: { fontSize: 17, fontWeight: "700", color: C.ink },
-  input: { minHeight: 160, padding: 16, borderRadius: 18, backgroundColor: C.card, fontSize: 17, lineHeight: 24, color: C.ink, textAlignVertical: "top" },
+  input: { minHeight: 160, maxHeight: 300, padding: 16, borderRadius: 18, backgroundColor: C.card, fontSize: 17, lineHeight: 24, color: C.ink, textAlignVertical: "top" },
   primary: { backgroundColor: C.blue, borderRadius: 16, paddingVertical: 15, alignItems: "center" },
   primaryText: { color: C.white, fontSize: 16, fontWeight: "700" },
   error: { color: C.red, fontSize: 14, lineHeight: 20 },

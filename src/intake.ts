@@ -39,7 +39,7 @@ export function sentences(text: string): string[] {
   return text
     .replace(/\s+/g, " ")
     .replace(MID_SIGNPOSTS, ". ")
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?])(?:\s+|(?=[A-Z]))|\n+/)
     .map((s) => s.trim())
     .filter(Boolean);
 }
