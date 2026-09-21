@@ -66,7 +66,13 @@ export default function PlanTomorrow({
   const onCount = mine.filter((r) => r.on && r.days.includes(day)).length;
   const hours = Math.round(proposal.freeMinutes / 30) / 2;
   return (
-    <Screen title="Tomorrow" subtitle={`${d.toLocaleDateString("en-US", { weekday: "long" })} ${d.getDate()} · ${proposal.events.length} event${proposal.events.length === 1 ? "" : "s"} · ${hours}h free`} back="Today" onBack={onBack}>
+    <Screen
+      title="Tomorrow"
+      subtitle={`${d.toLocaleDateString("en-US", { weekday: "long" })} ${d.getDate()} · ${proposal.events.length} event${proposal.events.length === 1 ? "" : "s"} · ${hours}h free`}
+      back="Today"
+      onBack={onBack}
+      footer={<Button label={total || onCount ? `Lock in tomorrow · ${total} move${total === 1 ? "" : "s"}${onCount ? ` · ${onCount} routine${onCount === 1 ? "" : "s"}` : ""}` : "Lock in tomorrow"} busy={busy} style={{ marginTop: 0 }} onPress={() => onLock({ keep: [...keep], carry: [...carry], added, routines: mine })} />}
+    >
       <Text style={s.lead}>Plan it now, then let it go. In the morning you just start.</Text>
       {(proposal.events.length > 0 || proposal.watch.length > 0) && (
         <Section label="Calendar">
@@ -94,19 +100,19 @@ export default function PlanTomorrow({
         )}
       </Section>
       <Section label="Moves" right={total ? String(total) : undefined}>
-        {proposal.moves.length === 0 && proposal.carry.length === 0 && added.length === 0 && <Empty text="Nothing on tomorrow yet. Add what matters below." />}
-        {proposal.moves.map((t, i) => (
-          <Row key={t.id} first={i === 0} title={t.title} sub={[t.area, t.minutes ? `${t.minutes} min` : ""].filter(Boolean).join(" · ")} when={t.plannedTime} lead={<Check on={keep.has(t.id)} onPress={() => setKeep(toggle(keep, t.id))} label={`${keep.has(t.id) ? "Drop" : "Keep"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
-        ))}
-        {proposal.carry.map((t, i) => (
-          <Row key={t.id} first={proposal.moves.length === 0 && i === 0} title={t.title} sub="not done today" when="→" lead={<Check on={carry.has(t.id)} onPress={() => setCarry(toggle(carry, t.id))} label={`${carry.has(t.id) ? "Leave" : "Bring"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
-        ))}
-        {added.map((a, i) => (
-          <Row key={`a${i}`} first={proposal.moves.length === 0 && proposal.carry.length === 0 && i === 0} title={a} sub="new" lead={<Check on onPress={() => setAdded((all) => all.filter((_, k) => k !== i))} label={`Remove ${a}`} />} />
-        ))}
         <View style={s.add}>
           <TextInput value={line} onChangeText={setLine} placeholder="Add a move for tomorrow…" placeholderTextColor={C.ink3} accessibilityLabel="Add a move" style={s.input} onSubmitEditing={addLine} returnKeyType="done" blurOnSubmit={false} />
         </View>
+        {added.map((a, i) => (
+          <Row key={`a${i}`} first={i === 0} title={a} sub="new" lead={<Check on onPress={() => setAdded((all) => all.filter((_, k) => k !== i))} label={`Remove ${a}`} />} />
+        ))}
+        {proposal.moves.length === 0 && proposal.carry.length === 0 && added.length === 0 && <Empty text="Nothing on tomorrow yet. Add what matters." />}
+        {proposal.moves.map((t, i) => (
+          <Row key={t.id} first={added.length === 0 && i === 0} title={t.title} sub={[t.area, t.minutes ? `${t.minutes} min` : ""].filter(Boolean).join(" · ")} when={t.plannedTime} lead={<Check on={keep.has(t.id)} onPress={() => setKeep(toggle(keep, t.id))} label={`${keep.has(t.id) ? "Drop" : "Keep"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
+        ))}
+        {proposal.carry.map((t, i) => (
+          <Row key={t.id} first={added.length === 0 && proposal.moves.length === 0 && i === 0} title={t.title} sub="not done today" when="→" lead={<Check on={carry.has(t.id)} onPress={() => setCarry(toggle(carry, t.id))} label={`${carry.has(t.id) ? "Leave" : "Bring"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
+        ))}
       </Section>
       {proposal.chases.length > 0 && (
         <Section label="Chase tomorrow">
@@ -115,10 +121,7 @@ export default function PlanTomorrow({
           ))}
         </Section>
       )}
-      <View style={{ paddingHorizontal: 20 }}>
-        <Button label="Lock in tomorrow" busy={busy} onPress={() => onLock({ keep: [...keep], carry: [...carry], added, routines: mine })} />
-      </View>
-      <View style={{ height: 60 }} />
+      <View style={{ height: 30 }} />
     </Screen>
   );
 }

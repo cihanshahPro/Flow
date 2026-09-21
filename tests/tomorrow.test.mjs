@@ -88,7 +88,7 @@ test("the Tomorrow screen: rows with checks, a line to add, one button; the deci
   await act(async () => input.props.onChangeText("Book the dentist"));
   await act(async () => input.props.onSubmitEditing());
   assert.match(textOf(view), /"Book the dentist"/);
-  await act(async () => find("Lock in tomorrow").props.onPress());
+  await act(async () => view.root.findAll((n) => (n.props.accessibilityLabel || "").startsWith("Lock in tomorrow"))[0].props.onPress());
   assert.equal(locked.length, 1);
   const d = locked[0];
   assert.deepEqual(d.keep, ["a"]);

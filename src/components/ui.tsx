@@ -8,7 +8,7 @@ import { C, T } from "./theme.ts";
  * else is allowed to invent a surface.
  */
 
-export function Screen({ title, subtitle, back, onBack, right, children, scroll = true, fab, tabs }: { title: string; subtitle?: string; back?: string; onBack?: () => void; right?: React.ReactNode; children: React.ReactNode; scroll?: boolean; fab?: React.ReactNode; tabs?: React.ReactNode }) {
+export function Screen({ title, subtitle, back, onBack, right, children, scroll = true, fab, tabs, footer }: { title: string; subtitle?: string; back?: string; onBack?: () => void; right?: React.ReactNode; children: React.ReactNode; scroll?: boolean; fab?: React.ReactNode; tabs?: React.ReactNode; /** Pinned under the body: the one button a screen ends with. */ footer?: React.ReactNode }) {
   const body = scroll ? <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">{children}</ScrollView> : <View style={[s.body, { flex: 1 }]}>{children}</View>;
   return (
     <View style={s.screen}>
@@ -27,6 +27,7 @@ export function Screen({ title, subtitle, back, onBack, right, children, scroll 
         {right}
       </View>
       {body}
+      {!!footer && <View style={s.footer}>{footer}</View>}
       {fab}
       {tabs}
     </View>
@@ -273,6 +274,7 @@ const s = StyleSheet.create({
   nav: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
   back: { color: C.accent, fontSize: 14, fontWeight: "600", marginBottom: 2 },
   body: { paddingBottom: 120 },
+  footer: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.hair, backgroundColor: C.paper },
   section: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 18, paddingBottom: 6 },
   rowWrap: { position: "relative", overflow: "hidden", backgroundColor: C.paper },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 9, minHeight: 46, backgroundColor: C.paper },
