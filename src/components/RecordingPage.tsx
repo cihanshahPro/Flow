@@ -5,7 +5,7 @@ import type { Note, Task } from "../model.ts";
 import { localDate } from "../model.ts";
 import { AudioPlayback } from "./VoiceCapture.tsx";
 import { Check, Dot, Empty, Row, Screen, Section, Segmented } from "./ui.tsx";
-import { duration, recordingProjects, recordingTitle, stamp } from "./Recordings.tsx";
+import { duration, recordingProjects, recordingTasks, recordingTitle, stamp } from "./Recordings.tsx";
 import { C } from "./theme.ts";
 
 /**
@@ -39,7 +39,7 @@ export default function RecordingPage({
   const [tab, setTab] = useState("Summary");
   const [highlight, setHighlight] = useState<string | null>(null);
   const scroll = useRef<ScrollView>(null);
-  const mine = tasks.filter((t) => t.noteId === note.id);
+  const mine = recordingTasks(note, threads, tasks);
   const moves = mine.filter((t) => t.kind !== "waiting" && !t.later);
   const waiting = mine.filter((t) => t.kind === "waiting");
   const later = mine.filter((t) => t.later);
@@ -94,7 +94,7 @@ export default function RecordingPage({
       <ScrollView ref={scroll} contentContainerStyle={{ paddingBottom: 60 }}>
         {tab === "Summary" ? (
           <>
-            <Text style={s.lead}>{paragraph?.trim() || fallback}</Text>
+            {(!!paragraph?.trim() || mine.length > 0) && <Text style={s.lead}>{paragraph?.trim() || fallback}</Text>}
             {moves.length > 0 && (
               <Section label="Moves">
                 {moves.map((t, i) => (

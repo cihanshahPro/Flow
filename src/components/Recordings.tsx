@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Note, Task } from "../model.ts";
+import { AREAS } from "../map.ts";
 import { Empty, Fab, Ring, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
@@ -14,15 +15,23 @@ export function recordingProjects(note: Note, threads: ThoughtDraft[], tasks: Ta
   return threads.filter((t) => !t.example && (t.id === note.id || t.sourceNoteIds?.includes(note.id) || viaTasks.has(t.id)));
 }
 
+/** The moves a recording produced: by noteId, or (older data) by the project it started. */
+export function recordingTasks(note: Note, threads: ThoughtDraft[], tasks: Task[]): Task[] {
+  const started = new Set(threads.filter((t) => t.sourceNoteIds?.[0] === note.id || t.id === note.id).map((t) => t.id));
+  return tasks.filter((t) => t.noteId === note.id || (!t.noteId && t.projectId && started.has(t.projectId)));
+}
+
+const GENERIC = new Set<string>([...AREAS, "Other (self)", "Many things going on"]);
+
 export function recordingTitle(note: Note, threads: ThoughtDraft[], tasks: Task[] = []): string {
-  const mine = recordingProjects(note, threads, tasks);
+  const mine = recordingProjects(note, threads, tasks).filter((t) => !GENERIC.has(t.title) && !/^Other\b/.test(t.title));
   if (mine.length) return mine.map((t) => t.title).slice(0, 3).join(", ");
   const first = note.text.split(/(?<=[.!?])\s+/)[0] ?? note.text;
   return first.length > 48 ? first.slice(0, 47).trimEnd() + "…" : first;
 }
 
-export function recordingResult(note: Note, tasks: Task[]): string {
-  const mine = tasks.filter((t) => t.noteId === note.id);
+export function recordingResult(note: Note, tasks: Task[], threads: ThoughtDraft[] = []): string {
+  const mine = recordingTasks(note, threads, tasks);
   const moves = mine.filter((t) => t.kind !== "waiting" && !t.later).length;
   const waiting = mine.filter((t) => t.kind === "waiting").length;
   const later = mine.filter((t) => t.later).length;
@@ -76,7 +85,7 @@ export default function Recordings({
   const recordings = notes
     .filter((n) => !n.planId && (!n.captureKind || n.captureKind === "thought") && n.text?.trim())
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .filter((n) => !q || n.text.toLowerCase().includes(q) || tasks.some((t) => t.noteId === n.id && t.title.toLowerCase().includes(q)));
+    .filter((n) => !q || n.text.toLowerCase().includes(q) || recordingTasks(n, threads, tasks).some((t) => t.title.toLowerCase().includes(q)));
   const projects = threads
     .filter((t) => !t.example && t.state !== "parked")
     .map((t) => {
@@ -92,7 +101,7 @@ export default function Recordings({
       </View>
       {recordings.length === 0 && <Empty text={q ? "Nothing matches." : "No recordings yet. Say what's on your mind."} />}
       {recordings.map((n, i) => (
-        <Row key={n.id} first={i === 0} title={recordingTitle(n, threads, tasks)} sub={`${recordingResult(n, tasks)} · ${stamp(n.createdAt, now)}${n.durationMs ? " · " + duration(n.durationMs) : ""}`} when="›" onPress={() => onOpenRecording(n)} accessibilityLabel={`Open recording ${recordingTitle(n, threads, tasks)}`} />
+        <Row key={n.id} first={i === 0} title={recordingTitle(n, threads, tasks)} sub={`${recordingResult(n, tasks, threads)} · ${stamp(n.createdAt, now)}${n.durationMs ? " · " + duration(n.durationMs) : ""}`} when="›" onPress={() => onOpenRecording(n)} accessibilityLabel={`Open recording ${recordingTitle(n, threads, tasks)}`} />
       ))}
       {projects.length > 0 && (
         <Section label="Projects" right={String(projects.length)}>
