@@ -2,65 +2,16 @@ import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import type { ThoughtDraft } from "../drafts";
 import type { Task } from "../model";
-import { localDate } from "../model";
-import { pendingMessage, stageFor, threadTasks } from "../thread";
 
 /**
- * Local reminders so Flow can knock when a check-in becomes due while the
- * app is closed. Best effort: no permission, no platform support, or any
- * failure simply means no reminder. Nothing here blocks saving a thought.
+ * Two local pushes a day: "Your day" in the morning and "Day closed" in the
+ * evening. Chases live in Apple Reminders. Best effort: no permission, no
+ * platform support, or any failure simply means no push.
  */
 
 const PREFIX = "flow-thread-";
-const HOUR = 9;
-export const MAX_REMINDERS = 8;
 
 export type PlannedReminder = { id: string; title: string; body: string; at: string };
-
-/** Pure: which reminders Flow would schedule from the current threads. */
-export function planReminders(
-  threads: ThoughtDraft[],
-  tasks: Task[],
-  now = new Date(),
-): PlannedReminder[] {
-  const today = localDate(now);
-  const planned: PlannedReminder[] = [];
-  const at = (date: string) => {
-    const [y, m, d] = date.split("-").map(Number);
-    // The morning after the day the person mentioned.
-    return new Date(y, m - 1, d + 1, HOUR, 0, 0).toISOString();
-  };
-  for (const thread of threads) {
-    if (thread.example || thread.state === "parked" || thread.resolvedAt) continue;
-    const stage = stageFor(thread, tasks);
-    if (stage === "done") continue;
-    if (pendingMessage(thread)) {
-      // Something is already waiting; one gentle nudge tomorrow morning.
-      planned.push({
-        id: `${PREFIX}${thread.id}-pending`,
-        title: "Flowthread",
-        body: `Something is waiting on you in “${thread.title}”.`,
-        at: at(today),
-      });
-      continue;
-    }
-    const dates = [
-      ...(thread.dueHints ?? []).map((h) => h.date),
-      ...threadTasks(thread, tasks)
-        .filter((t) => !t.done && t.plannedDate)
-        .map((t) => t.plannedDate),
-    ].filter((d) => d >= today);
-    const next = dates.sort()[0];
-    if (!next) continue;
-    planned.push({
-      id: `${PREFIX}${thread.id}-${next}`,
-      title: "Flowthread",
-      body: `Quick check-in on “${thread.title}” when you have a second.`,
-      at: at(next),
-    });
-  }
-  return planned.sort((a, b) => a.at.localeCompare(b.at)).slice(0, MAX_REMINDERS);
-}
 
 export const MORNING_ID = `${PREFIX}morning`;
 export const DEFAULT_MORNING = "08:30";
@@ -118,7 +69,9 @@ export async function syncReminders(
   options: { ask?: boolean; enabled?: boolean; morning?: { headline?: string; time?: string; off?: boolean }; evening?: { done: number; time?: string; off?: boolean } } = {},
 ): Promise<number> {
   if (Platform.OS === "web") return 0;
-  const planned = planReminders(threads, tasks, now);
+  void threads;
+  void tasks;
+  const planned: PlannedReminder[] = [];
   if (options.morning && !options.morning.off) {
     const m = planMorning(options.morning.headline, options.morning.time, now);
     if (m) planned.push(m);
@@ -126,10 +79,8 @@ export async function syncReminders(
   if (options.evening && !options.evening.off) planned.push(planEvening(options.evening.done, options.evening.time, now));
   try {
     configure();
-    const existing = await Notifications.getAllScheduledNotificationsAsync();
-    for (const n of existing) {
-      if (n.identifier.startsWith(PREFIX)) await Notifications.cancelScheduledNotificationAsync(n.identifier);
-    }
+    // Flow is the only thing scheduling here; older builds used other ids, so everything goes.
+    await Notifications.cancelAllScheduledNotificationsAsync();
     if (!planned.length || options.enabled === false) return 0;
     let permission = await Notifications.getPermissionsAsync();
     if (!permission.granted && options.ask && permission.canAskAgain) permission = await Notifications.requestPermissionsAsync();
@@ -176,10 +127,10 @@ export async function scheduledSummary(): Promise<string[]> {
   try {
     const all = await Notifications.getAllScheduledNotificationsAsync();
     return all
-      .filter((n) => n.identifier.startsWith(PREFIX))
       .map((n) => {
-        const t = n.trigger as { date?: number | string | Date } | null;
-        const when = t && "date" in t && t.date ? new Date(t.date as number).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : "?";
+        const t = (n.trigger ?? {}) as { date?: number | string | Date; value?: number; dateComponents?: { hour?: number; minute?: number; day?: number; weekday?: number } };
+        const stamp = t.date ?? t.value;
+        const when = stamp ? new Date(stamp).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : t.dateComponents ? `${t.dateComponents.day ?? "?"}th ${t.dateComponents.hour ?? "?"}:${String(t.dateComponents.minute ?? 0).padStart(2, "0")}` : "?";
         return `${when} · ${n.content.title}: ${n.content.body}`;
       })
       .sort();

@@ -304,7 +304,8 @@ function Flow() {
         await tickMove(task);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
-      await refresh();
+      // The evening close counts what was done; keep it current.
+      void syncAll(await refresh(), profile);
     });
   }
   function onTomorrow(task: Task) {

@@ -166,6 +166,7 @@ export const Alert = { alert() {} };
 export const SchedulableTriggerInputTypes = { DATE: "date" };
 export function setNotificationHandler() {}
 export async function getAllScheduledNotificationsAsync() { return []; }
+export async function cancelAllScheduledNotificationsAsync() {}
 export async function cancelScheduledNotificationAsync() {}
 export async function getPermissionsAsync() { return { granted: false, canAskAgain: false }; }
 export async function requestPermissionsAsync() { return { granted: false, canAskAgain: false }; }
