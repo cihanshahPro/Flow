@@ -350,6 +350,9 @@ export function parsePlan(value: unknown, sourceText: string): PlanShape {
     const project = (str(r.project, 120) ?? "").trim();
     const when = (str(r.when, 120) ?? "").trim();
     const minutes = typeof r.minutes === "number" && r.minutes >= 5 && r.minutes <= 120 ? Math.round(r.minutes) : undefined;
+    // The same move twice (a weak model repeating itself) is one move.
+    const key = `${kind}:${title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+    if (items.some((i) => `${i.kind}:${i.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}` === key)) continue;
     items.push({ title, kind, project, ...(area ? { area } : {}), ...(person ? { person } : {}), ...(when ? { when } : {}), ...(minutes ? { minutes } : {}), evidence });
   }
   const summary = str(o.summary, 600)?.trim();

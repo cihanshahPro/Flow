@@ -23,7 +23,10 @@ export type WeekPlan = {
   noteId: string;
   /** The model's sentences saying back the recording. */
   summary?: string;
+  /** What this recording added. */
   placements: Placement[];
+  /** Items that were already on the week (said before), left as they were. */
+  known?: number;
   /** The week after placing: the person's events plus Flow's. */
   events: CalEvent[];
   watch: WatchOut[];
@@ -133,15 +136,25 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   // 5. Tasks: one per placed item; dated ones go to the phone.
   const tasks: Task[] = [];
   const written: CalEvent[] = [];
+  /** Placements that became a move now; the rest were already on the week. */
+  const fresh: Placement[] = [];
+  let already = 0;
   for (const [i, pl] of placements.entries()) {
     const it = pl.item;
     const key = it.projectId ?? (it.project.trim() ? `new:${slug(it.project)}` : "");
     const project = key ? projects.get(key) : undefined;
     const id = project ? `flow:${project.id}:${slug(it.title)}-${i}` : `flow:area:${slug(it.area)}:${slug(it.title)}-${i}`;
-    if (workspace.tasks.some((t) => t.id === id)) continue;
+    if (workspace.tasks.some((t) => t.id === id)) {
+      already++;
+      continue;
+    }
     // The same move said again (in other words) is one move: an open task in the project with the same words stays.
-    const mine = workspace.tasks.filter((t) => !t.done && (project ? t.projectId === project.id : t.area === it.area && !t.projectId));
-    if (mine.some((t) => similar(t.title, it.title))) continue;
+    const mine = [...workspace.tasks, ...tasks].filter((t) => !t.done && (project ? t.projectId === project.id : t.area === it.area && !t.projectId));
+    if (mine.some((t) => similar(t.title, it.title))) {
+      already++;
+      continue;
+    }
+    fresh.push(pl);
     const time = pl.slot ? `${String(new Date(pl.slot.start).getHours()).padStart(2, "0")}:${String(new Date(pl.slot.start).getMinutes()).padStart(2, "0")}` : "";
     const task: Task = {
       id,
@@ -207,12 +220,13 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   return {
     noteId: note.id,
     ...(outcome.plan?.summary ? { summary: outcome.plan.summary } : {}),
-    placements,
+    placements: fresh,
+    known: already,
     events: week,
     watch,
     projects: [...projects.values()].map(({ id, title, area, fresh }) => ({ id, title, area, fresh })),
     tasks,
-    closure: closureLine(placements, watch),
+    closure: fresh.length ? closureLine(fresh, watch) : already ? "All of that was already on your week. Nothing new to hold." : closureLine(placements, watch),
     source: modelItems.length ? "model" : "local",
   };
 }
