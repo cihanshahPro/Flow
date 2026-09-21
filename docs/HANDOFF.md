@@ -2,7 +2,7 @@
 
 ## Build 9 handoff — 21 Sep 2026 (read this first)
 
-**Branch:** `kodavena/v1.0.0`, head `cff1364` (PR #14 → `testing` stays open). **You do not need the Mac mini for anything below** — it is Cihan's dev runtime only.
+**Branch:** `kodavena/v1.0.0` (PR #14 → `testing` stays open). Head: see `git log -1`. **You do not need the Mac mini for anything below** — it is Cihan's dev runtime only.
 
 ### What changed since build 8 (the whole app, on purpose)
 Tabs **Today · Threads · Calendar · Me**, one Record button, rows not cards. Calendar read first → one model call turns the words into moves / waiting-fors / later / projects → placed around the week (the clock the person said is kept when free, "by Friday" is a due date, evening stays evening, trips and full days are skipped) → written to Apple Calendar with alerts and to a "Flow" list in Apple Reminders, two-way (ticks and deletes on the phone come back) → **Your week**. Every recording is an Otter-style page (Summary | Transcript, ↗ to the sentence behind each move). Threads are projects; inside a thread Flow is an **assistant** with the project in front of it (moves, calendar, other projects) and answers, asks one thing, or puts one move on the table; "do it" accepts; a side subject can go to a **New thread · → Existing… · Keep here**. **Plan tomorrow** (evening ritual: calendar, routines, leftovers, "Tell Flow about tomorrow"). Two pushes: "Your day" and "Day closed". Screen contract: [SKELETON.html](SKELETON.html) (ten screens). The step tree per project: `ensureSteps()` in `src/services/processing.ts`.
@@ -11,7 +11,7 @@ Tabs **Today · Threads · Calendar · Me**, one Record button, rows not cards. 
 ```bash
 git fetch && git checkout kodavena/v1.0.0 && npm ci
 npx tsc --noEmit -p .
-node --experimental-strip-types --test tests/*.test.mjs      # 302 pass
+node --experimental-strip-types --test tests/*.test.mjs      # 304 pass
 cd server/shape-worker && npm ci && npx vitest run            # 9 pass
 ```
 
@@ -44,7 +44,7 @@ When they land, flip the rows in `src/components/Me.tsx` from SOON to ON and upd
 | 3 | Siri "Tell Flow…" App Intent + Shortcut (Action button) → `flowthread://record?text=…`; handle the URL in `App.tsx`. | Samil | Me › Siri row flips to ON; a Shortcut run lands as a move. |
 | 4 | Share extension → same URL. | Samil | Me › Share sheet ON; sharing a mail lands as a move. |
 | 5 | Lock-screen widget (WidgetKit + App Group JSON written on refresh). | Samil | Me › Widget ON; the widget shows "first: …". |
-| 6 | Test on Cihan's real data, never demo data: `tests/fixtures/owner/phone-2026-09-21.json` (his six recordings, his threads) runs through the app in `tests/owner-phone.test.mjs`; new phone snapshots go next to it. | both | The test stays green; new snapshots added when he records. |
+| 6 | Test on Cihan's real data, never demo data: `tests/fixtures/owner/phone-2026-09-21.json` (his six recordings, his threads) runs through the app in `tests/owner-phone.test.mjs`; on a dev device, Me › "Load the owner's phone data (dev)" pulls the same data from the dev server (`GET /mirror/<install>`). New phone snapshots go next to it. | both | The test stays green; new snapshots added when he records. |
 | 7 | Decide the thread meter ("Getting to know this · %") and the "What Flow got" cards: keep or drop now that the thread is an assistant chat. | Cihan | One line in this doc. |
 | 8 | Whisper on the dev server: `large-v3-turbo` (done on the mini); document for any other dev Mac in `.env.processor.example` (done). | — | — |
 

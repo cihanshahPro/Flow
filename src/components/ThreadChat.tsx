@@ -177,6 +177,7 @@ export default function ThreadChat({
             busy={busy}
             onChip={(chip) => onChip(m.id, chip)}
             others={others}
+            onGrow={() => setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60)}
           />
         ))}
         {processing && (
@@ -240,6 +241,7 @@ function Bubble({
   busy,
   onChip,
   others = [],
+  onGrow,
 }: {
   message: ThreadMessage;
   note?: Note;
@@ -249,6 +251,8 @@ function Bubble({
   onChip: (chip: string) => void;
   /** The person's other open threads, for "→ Existing…". */
   others?: { id: string; title: string }[];
+  /** The bubble got taller (a picker opened): the list scrolls to keep it in view. */
+  onGrow?: () => void;
 }) {
   const [picking, setPicking] = useState(false);
   const you = message.from === "you";
@@ -304,7 +308,12 @@ function Bubble({
                 key={chip.id}
                 accessibilityRole="button"
                 accessibilityLabel={chip.label}
-                onPress={() => (chip.id === "pick" ? setPicking((v) => !v) : onChip(chip.id))}
+                onPress={() => {
+                  if (chip.id === "pick") {
+                    setPicking((v) => !v);
+                    onGrow?.();
+                  } else onChip(chip.id);
+                }}
                 disabled={busy || !active}
                 style={({ pressed }) => [s.chip, i === 0 && s.chipPrimary, (pressed || busy) && { opacity: 0.6 }]}
               >
@@ -346,7 +355,7 @@ const s = StyleSheet.create({
   pointLabel: { fontSize: 13, fontWeight: "700", color: C.ink },
   pointValue: { fontSize: 13, lineHeight: 18, color: C.muted },
   pointMissing: { fontSize: 12, color: C.faint },
-  list: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, paddingBottom: 16 },
+  list: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, paddingBottom: 28 },
   row: { flexDirection: "row", alignItems: "flex-end", gap: 8, maxWidth: "100%" },
   rowYou: { justifyContent: "flex-end" },
   avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.accentBg, color: C.accent, textAlign: "center", lineHeight: 24, fontWeight: "800", fontSize: 11, overflow: "hidden" },

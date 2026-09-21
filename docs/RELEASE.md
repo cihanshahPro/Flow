@@ -33,4 +33,7 @@ Why the order matters:
 
 Check the archive before uploading: `plutil -p .../Flowthread.app/Info.plist` should show the right
 `CFBundleShortVersionString` / `CFBundleVersion`, `UIDeviceFamily` = `[1]`,
-`ITSAppUsesNonExemptEncryption` = `false`, and no `UIBackgroundModes` or `NSReminders*` keys.
+`ITSAppUsesNonExemptEncryption` = `false`, no `UIBackgroundModes`, and — since build 9 — `NSCalendarsFullAccessUsageDescription`
+and `NSRemindersFullAccessUsageDescription` present (the app writes moves to Calendar and chases to a "Flow" list in Reminders;
+both are real features now, so App Review 2.5.4 no longer applies). EAS is the supported path (`eas build --platform ios
+--profile production --auto-submit`); this local archive order still works.
