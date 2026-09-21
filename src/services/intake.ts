@@ -87,7 +87,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   // 1. Read the words into items: the model when it answers, the local pass otherwise.
   const outcome = await planText(text, calendarContextText(calendarLines(events, now)), options);
   // Items that merely restate a calendar event are the model reading the context back; they are not new.
-  const known = events.map((e) => contentWordsOf(e.title));
+  const known = events.filter((e) => !e.mine).map((e) => contentWordsOf(e.title));
   const restates = (i: PlanShapeItem) => {
     const w = contentWordsOf(i.title);
     return w.size > 0 && known.some((k) => k.size > 0 && [...w].filter((x) => k.has(x)).length / Math.min(w.size, k.size) >= 0.6);
