@@ -62,6 +62,6 @@ export default function WeekPlan({ plan, busy = false, now = new Date(), onOpenP
 const s = StyleSheet.create({
   lead: { fontSize: 15, lineHeight: 22, color: C.ink, paddingHorizontal: 20, paddingTop: 10 },
   already: { fontSize: 12, fontWeight: "500", color: C.ink3, paddingHorizontal: 20, paddingTop: 8 },
-  closure: { marginHorizontal: 20, marginTop: 22, backgroundColor: C.greenBg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  closureText: { color: C.green, fontSize: 14.5, fontWeight: "600", lineHeight: 20 },
+  closure: { marginHorizontal: 20, marginTop: 18 },
+  closureText: { color: C.green, fontSize: 15, fontWeight: "700", lineHeight: 21 },
 });

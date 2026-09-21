@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Linking, Switch, Text, View } from "react-native";
 import type { PhoneCalendar } from "../services/calendar-read.ts";
-import { Chips, Dot, Row, Screen, Section } from "./ui.tsx";
+import { Chips, Dot, Pill, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
 export const PRIVACY_URL = "https://kodavena.com/flowthread/privacy";
@@ -112,10 +112,10 @@ export default function Me({
         ))}
       </Section>
       <Section label="Ways in">
-        <Row first title="Reminders" sub={remindersConnected ? 'chases in the "Flow" list · ticks sync back' : "chases land in Apple Reminders"} when={remindersConnected ? "ON" : "›"} onPress={remindersConnected ? undefined : onConnectReminders} accessibilityLabel="Reminders" />
-        <Row title='Siri · "Tell Flow…"' sub="Shortcut · works from the Action button" when="SOON" />
-        <Row title="Share sheet" sub="send an email or message to Flow" when="SOON" />
-        <Row title="Lock-screen widget" sub="your next move" when="SOON" />
+        <Row first title="Reminders" sub={remindersConnected ? 'chases in the "Flow" list · ticks sync back' : "chases land in Apple Reminders"} trailing={remindersConnected ? <Pill text="ON" tone="blue" /> : undefined} when={remindersConnected ? undefined : "›"} onPress={remindersConnected ? undefined : onConnectReminders} accessibilityLabel="Reminders" />
+        <Row title='Siri · "Tell Flow…"' sub="Shortcut · works from the Action button" trailing={<Pill text="SOON" tone="blue" />} />
+        <Row title="Share sheet" sub="send an email or message to Flow" trailing={<Pill text="SOON" tone="blue" />} />
+        <Row title="Lock-screen widget" sub="your next move" trailing={<Pill text="SOON" tone="blue" />} />
         <Row title="Notifications" sub="your day at morning, day closed at evening" trailing={<Switch accessibilityLabel="Notifications" value={notificationsOn} onValueChange={onNotifications} disabled={busy} />} />
         {cloud && <Row title="Shape notes on a secure server" sub="only the text, never the audio · nothing stored" trailing={<Switch accessibilityLabel="Shape notes on a secure server" value={cloud.on} onValueChange={cloud.onChange} disabled={busy} />} />}
       </Section>

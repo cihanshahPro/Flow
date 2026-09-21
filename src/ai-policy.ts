@@ -336,9 +336,18 @@ export function parsePlan(value: unknown, sourceText: string): PlanShape {
   const items: PlanShapeItem[] = [];
   for (const entry of list.slice(0, PLAN_MAX_ITEMS)) {
     const r = (entry ?? {}) as Record<string, unknown>;
-    const title = str(r.title, 120)?.trim(), evidence = str(r.evidence, 400)?.replace(/\s+/g, " ").trim();
+    const title = str(r.title, 120)?.trim();
+    let evidence = str(r.evidence, 400)?.replace(/\s+/g, " ").trim();
     let kind = PLAN_KINDS.find((k) => k === r.kind);
     if (!title || !evidence || !kind) continue;
+    // A weak model quotes a whole sentence: keep the twelve words around the first title word instead.
+    if (evidence.length > 120) {
+      const words = evidence.split(" ");
+      const tw = title.toLowerCase().replace(/[^a-z0-9\s']/g, " ").split(/\s+/).filter((w) => w.length > 3 && !TITLE_STOP.has(w));
+      const at = words.findIndex((w) => tw.some((t) => w.toLowerCase().replace(/[^a-z0-9']/g, "").startsWith(t)));
+      const from = Math.max(0, (at >= 0 ? at : 0) - 4);
+      evidence = words.slice(from, from + 12).join(" ");
+    }
     // "Waiting on myself" is a move.
     if (kind === "waiting" && /^(?:self|me|myself|i|none|nobody)$/i.test((str(r.person, 120) ?? "").trim())) kind = "action";
     if (!normalized.includes(evidence.toLowerCase())) continue;

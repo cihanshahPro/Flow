@@ -72,10 +72,10 @@ export default function Today({
       first={i === 0}
       title={t.title}
       sub={[t.routineId ? "routine" : projects.find((p) => p.id === t.projectId)?.title ?? t.area, t.deadline && !t.done ? `by ${new Date(`${t.deadline}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : t.minutes ? `${t.minutes} min` : undefined].filter(Boolean).join(" · ") || undefined}
-      when={label(t)}
+      when={t.deadline && !t.done ? "" : label(t)}
       done={t.done}
       lead={<Check on={t.done} onPress={() => onTick(t)} label={t.done ? `Reopen ${t.title}` : `Done: ${t.title}`} />}
-      trailing={t.deadline && !t.done ? <Pill text={`by ${new Date(`${t.deadline}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}`} tone={t.deadline <= localDate(new Date(now.getTime() + 2 * 864e5)) ? "red" : "amber"} /> : undefined}
+      trailing={t.deadline && !t.done ? <Pill text={`by ${new Date(`${t.deadline}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}`} tone="red" /> : undefined}
       onPress={() => onOpenMove(t)}
       actions={acts(t)}
       accessibilityLabel={`Open move ${t.title}`}

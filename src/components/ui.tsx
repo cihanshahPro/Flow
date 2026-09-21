@@ -17,7 +17,7 @@ export function Screen({ title, subtitle, back, onBack, right, children, scroll 
     else ref.current?.scrollToEnd({ animated: false });
     atEnd.current = !atEnd.current;
   } : undefined;
-  const body = scroll ? <ScrollView ref={ref} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">{children}</ScrollView> : <View style={[s.body, { flex: 1 }]}>{children}</View>;
+  const body = scroll ? <ScrollView ref={ref} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">{children}</ScrollView> : <View style={{ flex: 1 }}>{children}</View>;
   return (
     <View style={s.screen}>
       <View style={s.nav}>

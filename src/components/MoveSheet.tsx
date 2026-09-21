@@ -55,7 +55,6 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
       <TextInput value={title} onChangeText={setTitle} accessibilityLabel="Move title" style={s.title} multiline />
       {!isWaiting && (
         <>
-          <Text style={s.label}>DAY</Text>
           <Chips items={dayChips} value={dayValue} onChange={(v) => setDate(v === "Someday" ? "" : days[dayChips.indexOf(v)])} />
           <Field label="Time" value={clock(time)} onPress={() => flip("time")} />
           {open === "time" && <Chips items={["Any time", ...times.map((t) => clock(t.padStart(5, "0")))]} value={clock(time)} onChange={(v) => { setTime(v === "Any time" ? "" : times[times.map((t) => clock(t.padStart(5, "0"))).indexOf(v)].padStart(5, "0")); setOpen(null); }} />}

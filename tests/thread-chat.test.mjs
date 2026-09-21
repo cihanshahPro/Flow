@@ -279,7 +279,7 @@ test("the move sheet: day, time, due and takes as chips, project as a field, sav
   const saved = [], deleted = [], opened = [];
   const view = await render(React.createElement(MoveSheet, { task, projects, now, onSave: (p) => saved.push(p), onDelete: () => deleted.push(1), onClose() {}, onOpenSource: () => opened.push(1) }));
   const text = textOf(view);
-  assert.match(text, /"DAY"/);
+  assert.ok(labels(view).includes("Tomorrow"), "day chips under the title");
   for (const label of ["Time: 10:00 AM", "Due: None", "Project: DUI case", "Takes: 20 min"]) assert.ok(labels(view).includes(label), `${label} is a field`);
   assert.match(text, /I have to reach out to the lawyer/);
   const tap = async (label) => act(async () => view.root.findAll((n) => n.props.accessibilityLabel === label)[0].props.onPress());
