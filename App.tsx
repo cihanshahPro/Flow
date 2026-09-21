@@ -54,7 +54,7 @@ import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
 import { modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, moveHeadline, plannedDateFor, moveWhen, suggestPrompt, wakeThread } from "./src/thread";
+import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, moveHeadline, plannedDateFor, moveWhen, suggestPrompt } from "./src/thread";
 import { appendPlanUpdate, suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
@@ -401,18 +401,8 @@ function Flow() {
     setNotice("");
     setError("");
     setProcessingError("");
-    void (async () => {
-      // A starter Flow has not asked anything in yet gets its first question now, on opening.
-      const thread = (await loadDrafts()).find((t) => t.id === id);
-      if (thread) {
-        const woken = wakeThread(thread, { formula, plate: profile.plate });
-        if (woken !== thread) {
-          await saveDraft(woken);
-          await refresh();
-        }
-      }
-      await evaluateAll();
-    })().catch(() => {});
+    // Nothing is asked on opening: the thread is there when the person wants to talk, and Flow answers as an assistant.
+    void evaluateAll().catch(() => {});
   }
   function closeThread() {
     setScreen(openNoteId ? "recording" : lastTab);
