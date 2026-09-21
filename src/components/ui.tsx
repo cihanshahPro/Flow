@@ -102,7 +102,8 @@ export function Row({
   const content = (
     <Animated.View style={[s.row, !first && s.rowDivider, { transform: [{ translateX: x }] }]} {...(actions?.length ? pan.panHandlers : {})}>
       {lead}
-      <View style={{ flex: 1 }}>
+      {/* The words are their own accessible element, so a checkbox or ↗ beside them stays reachable. */}
+      <Pressable accessible accessibilityRole={onPress ? "button" : "text"} accessibilityLabel={accessibilityLabel ?? title} onPress={onPress} onLongPress={onLongPress} disabled={!onPress && !onLongPress} style={{ flex: 1 }}>
         <Text style={[T.row, done && s.done]} numberOfLines={2}>
           {title}
         </Text>
@@ -111,7 +112,7 @@ export function Row({
             {sub}
           </Text>
         )}
-      </View>
+      </Pressable>
       {!!when && <Text style={[T.when, done && s.done]}>{when}</Text>}
       {trailing}
     </Animated.View>
@@ -136,7 +137,7 @@ export function Row({
           ))}
         </View>
       )}
-      <Pressable accessibilityRole={onPress ? "button" : undefined} accessibilityLabel={accessibilityLabel ?? title} onPress={onPress} onLongPress={onLongPress} disabled={!onPress && !onLongPress}>
+      <Pressable accessible={false} onPress={onPress} onLongPress={onLongPress} disabled={!onPress && !onLongPress}>
         {content}
       </Pressable>
     </View>
