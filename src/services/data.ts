@@ -39,3 +39,27 @@ export async function deleteAllData(): Promise<void> {
   }
   await Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
 }
+
+/**
+ * Dev only: load a phone's exported data (the mirror the dev server keeps)
+ * into this device, so the owner's real recordings and threads are what gets
+ * tested — never demo data. Records and threads are upserted; audio files are
+ * not copied (their notes keep the text).
+ */
+export async function importAllData(snapshot: { records?: { id: string; kind: string; data: unknown }[]; threads?: { id: string }[] }): Promise<{ records: number; threads: number }> {
+  const db = await database();
+  let n = 0;
+  for (const r of snapshot.records ?? []) {
+    if (!r?.id || !r?.kind) continue;
+    await db.runAsync("INSERT INTO records (id,kind,payload) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", r.id, r.kind, JSON.stringify(r.data));
+    n++;
+  }
+  await db.execAsync("CREATE TABLE IF NOT EXISTS flow_drafts (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL);");
+  let t = 0;
+  for (const d of snapshot.threads ?? []) {
+    if (!d?.id) continue;
+    await db.runAsync("INSERT INTO flow_drafts(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", d.id, JSON.stringify(d));
+    t++;
+  }
+  return { records: n, threads: t };
+}

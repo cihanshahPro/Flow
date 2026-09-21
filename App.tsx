@@ -43,11 +43,11 @@ import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
 import { ensureSteps, processCapturedNote, replayOldRecordings } from "./src/services/processing";
 import { buildStamp, mirrorToDev } from "./src/services/mirror";
-import { capabilities } from "./src/services/processors";
+import { capabilities, devLanConfig } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
 import type { Consent } from "./src/ai-policy";
 import { EVENING_ID, scheduledSummary, sendTestReminder, syncReminders } from "./src/services/reminders";
-import { exportAllData, deleteAllData } from "./src/services/data";
+import { exportAllData, deleteAllData, importAllData } from "./src/services/data";
 import Constants from "expo-constants";
 import { newProfile, needsFunnel, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
@@ -917,6 +917,21 @@ function Flow() {
             onExport={() => void run(async () => void (await Share.share({ message: await exportAllData() })))}
             onDevReminder={typeof __DEV__ !== "undefined" && __DEV__ ? () => void sendTestReminder() : undefined}
             onDevScheduled={typeof __DEV__ !== "undefined" && __DEV__ ? () => void scheduledSummary().then((lines) => Alert.alert("Scheduled", lines.join("\n") || "Nothing scheduled.")) : undefined}
+            onDevImport={
+              typeof __DEV__ !== "undefined" && __DEV__ && devLanConfig()
+                ? () =>
+                    void run(async () => {
+                      // The owner's phone, as mirrored on the dev server: the real scenario every test runs on.
+                      const lan = devLanConfig()!;
+                      const res = await fetch(`${lan.url}/mirror/${process.env.EXPO_PUBLIC_OWNER_INSTALL ?? "110da00b-1bb2-48da-9df9-4c747141d76e"}`, { headers: { Authorization: "Bearer " + lan.token } });
+                      if (!res.ok) throw new Error("No mirror on the dev server.");
+                      const got = await importAllData(await res.json());
+                      await refresh();
+                      await refreshCalendar();
+                      setNotice(`Loaded ${got.records} records and ${got.threads} threads from the owner's phone.`);
+                    })
+                : undefined
+            }
             cloud={onDeviceAi ? undefined : { on: cloudConsent === "allowed", onChange: (on) => void run(async () => { await setCloudConsent(on ? "allowed" : "declined"); setCloudConsentState(on ? "allowed" : "declined"); }) }}
             onDeleteAll={() =>
               Alert.alert("Delete all your data?", "Every thread, move, recording and setting on this phone will be erased. This cannot be undone.", [

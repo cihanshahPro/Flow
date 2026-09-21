@@ -237,6 +237,19 @@ export function createVoiceServer({
       req.resume();
       return;
     }
+    // Dev: hand a phone's mirrored data back, so any device (the simulator) can test on the owner's real recordings.
+    if (req.method === "GET" && req.url.startsWith("/mirror/")) {
+      const install = decodeURIComponent(req.url.slice(8)).replace(/[^a-zA-Z0-9-]/g, "").slice(0, 64);
+      try {
+        const body = await readFile(join(fixturesDir || config.temp, "mirror", `${install}.json`), "utf8");
+        const snap = JSON.parse(body);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(snap.data ?? snap));
+      } catch {
+        reply(404, { error: "No mirror for that install." });
+      }
+      return;
+    }
     if (req.method !== "POST" || (req.url !== "/process" && req.url !== "/plan" && req.url !== "/chat" && req.url !== "/mirror")) {
       reply(404, { error: "Not found" });
       req.resume();
