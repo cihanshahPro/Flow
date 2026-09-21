@@ -96,6 +96,8 @@ export type Placement = {
   date?: string;
   slot?: FreeSlot;
   chaseDate?: string;
+  /** "by Friday": the due date, separate from the day it is done. */
+  deadline?: string;
   /** Why it landed there when the person's own date was moved. */
   note?: string;
 };
@@ -127,9 +129,25 @@ export function placePlan(items: (PlanItem & { projectId?: string; area: Area })
       continue;
     }
     // action or appointment
-    let date = said?.date ?? today;
+    // "by Friday" is a deadline: the move goes into the first gap before it, and carries the due date.
+    const deadline = said && isDeadline(item.when) ? said.date : undefined;
+    let date = deadline ? today : (said?.date ?? today);
     if (date < today) date = today;
     let note: string | undefined;
+    // The clock the person gave: that slot when it is free, otherwise the next gap with a note.
+    const saidTime = said?.time && (clockIn(item.when ?? "") || /\b(evening|tonight|morning|afternoon|noon|lunch)\b/i.test(item.when ?? "")) ? said.time : undefined;
+    if (item.kind === "action" && saidTime && !deadline) {
+      const start = new Date(`${date}T${saidTime}:00`);
+      const end = new Date(start.getTime() + minutes * 60000);
+      const clash = placed.some((e) => !e.allDay && new Date(e.start) < end && new Date(e.end) > start);
+      if (!clash && !away.has(date) && start.getTime() > now.getTime() - 5 * 60000) {
+        const slot: FreeSlot = { date, start: start.toISOString(), end: end.toISOString(), minutes };
+        out.push({ item, date, slot });
+        placed.push(fake(item.title, slot));
+        continue;
+      }
+      note = clash ? `${saidTime} is taken` : undefined;
+    }
     if (item.kind === "appointment" && said?.time) {
       const start = new Date(`${date}T${said.time}:00`);
       const slot: FreeSlot = { date, start: start.toISOString(), end: new Date(start.getTime() + minutes * 60000).toISOString(), minutes };
@@ -142,24 +160,35 @@ export function placePlan(items: (PlanItem & { projectId?: string; area: Area })
     const slot = placeInGap(placed, open, minutes, now, away);
     if (slot) {
       if (slot.date !== open && !note) note = "first gap";
-      out.push({ item, date: slot.date, slot, note });
+      out.push({ item, date: slot.date, slot, note, ...(deadline ? { deadline } : {}) });
       placed.push(fake(item.title, slot));
-    } else out.push({ item, date: open, note: note ?? "no gap this week" });
+    } else out.push({ item, date: open, note: note ?? "no gap this week", ...(deadline ? { deadline } : {}) });
   }
   return out;
 }
 
 /** "tomorrow", "Monday", "end of month", "Nov 3", "this evening" → a date (and a time when one was said). */
+/** "10am", "2:30pm", "at 14:00" said in the words, as "HH:MM"; the clock the person gave beats any default. */
+export function clockIn(words: string): string | undefined {
+  const t = words.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  if (t) return `${String((Number(t[1]) % 12) + (t[3].toLowerCase() === "pm" ? 12 : 0)).padStart(2, "0")}:${t[2] ?? "00"}`;
+  const h = words.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\b/i);
+  if (h && Number(h[1]) < 24) return `${String(Number(h[1])).padStart(2, "0")}:${h[2] ?? "00"}`;
+  return undefined;
+}
+
+/** "by Friday", "before the end of the month": a deadline, not a day to do it. */
+export function isDeadline(words: string | undefined): boolean {
+  return /^\s*(?:by|before|until|no later than)\b/i.test(words ?? "");
+}
+
 export function dateFromWords(words: string | undefined, now = new Date()): { date: string; time?: string } | undefined {
   if (!words?.trim()) return undefined;
+  const clock = clockIn(words);
   const w = whenFromAnswer(words, now);
-  if (w) return { date: w.date, time: w.time };
+  if (w) return { date: w.date, time: clock ?? w.time };
   const hint = extractDueHints(words, now)[0];
-  if (hint) {
-    const t = words.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
-    const time = t ? `${String((Number(t[1]) % 12) + (t[3].toLowerCase() === "pm" ? 12 : 0)).padStart(2, "0")}:${t[2] ?? "00"}` : undefined;
-    return { date: hint.date, ...(time ? { time } : {}) };
-  }
+  if (hint) return { date: hint.date, ...(clock ? { time: clock } : {}) };
   return undefined;
 }
 

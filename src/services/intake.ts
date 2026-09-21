@@ -175,7 +175,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
       done: false,
       plannedDate: pl.slot ? pl.slot.date : (pl.date ?? ""),
       plannedTime: time,
-      deadline: "",
+      deadline: pl.deadline ?? "",
       waitingOn: it.kind === "waiting" ? (it.person ?? project?.title ?? "someone") : "",
       chaseDate: pl.chaseDate ?? "",
       notes: it.evidence,

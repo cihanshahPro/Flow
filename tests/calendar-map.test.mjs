@@ -68,3 +68,18 @@ test("areas, dates and projects: the map's matching is code", () => {
   assert.deepEqual(matched.get("dui")?.map((e) => e.id), ["court"], "the court hearing belongs to the DUI case");
   assert.equal(isProject([{ title: "x", kind: "action", project: "Call mum", evidence: "" }], "Call mum"), false);
 });
+
+test("the clock the person said is kept when free; 'by Friday' is a deadline with the move in the first gap", () => {
+  const items = attachItems([
+    { title: "Call the DUI lawyer", kind: "action", project: "DUI case", when: "today at 10am", evidence: "a" },
+    { title: "Compare two insurance quotes", kind: "action", project: "", when: "this evening", evidence: "b" },
+    { title: "Follow up both lawyers", kind: "action", project: "DUI case", when: "by Friday", evidence: "c" },
+    { title: "Message Ali", kind: "action", project: "", when: "tomorrow 2pm", evidence: "d" },
+  ], []);
+  const placed = placePlan(items, week, new Date(2026, 8, 21, 8, 0));
+  assert.equal(placed[0].slot.start, at(0, 10), "10am on Monday is free: kept");
+  assert.equal(placed[1].slot.start, at(0, 19), "this evening → 19:00 today");
+  assert.equal(placed[2].deadline, "2026-09-25");
+  assert.equal(placed[2].date, "2026-09-21", "done in the first gap, not on Friday");
+  assert.equal(placed[3].slot.start, at(1, 14), "tomorrow 2pm");
+});
