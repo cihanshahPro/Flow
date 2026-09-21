@@ -128,17 +128,18 @@ Nothing is built until D10 and D11 are answered. D12–D14 can be answered befor
 
 ## 10 · Name (D15)
 
-"Flow" is out: 28 App Store apps named Flow, the top one with 404K ratings. "Muse" is theirs (53 apps, Meta's at 27K). Muse works because it names a *being* that does something for you. Checked ~120 four-letter words against the App Store search API (exact first-word matches, ratings of the biggest) and whois/DNS, 21 Sep 2026. Plain words that only describe (dote, heed, deft, tend) were rejected by the owner: they wake nothing up.
+"Flow" is out: 28 App Store apps named Flow, the top one with 404K ratings. "Muse" is theirs. The owner's brief: it must feel like Apple — a plain word nobody thought of using, the way Flow once was. Descriptive words (dote, heed, deft, tend) and mythic ones (seer, spur) were rejected. Checked ~170 four-letter words against the App Store search API (exact first-word matches, ratings of the biggest) and DNS/whois, 21 Sep 2026.
 
-| Name | What it wakes up | App Store today | Note |
+| Name | Why it is not thought of | App Store today | Domains |
 |---|---|---|---|
-| **Seer** | the one who sees ahead — "Seer sees your day before you do"; same mythic register as Muse; fits the briefing and Ideas | 17 apps, biggest 114 ratings, none in productivity | seer.app/.ai/.so/.day taken (true of every real 4-letter word); site = `getseer.app`-style |
-| **Spur** | spurs you on — goals, momentum, the funnel | 13 apps, biggest 130 ratings | spur.app/.ai/.so taken; `spur.day` free |
-| Omen | a sign of what's coming | 6 apps, biggest 7 ratings | **out**: omen.app is HP's OMEN gaming brand, trademark risk |
-| Bard | the storyteller | 2 apps | **out**: Google's former chatbot name |
-| Vega · Elio · Nyla · Zade | empty, but say nothing | 0–8 tiny apps | names, not meanings |
+| **Okay** | The name is the reply. You say a thing; it says "Okay." Nobody has named an app after the word that means *handled*. | **0** apps named Okay | okay.app/.ai/.so/.day taken — as for every real word; `then.app` and `tray.app` are the only free .app in this batch |
+| **Then** | What comes next. "Then" is the whole product: this, then that. | 8 apps, biggest 24 ratings | **then.app free**, then.day free |
+| **Soon** | Everything coming, in one word; the briefing and Ideas are "soon" | 10 apps, biggest 39 | soon.app taken, soon.day taken |
+| **Tray** | Takes things off your plate and onto its tray; an object name like Pages, Notes | 9 apps, all 0 ratings | tray.app taken, tray.day free |
+| Sail | smooth sailing — the Flow feeling | 26 tiny apps | sail.app taken |
+| Told / Said / Sure / Done | replies and states | 2–15 tiny apps | weaker as a word on an icon |
 
-Recommendation: **Seer**. Listing name "Seer — your day, seen ahead". Bundle id and `seer://` scheme change in build 10 (Samil: new App Store Connect record; bundle ids cannot be renamed). USPTO class 9/42 search is Samil's check before build 12.
+Recommendation: **Okay**. It reads like Apple (Journal, Freeform, Reminders), it is what the app says after every message, and no one has taken it. App Store name "Okay — say it, it's handled". Runner-up **Then** (the one with a free `.app`). Trademark: "Okay" is a common word; a class 9/42 mark is weak but the name is usable — Samil checks USPTO before build 12. Bundle id and URL scheme change in build 10 (new App Store Connect record).
 
 ## 11 · Goals as the funnel
 
