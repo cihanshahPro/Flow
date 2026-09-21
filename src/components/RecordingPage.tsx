@@ -121,11 +121,11 @@ export default function RecordingPage({
             )}
             {mine.length === 0 && <Empty text="Flow is still reading this, or nothing in it needed a move." />}
             {projects.length > 0 && onAsk && (
-              <Section label="Ask Flow">
+              <View style={{ marginTop: 18 }}>
                 {projects.map((p, i) => (
-                  <Row key={p.id} first={i === 0} title={p.title} sub="talk it through" when="›" onPress={() => onAsk(p.id)} accessibilityLabel={`Ask Flow about ${p.title}`} />
+                  <Row key={p.id} first={i === 0} title="ASK FLOW" sub={projects.length > 1 ? `about ${p.title}` : undefined} when="›" onPress={() => onAsk(p.id)} accessibilityLabel={`Ask Flow about ${p.title}`} />
                 ))}
-              </Section>
+              </View>
             )}
           </>
         ) : (

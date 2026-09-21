@@ -20,7 +20,7 @@ test("the week is read as days, gaps and full days", () => {
 
 test("watch-outs come from the calendar alone: the court date, the trip, the birthday with nothing planned", () => {
   const w = watchOuts(week, now);
-  assert.ok(w.some((x) => x.kind === "important" && /court/i.test(x.title) && x.note === "tomorrow · 10am"));
+  assert.ok(w.some((x) => x.kind === "important" && /court/i.test(x.title) && x.note === "tomorrow 10am · hour kept clear before"));
   assert.ok(w.some((x) => x.kind === "trip" && x.date === "2026-09-24"));
   assert.ok(w.some((x) => x.kind === "occasion" && /birthday/i.test(x.title)));
   assert.ok(!w.some((x) => /dinner/i.test(x.title)), "dinner is not a watch-out");

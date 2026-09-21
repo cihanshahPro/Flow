@@ -14,7 +14,7 @@ export default function Today({
   events,
   tasks,
   tomorrow = [],
-  build,
+  projects = [],
   notice = "",
   error = "",
   busy = false,
@@ -34,7 +34,8 @@ export default function Today({
   tasks: Task[];
   /** Tomorrow's watch-outs, shown under CALENDAR with a pill. */
   tomorrow?: WatchOut[];
-  build?: string;
+  /** Project titles by id, for the row's second line. */
+  projects?: { id: string; title: string }[];
   notice?: string;
   error?: string;
   busy?: boolean;
@@ -62,7 +63,7 @@ export default function Today({
   const label = (t: Task) => (t.done ? "done" : t.plannedTime ? t.plannedTime : "");
   const acts = (t: Task) => (t.done ? undefined : [
     { label: "Tomorrow", color: C.ink2, onPress: () => onTomorrow(t) },
-    { label: "Evening", color: C.accent, onPress: () => onEvening(t) },
+    { label: "This evening", color: C.accent, onPress: () => onEvening(t) },
     { label: "Delete", color: C.red, onPress: () => onDelete(t) },
   ]);
   const moveRow = (t: Task, i: number) => (
@@ -70,7 +71,7 @@ export default function Today({
       key={t.id}
       first={i === 0}
       title={t.title}
-      sub={[t.routineId ? "routine" : t.projectId ? undefined : t.area, t.minutes ? `${t.minutes} min` : undefined].filter(Boolean).join(" · ") || undefined}
+      sub={[t.routineId ? "routine" : projects.find((p) => p.id === t.projectId)?.title ?? t.area, t.deadline && !t.done ? `by ${new Date(`${t.deadline}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : t.minutes ? `${t.minutes} min` : undefined].filter(Boolean).join(" · ") || undefined}
       when={label(t)}
       done={t.done}
       lead={<Check on={t.done} onPress={() => onTick(t)} label={t.done ? `Reopen ${t.title}` : `Done: ${t.title}`} />}
@@ -83,7 +84,7 @@ export default function Today({
   return (
     <Screen
       title="Today"
-      subtitle={`${dayName} · ${onCalendar.length} event${onCalendar.length === 1 ? "" : "s"} · ${moves.length + evening.length} move${moves.length + evening.length === 1 ? "" : "s"}${build ? " · " + build : ""}`}
+      subtitle={`${dayName} · ${onCalendar.length} event${onCalendar.length === 1 ? "" : "s"} · ${moves.length + evening.length} move${moves.length + evening.length === 1 ? "" : "s"}`}
       fab={<Fab onRecord={onRecord} onWrite={onWrite} busy={busy} />}
     >
       {!!error && <Notice text={error} tone="red" onDismiss={onDismissNotice} />}

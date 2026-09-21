@@ -258,6 +258,30 @@ export function Button({ label, onPress, busy = false, quiet = false, style }: {
   );
 }
 
+/** A day as the skeleton draws it: the day on the left, tinted items stacked on the right. */
+export type DayItem = { key: string; text: string; kind: "event" | "flow" | "chase" | "empty"; onPress?: () => void; accessibilityLabel?: string };
+export function DayBlock({ date, today = false, items, first = false, footer }: { date: string; today?: boolean; items: DayItem[]; first?: boolean; footer?: string }) {
+  const d = new Date(`${date}T12:00:00`);
+  return (
+    <View style={[s.day, !first && s.dayDivider]}>
+      <View style={s.dayCol}>
+        <Text style={s.dayName}>{d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}</Text>
+        <Text style={[s.dayNum, today && s.dayToday]}>{d.getDate()}</Text>
+      </View>
+      <View style={s.dayItems}>
+        {items.map((it) => (
+          <Pressable key={it.key} accessibilityRole={it.onPress ? "button" : undefined} accessibilityLabel={it.accessibilityLabel ?? it.text} onPress={it.onPress} disabled={!it.onPress} style={[s.dayItem, it.kind === "event" && { backgroundColor: C.violetBg }, it.kind === "flow" && { backgroundColor: C.accentBg }, it.kind === "chase" && { backgroundColor: C.amberBg }]}>
+            <Text style={[s.dayItemText, it.kind === "empty" && { color: C.ink3 }]} numberOfLines={2}>
+              {it.text}
+            </Text>
+          </Pressable>
+        ))}
+        {!!footer && <Text style={s.dayFooter}>{footer}</Text>}
+      </View>
+    </View>
+  );
+}
+
 export function Para({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   return (
     <View style={[s.para, style]}>
@@ -330,6 +354,16 @@ const s = StyleSheet.create({
   quiet: { marginTop: 4, paddingVertical: 8, alignItems: "center" },
   quietText: { color: C.accent, fontSize: 14, fontWeight: "600" },
   para: { paddingHorizontal: 20, paddingTop: 8 },
+  day: { flexDirection: "row", gap: 12, paddingHorizontal: 20, paddingVertical: 8 },
+  dayDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.hair },
+  dayCol: { width: 40, alignItems: "center" },
+  dayName: { fontSize: 11, fontWeight: "700", color: C.ink3, letterSpacing: 0.5 },
+  dayNum: { fontSize: 18, fontWeight: "700", color: C.ink, lineHeight: 24, minWidth: 30, textAlign: "center", borderRadius: 10, overflow: "hidden" },
+  dayToday: { color: C.white, backgroundColor: C.accent },
+  dayItems: { flex: 1, gap: 4 },
+  dayItem: { paddingVertical: 6, paddingHorizontal: 9, borderRadius: 7, backgroundColor: C.tint },
+  dayItemText: { fontSize: 13.5, color: C.ink, fontWeight: "500" },
+  dayFooter: { fontSize: 12, color: C.ink3, fontWeight: "500", paddingTop: 2 },
   paraText: { fontSize: 14.5, lineHeight: 21, color: C.ink },
   empty: { paddingHorizontal: 20, paddingVertical: 14 },
   emptyText: { fontSize: 14, color: C.ink2 },

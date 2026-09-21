@@ -157,14 +157,15 @@ test("Me is calendars · ways in · rhythm · data, as rows; Progress shows the 
   assert.match(text, /"Holidays"/);
   assert.match(text, /off, not planned around/);
   assert.match(text, /chases in the .*Flow.* list · ticks sync back/);
-  assert.match(text, /"8:30 AM"/);
-  assert.match(text, /"7:00 PM"/);
+  assert.match(text, /"8:30 AM ›"/);
+  assert.match(text, /"7:00 PM ›"/);
   assert.doesNotMatch(text, /PROFILE COMPLETE|ON YOUR PLATE|Redo the test/, "no personality layer, no gear");
   await press(view, "Record feedback");
   assert.deepEqual(fb, ["voice"]);
   await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Plan around Holidays")[0].props.onValueChange(true));
   assert.deepEqual(cals, [["h", true]]);
-  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Morning plan later by 30 minutes")[0].props.onPress());
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Morning plan: 8:30 AM")[0].props.onPress());
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "9:00 AM")[0].props.onPress());
   assert.deepEqual(times, ["09:00"]);
   assert.ok(labels(view).includes("Export my data"));
   assert.ok(labels(view).includes("Delete all my data"));

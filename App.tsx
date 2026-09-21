@@ -823,7 +823,7 @@ function Flow() {
             events={events}
             tasks={tasks}
             tomorrow={watchOuts(events, new Date(), 2).filter((w) => w.date !== new Date().toISOString().slice(0, 10))}
-            build={buildStamp()}
+            projects={realThreads.map((t) => ({ id: t.id, title: t.title }))}
             notice={notice}
             error={error || processingError}
             busy={busy}
@@ -888,6 +888,7 @@ function Flow() {
             morningTime={profile.morningTime ?? "08:30"}
             eveningTime={profile.eveningTime ?? "19:00"}
             version={Constants.expoConfig?.version ?? ""}
+            build={buildStamp()}
             busy={busy}
             onConnectCalendar={() => void connectCalendarNow()}
             onCalendar={(id, on) =>

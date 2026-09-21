@@ -132,7 +132,7 @@ export function watchOuts(events: CalEvent[], now = new Date(), days = 7): Watch
         if (!planned) out.push({ kind: "occasion", date, title: e.title, note: `${label(date)} · nothing planned yet`, eventId: e.id });
         continue;
       }
-      if (IMPORTANT.test(e.title) && week.indexOf(date) <= 2) out.push({ kind: "important", date, title: e.title, note: `${label(date)}${e.allDay ? "" : " · " + timeLabel(e.start)}`, eventId: e.id });
+      if (IMPORTANT.test(e.title) && week.indexOf(date) <= 2) out.push({ kind: "important", date, title: e.title, note: `${label(date)}${e.allDay ? "" : " " + timeLabel(e.start) + " · hour kept clear before"}`, eventId: e.id });
     }
     if (dayIsFull(events, date) && !out.some((w) => w.date === date && (w.kind === "trip" || w.kind === "full")))
       out.push({ kind: "full", date, title: `${capitalise(label(date))} is full`, note: `${on.filter((e) => !e.allDay).length} things · no room` });

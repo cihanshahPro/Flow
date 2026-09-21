@@ -70,7 +70,8 @@ export function closureLine(placements: Placement[], watch: WatchOut[]): string 
   const bits = [`${placements.length} thing${placements.length === 1 ? "" : "s"} placed`];
   if (dated) bits.push(`${dated} on your calendar`);
   if (watch.length) bits.push(`${watch.length} to watch`);
-  return `✅ That's everything. ${bits.join(" · ")}. Nothing left in your head — see you tomorrow morning.`;
+  void bits;
+  return "That's everything. Nothing left in your head.";
 }
 
 /** Run the intake for a saved, transcribed dump. Everything it creates is saved before it returns. */

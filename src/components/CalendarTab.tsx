@@ -2,7 +2,7 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { eventsOn, timeLabel, watchOuts, weekDays, type CalEvent } from "../calendar.ts";
 import { localDate, type Task } from "../model.ts";
-import { Dot, Empty, Fab, Pill, Row, Screen, Section } from "./ui.tsx";
+import { DayBlock, Dot, Fab, Pill, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
 /** Everything on one day, in order: the phone's events, Flow's moves (blue), chases (amber). */
@@ -80,28 +80,20 @@ export default function CalendarTab({
           ))}
         </Section>
       )}
-      {list.map((date) => {
-        const d = new Date(`${date}T12:00:00`);
+      {list.map((date, i) => {
         const items = dayItems(events, tasks, date);
-        const label = `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.getDate()}`;
         return (
-          <Section key={date} label={label} right={date === today ? "TODAY" : undefined}>
-            {items.length === 0 ? (
-              <Empty text="nothing planned yet" />
-            ) : (
-              items.map((it, i) => (
-                <Row
-                  key={it.key}
-                  first={i === 0}
-                  title={it.title}
-                  when={it.when}
-                  lead={<Dot color={it.kind === "flow" ? C.accent : it.kind === "chase" ? C.amber : C.violet} />}
-                  onPress={it.task ? () => onOpenMove(it.task!) : undefined}
-                  accessibilityLabel={it.task ? `Open move ${it.title}` : it.title}
-                />
-              ))
-            )}
-          </Section>
+          <DayBlock
+            key={date}
+            date={date}
+            today={date === today}
+            first={i === 0}
+            items={
+              items.length
+                ? items.map((it) => ({ key: it.key, text: `${it.title}${it.when ? " · " + it.when : ""}`, kind: it.kind, onPress: it.task ? () => onOpenMove(it.task!) : undefined, accessibilityLabel: it.task ? `Open move ${it.title}` : it.title }))
+                : [{ key: "empty", text: "nothing planned yet", kind: "empty" as const }]
+            }
+          />
         );
       })}
       <View style={{ height: 40 }} />

@@ -683,22 +683,24 @@ export function AudioPlayback({ uri }: { uri: string }) {
       setError(`Could not play this recording. ${message(failure)}`);
     }
   };
+  const pct = status.duration > 0 ? Math.min(1, status.currentTime / status.duration) : 0;
   return (
     <View style={styles.playback}>
-      <View style={styles.statusRow}>
+      <View style={styles.playerRow}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
             status.playing ? "Pause recording" : "Play recording"
           }
           onPress={() => void toggle()}
-          style={({ pressed }) => [styles.playButton, pressed && styles.dim]}
+          style={({ pressed }) => [styles.playCircle, pressed && styles.dim]}
         >
-          <Text style={styles.playText}>
-            {status.playing ? "Pause" : "Play audio"}
-          </Text>
+          <Text style={styles.playGlyph}>{status.playing ? "❚❚" : "▶"}</Text>
         </Pressable>
-        <Text style={styles.hint}>
+        <View style={styles.track}>
+          <View style={[styles.trackFill, { width: `${Math.round(pct * 100)}%` }]} />
+        </View>
+        <Text style={styles.playerTime}>
           {clock(status.currentTime * 1000)} / {clock(status.duration * 1000)}
         </Text>
       </View>
@@ -771,6 +773,12 @@ const styles = StyleSheet.create({
   notice: { color: C.green, fontSize: 13, lineHeight: 19 },
   link: { color: C.accent, fontWeight: "700", paddingVertical: 8 },
   playback: { gap: 6 },
+  playerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  playCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
+  playGlyph: { color: C.white, fontSize: 13, fontWeight: "800" },
+  track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: C.hair, overflow: "hidden" },
+  trackFill: { height: 4, backgroundColor: C.accent, borderRadius: 2 },
+  playerTime: { fontSize: 12, fontWeight: "600", color: C.ink2, fontVariant: ["tabular-nums"] },
   playButton: {
     backgroundColor: C.tint,
     borderRadius: 10,

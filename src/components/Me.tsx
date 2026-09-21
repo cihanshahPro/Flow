@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Linking, Switch, Text, View } from "react-native";
 import type { PhoneCalendar } from "../services/calendar-read.ts";
-import { Dot, Row, Screen, Section } from "./ui.tsx";
+import { Chips, Dot, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
 export const PRIVACY_URL = "https://kodavena.com/flowthread/privacy";
@@ -34,6 +34,7 @@ export default function Me({
   morningTime = "08:30",
   eveningTime = "19:00",
   version = "",
+  build = "",
   busy = false,
   onConnectCalendar,
   onCalendar,
@@ -58,6 +59,7 @@ export default function Me({
   morningTime?: string;
   eveningTime?: string;
   version?: string;
+  build?: string;
   busy?: boolean;
   onConnectCalendar: () => void;
   onCalendar: (id: string, on: boolean) => void;
@@ -74,18 +76,24 @@ export default function Me({
   cloud?: { on: boolean; onChange: (on: boolean) => void };
 }) {
   const subtitle = [name, `${recordings} recording${recordings === 1 ? "" : "s"}`, `${projects} project${projects === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
-  const timeRow = (label: string, time: string, onChange: (t: string) => void, first = false) => (
-    <Row
-      first={first}
-      title={label}
-      when={clock(time)}
-      trailing={
-        <View style={{ flexDirection: "row", gap: 14 }}>
-          <Text accessibilityRole="button" accessibilityLabel={`${label} earlier by 30 minutes`} onPress={() => onChange(shiftTime(time, -30))} style={{ color: C.accent, fontSize: 18, fontWeight: "700" }}>−</Text>
-          <Text accessibilityRole="button" accessibilityLabel={`${label} later by 30 minutes`} onPress={() => onChange(shiftTime(time, 30))} style={{ color: C.accent, fontSize: 18, fontWeight: "700" }}>+</Text>
+  const [picking, setPicking] = useState<string | null>(null);
+  const timeRow = (label: string, time: string, onChange: (t: string) => void, choices: string[], first = false) => (
+    <>
+      <Row first={first} title={label} when={`${clock(time)} ›`} onPress={() => setPicking((p) => (p === label ? null : label))} accessibilityLabel={`${label}: ${clock(time)}`} />
+      {picking === label && (
+        <View style={{ paddingHorizontal: 20 }}>
+          <Chips
+            items={choices.map(clock)}
+            value={clock(time)}
+            onChange={(v) => {
+              const t = choices[choices.map(clock).indexOf(v)];
+              if (t) onChange(t);
+              setPicking(null);
+            }}
+          />
         </View>
-      }
-    />
+      )}
+    </>
   );
   return (
     <Screen title="Me" subtitle={subtitle}>
@@ -112,8 +120,8 @@ export default function Me({
         {cloud && <Row title="Shape notes on a secure server" sub="only the text, never the audio · nothing stored" trailing={<Switch accessibilityLabel="Shape notes on a secure server" value={cloud.on} onValueChange={cloud.onChange} disabled={busy} />} />}
       </Section>
       <Section label="Rhythm">
-        {timeRow("Morning plan", morningTime, onMorning, true)}
-        {timeRow("Evening close", eveningTime, onEvening)}
+        {timeRow("Morning plan", morningTime, onMorning, ["06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "09:30"], true)}
+        {timeRow("Evening close", eveningTime, onEvening, ["17:00", "18:00", "18:30", "19:00", "19:30", "20:00", "21:00"])}
       </Section>
       <Section label="Tell Flow something">
         <Row first title="Record feedback" sub="about Flow itself · stays on this phone" when="›" onPress={() => onFeedback("voice")} accessibilityLabel="Record feedback" />
@@ -125,7 +133,7 @@ export default function Me({
         <Row title="Delete everything" when="›" onPress={onDeleteAll} accessibilityLabel="Delete all my data" />
         {onDevReminder && <Row title="Send a test reminder (dev)" when="›" onPress={onDevReminder} accessibilityLabel="Send a test reminder" />}
         {onDevScheduled && <Row title="Scheduled pushes (dev)" when="›" onPress={onDevScheduled} accessibilityLabel="Scheduled pushes" />}
-        {!!version && <Row title={`Flowthread ${version}`} />}
+        {!!version && <Row title={`Flowthread ${version}${build ? " · " + build : ""}`} />}
       </Section>
       <View style={{ height: 40 }} />
     </Screen>
