@@ -622,9 +622,9 @@ function Flow() {
       ? "Tell Flow something"
       : capture?.threadId
         ? current?.title ?? "Add to this thread"
-        : capture?.prompt
-          ? "Flow is listening"
-          : "What's on your mind?";
+        : capture?.mode === "text"
+          ? "Write it down"
+          : "Record";
   const captureHint =
     capture?.kind === "feedback"
       ? "About Flow itself. It stays here and never becomes a thread."
@@ -643,7 +643,7 @@ function Flow() {
           <View style={{ flex: 1 }}>
             <View style={s.sheetHead}>
               <Text style={s.kicker} numberOfLines={1}>
-                {capture?.kind === "feedback" ? "FEEDBACK" : capture?.threadId ? "THIS THREAD" : "NEW"}
+                {capture?.kind === "feedback" ? "FEEDBACK" : capture?.threadId ? "THIS THREAD" : ""}
               </Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeCapture} disabled={voiceBusy || busy || processing} hitSlop={12}>
                 <Text style={s.link}>Close</Text>
@@ -949,14 +949,14 @@ const s = StyleSheet.create({
   sheet: { flex: 1, backgroundColor: C.paper },
   sheetHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12 },
   sheetBody: { paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
-  sheetTitle: { fontSize: 28, lineHeight: 34, fontWeight: "700", color: C.ink },
-  kicker: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.muted },
+  sheetTitle: { fontSize: 30, lineHeight: 34, fontWeight: "800", color: C.ink, letterSpacing: -0.6 },
+  kicker: { fontSize: 11, letterSpacing: 1.2, fontWeight: "700", color: C.ink3 },
   body: { fontSize: 15, lineHeight: 22, color: C.muted },
   link: { color: C.blue, fontSize: 15, fontWeight: "700", paddingVertical: 6 },
-  card: { padding: 16, borderRadius: 18, backgroundColor: C.white, gap: 10 },
+  card: { padding: 16, borderRadius: 16, backgroundColor: C.tint, gap: 10 },
   cardTitle: { fontSize: 17, fontWeight: "700", color: C.ink },
-  input: { minHeight: 160, maxHeight: 300, padding: 16, borderRadius: 18, backgroundColor: C.card, fontSize: 17, lineHeight: 24, color: C.ink, textAlignVertical: "top" },
-  primary: { backgroundColor: C.blue, borderRadius: 16, paddingVertical: 15, alignItems: "center" },
+  input: { minHeight: 160, maxHeight: 300, padding: 16, borderRadius: 14, backgroundColor: C.tint, fontSize: 17, lineHeight: 24, color: C.ink, textAlignVertical: "top" },
+  primary: { backgroundColor: C.accent, borderRadius: 26, paddingVertical: 15, alignItems: "center" },
   primaryText: { color: C.white, fontSize: 16, fontWeight: "700" },
   error: { color: C.red, fontSize: 14, lineHeight: 20 },
 });
