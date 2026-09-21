@@ -337,8 +337,10 @@ export function parsePlan(value: unknown, sourceText: string): PlanShape {
   for (const entry of list.slice(0, PLAN_MAX_ITEMS)) {
     const r = (entry ?? {}) as Record<string, unknown>;
     const title = str(r.title, 120)?.trim(), evidence = str(r.evidence, 400)?.replace(/\s+/g, " ").trim();
-    const kind = PLAN_KINDS.find((k) => k === r.kind);
+    let kind = PLAN_KINDS.find((k) => k === r.kind);
     if (!title || !evidence || !kind) continue;
+    // "Waiting on myself" is a move.
+    if (kind === "waiting" && /^(?:self|me|myself|i|none|nobody)$/i.test((str(r.person, 120) ?? "").trim())) kind = "action";
     if (!normalized.includes(evidence.toLowerCase())) continue;
     // The title must be about something the person said, not a line from their calendar context.
     const person = (str(r.person, 120) ?? "").trim();

@@ -97,7 +97,7 @@ export default function RecordingPage({
       <ScrollView ref={scroll} contentContainerStyle={{ paddingBottom: 60 }}>
         {tab === "Summary" ? (
           <>
-            {!!paragraph?.trim() && <Text style={s.lead}>{paragraph.trim()}</Text>}
+            {(!!paragraph?.trim() || mine.length > 0) && <Text style={s.lead}>{paragraph?.trim() || saidBack(moves, waiting, later, today)}</Text>}
             {moves.length > 0 && (
               <Section label="Moves">
                 {moves.map((t, i) => (
@@ -141,6 +141,16 @@ export default function RecordingPage({
       </ScrollView>
     </Screen>
   );
+}
+
+/** Without the model's paragraph: the recording said back from what came of it, plainly. */
+function saidBack(moves: Task[], waiting: Task[], later: Task[], today: string): string {
+  const day = (d?: string) => (d ? (d === today ? "today" : new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })) : "");
+  const parts: string[] = [];
+  if (moves.length) parts.push(`${moves.length === 1 ? "One thing to do" : `${moves.length} things to do`}: ${moves.map((t) => `${t.title.toLowerCase()}${t.plannedDate ? ` (${day(t.plannedDate)})` : ""}`).join(", ")}.`);
+  if (waiting.length) parts.push(`Waiting on ${waiting.map((t) => t.waitingOn).filter((x, i, a) => x && a.indexOf(x) === i).join(" and ")}${waiting.some((t) => t.chaseDate) ? `, chase ${day(waiting.find((t) => t.chaseDate)?.chaseDate)}` : ""}.`);
+  if (later.length) parts.push(`Later: ${later.map((t) => t.title.toLowerCase()).join(", ")}.`);
+  return parts.join(" ");
 }
 
 const s = StyleSheet.create({
