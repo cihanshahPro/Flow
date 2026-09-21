@@ -156,7 +156,12 @@ export function localPlan(text: string, now = new Date()): PlanItem[] {
   return segmentDump(text).map((s) => {
     const kind = WAITING.test(s.evidence) ? "waiting" : LATER.test(s.evidence) ? "later" : "action";
     const person = s.evidence.match(PERSON)?.[1];
-    const when = extractDueHints(s.evidence, now)[0]?.phrase;
+    // The day as they said it, plus a clock or a daypart when they gave one ("today at 2pm", "this evening", "by Friday").
+    const hint = extractDueHints(s.evidence, now)[0]?.phrase;
+    const clock = s.evidence.match(/\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i)?.[0];
+    const part = s.evidence.match(/\b(?:this\s+)?(?:evening|tonight|morning|afternoon)\b/i)?.[0];
+    const by = hint && new RegExp(`\\b(?:by|before|until)\\s+${hint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(s.evidence) ? `by ${hint}` : undefined;
+    const when = by ?? (clock ? [hint, clock].filter(Boolean).join(" ") : part ?? hint);
     // A verb phrase becomes a move in the second person; a noun phrase ("My DEY case") stays the thing's name.
     const move = cleanMove(s.title, 50);
     const title = kind === "action" && !/^(?:my|our|the|a|an|this|that)\b/i.test(move) ? secondPerson(move) : s.title;
