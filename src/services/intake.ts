@@ -115,7 +115,14 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
       savedThreads.push(started);
     } else {
       const thread = live.find((t) => t.id === p.id)!;
-      const updated = respondToRecording(appendPlanUpdate(thread, suggestDraft(`${note.id}:${slug(p.title)}`, words)), `${note.id}:${slug(p.title)}`, words, { plate: profile?.plate ?? undefined, quiet: true, now });
+      // Only what the thread has not heard yet: a repeated sentence never lands twice.
+      const heard = [thread.source, ...thread.updates].join(" ").toLowerCase().replace(/\s+/g, " ");
+      const fresh = p.items.map((i) => i.evidence).filter((e) => !heard.includes(e.toLowerCase().replace(/\s+/g, " ").trim())).join(" ");
+      if (!fresh.trim()) {
+        savedThreads.push(thread);
+        continue;
+      }
+      const updated = respondToRecording(appendPlanUpdate(thread, suggestDraft(`${note.id}:${slug(p.title)}`, fresh)), `${note.id}:${slug(p.title)}`, fresh, { plate: profile?.plate ?? undefined, quiet: true, now });
       const merged = { ...updated, people: [...new Set([...(thread.people ?? []), ...people])], sourceNoteIds: [...new Set([...(updated.sourceNoteIds ?? []), note.id])] };
       await saveDraft(merged);
       savedThreads.push(merged);
@@ -130,6 +137,9 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     const project = key ? projects.get(key) : undefined;
     const id = project ? `flow:${project.id}:${slug(it.title)}-${i}` : `flow:area:${slug(it.area)}:${slug(it.title)}-${i}`;
     if (workspace.tasks.some((t) => t.id === id)) continue;
+    // The same move said again (in other words) is one move: an open task in the project with the same words stays.
+    const mine = workspace.tasks.filter((t) => !t.done && (project ? t.projectId === project.id : t.area === it.area && !t.projectId));
+    if (mine.some((t) => similar(t.title, it.title))) continue;
     const time = pl.slot ? `${String(new Date(pl.slot.start).getHours()).padStart(2, "0")}:${String(new Date(pl.slot.start).getMinutes()).padStart(2, "0")}` : "";
     const task: Task = {
       id,
@@ -195,6 +205,14 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
 
 function fromShape(i: PlanShapeItem): PlanItem {
   return { title: i.title, kind: i.kind, project: i.project, ...(i.area ? { area: i.area } : {}), ...(i.person ? { person: i.person } : {}), ...(i.when ? { when: i.when } : {}), ...(i.minutes ? { minutes: i.minutes } : {}), evidence: i.evidence };
+}
+
+function similar(a: string, b: string): boolean {
+  const x = contentWordsOf(a), y = contentWordsOf(b);
+  if (!x.size || !y.size) return false;
+  let shared = 0;
+  for (const w of x) if (y.has(w)) shared++;
+  return shared / Math.min(x.size, y.size) >= 0.7;
 }
 
 function capitalise(s: string): string {

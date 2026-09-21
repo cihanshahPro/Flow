@@ -256,3 +256,26 @@ test("a later dump attaches to the projects it names instead of starting new one
   assert.equal(harness.drafts[0].messages.filter((m) => m.kind === "transcript").length, 2, "the words went to the DUI thread");
   assert.ok(harness.tasks[0].id.startsWith("flow:dui:"));
 });
+
+test("saying the same things again adds nothing twice: no repeated passage, no duplicate move", async () => {
+  harness.reset();
+  const dump = "I need to call the DUI lawyer tomorrow. Also start the app portfolio, a free app for Ali first.";
+  harness.plan = { items: [
+    { title: "Call the DUI lawyer", kind: "action", project: "DUI case", area: "Legal & admin", person: "the lawyer", when: "tomorrow", evidence: "call the DUI lawyer tomorrow" },
+    { title: "Start the app portfolio", kind: "action", project: "App portfolio", area: "Work", person: "Ali", evidence: "start the app portfolio" },
+  ] };
+  harness.notes = [{ id: "r1", captureKind: "thought", text: dump, createdAt: "2026-09-20T18:00:00Z" }];
+  await processCapturedNote(harness.notes[0]);
+  const tasksAfterFirst = harness.tasks.length;
+  harness.notes = [...harness.notes, { id: "r2", captureKind: "thought", text: dump + " That's all.", createdAt: "2026-09-20T19:00:00Z" }];
+  harness.plan = { items: [
+    { title: "Call the lawyer about the DUI", kind: "action", project: "DUI case", area: "Legal & admin", person: "the lawyer", when: "tomorrow", evidence: "call the DUI lawyer tomorrow" },
+    { title: "Start the app portfolio", kind: "action", project: "App portfolio", area: "Work", person: "Ali", evidence: "start the app portfolio" },
+  ] };
+  const again = await processCapturedNote(harness.notes[1]);
+  assert.equal(again.kind, "intake");
+  assert.equal(harness.drafts.length, 2, "same two projects");
+  assert.equal(harness.tasks.length, tasksAfterFirst, "no duplicate moves");
+  const dui = harness.drafts.find((d) => d.title === "DUI case");
+  assert.equal(dui.messages.filter((m) => m.kind === "transcript").length, 1, "the repeated sentence did not land twice");
+});
