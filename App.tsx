@@ -526,6 +526,10 @@ function Flow() {
       if (result.kind === "intake") {
         setEvents(result.plan.events);
         const first = result.plan.placements[0];
+        if (result.plan.quick && !first) {
+          setNotice(result.plan.known ? "Already on your week — nothing added." : "Nothing to add from that.");
+          return;
+        }
         if (result.plan.quick && first) {
           // One line, one move: say where it landed and stay put.
           const when = first.slot ? `${new Date(first.slot.start).toLocaleDateString("en-US", { weekday: "short" })} ${new Date(first.slot.start).toTimeString().slice(0, 5)}` : first.chaseDate ? `chase ${new Date(`${first.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : first.date ? new Date(`${first.date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }) : "later";
