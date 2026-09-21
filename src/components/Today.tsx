@@ -1,251 +1,129 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { ThoughtDraft } from "../drafts.ts";
+import { View } from "react-native";
 import type { Task } from "../model.ts";
-import { moveHeadline } from "../thread.ts";
-import type { CalEvent, WatchOut } from "../calendar.ts";
-import { timeLabel } from "../calendar.ts";
-import Celebrate from "./Celebrate.tsx";
-import Thinking from "./Thinking.tsx";
+import { localDate } from "../model.ts";
+import { timeLabel, type CalEvent, type WatchOut } from "../calendar.ts";
+import { Check, Dot, Empty, Fab, Notice, Pill, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
 /**
- * Today's plan: what's on the calendar, your one move, anything to chase,
- * tomorrow's watch-out — and the Record button. There is nothing to organise.
+ * Today, in Things' shape: CALENDAR · MOVES · THIS EVENING · WAITING ON.
+ * Rows you can tick, swipe and tap. One Record button. Nothing else.
  */
 export default function Today({
-  threads,
+  events,
   tasks,
-  nextTask,
-  nextThread,
-  levelLabel,
-  timeWindow,
-  celebrate = 0,
-  suggestion,
-  busy = false,
-  processing = false,
-  onCancelProcessing,
-  day,
-  calendar,
+  tomorrow = [],
   build,
   notice = "",
   error = "",
+  busy = false,
+  now = new Date(),
+  onTick,
+  onOpenMove,
+  onTomorrow,
+  onEvening,
+  onDelete,
   onRecord,
   onWrite,
-  onRecordOther,
-  onOpenThread,
-  onDoneNext,
-  onCalendarNext,
-  onOpenMe,
   onDismissNotice,
+  calendar,
 }: {
-  threads: ThoughtDraft[];
+  events: CalEvent[];
   tasks: Task[];
-  nextTask?: Task;
-  nextThread?: ThoughtDraft;
-  levelLabel: string;
-  /** The person's usual time window, used to word when the move happens. */
-  timeWindow?: string;
-  /** Bumps each time a move is finished, to play the small celebration. */
-  celebrate?: number;
-  /** What Flow suggests recording next, from the person's own profile. */
-  suggestion: { title: string; prompt: string };
-  busy?: boolean;
-  /** Flow is shaping a thought in the background. */
-  processing?: boolean;
-  onCancelProcessing?: () => void;
-  /** Today as the calendar and the map see it. */
-  day?: { events: CalEvent[]; moves: Task[]; chases: Task[]; tomorrow: WatchOut[] };
-  /** Calendar connection: shown as one card until connected. */
-  calendar?: { connected: boolean; onConnect: () => void };
-  /** The commit this bundle was built from, so a phone and a screenshot can be matched to code. */
+  /** Tomorrow's watch-outs, shown under CALENDAR with a pill. */
+  tomorrow?: WatchOut[];
   build?: string;
   notice?: string;
   error?: string;
+  busy?: boolean;
+  now?: Date;
+  onTick: (task: Task) => void;
+  onOpenMove: (task: Task) => void;
+  onTomorrow: (task: Task) => void;
+  onEvening: (task: Task) => void;
+  onDelete: (task: Task) => void;
   onRecord: () => void;
   onWrite: () => void;
-  onRecordOther: () => void;
-  onOpenThread: (id: string) => void;
-  onDoneNext: () => void;
-  onCalendarNext: () => void;
-  onOpenMe: () => void;
   onDismissNotice: () => void;
+  calendar?: { connected: boolean; onConnect: () => void };
 }) {
-  const onCalendar = day?.events ?? [];
-  const chases = day?.chases ?? [];
-  const tomorrow = day?.tomorrow ?? [];
-  void threads;
+  const today = localDate(now);
+  const isEvening = (t: Task) => (t.plannedTime ? Number(t.plannedTime.slice(0, 2)) >= 17 : false);
+  const mine = tasks.filter((t) => t.kind !== "waiting" && !t.later && (t.plannedDate === today || (t.done && t.completedAt?.slice(0, 10) === today)));
+  const moves = mine.filter((t) => !isEvening(t)).sort((a, b) => Number(a.done) - Number(b.done) || (a.plannedTime || "99").localeCompare(b.plannedTime || "99"));
+  const evening = mine.filter(isEvening).sort((a, b) => Number(a.done) - Number(b.done));
+  const waiting = tasks.filter((t) => t.kind === "waiting" && !t.done && (!t.chaseDate || t.chaseDate <= localDate(new Date(now.getTime() + 6 * 864e5))));
+  const onCalendar = events.filter((e) => !e.mine && localDate(new Date(e.start)) <= today && localDate(new Date(new Date(e.end).getTime() - 1)) >= today);
+  const dayName = now.toLocaleDateString("en-US", { weekday: "long", day: "numeric" });
+  const label = (t: Task) => (t.done ? "done" : t.plannedTime ? t.plannedTime : "");
+  const acts = (t: Task) => (t.done ? undefined : [
+    { label: "Tomorrow", color: C.ink2, onPress: () => onTomorrow(t) },
+    { label: "Evening", color: C.accent, onPress: () => onEvening(t) },
+    { label: "Delete", color: C.red, onPress: () => onDelete(t) },
+  ]);
+  const moveRow = (t: Task, i: number) => (
+    <Row
+      key={t.id}
+      first={i === 0}
+      title={t.title}
+      sub={[t.projectId ? undefined : t.area, t.minutes ? `${t.minutes} min` : undefined, t.deadline && !t.done ? undefined : undefined].filter(Boolean).join(" · ") || undefined}
+      when={label(t)}
+      done={t.done}
+      lead={<Check on={t.done} onPress={() => onTick(t)} label={t.done ? `Reopen ${t.title}` : `Done: ${t.title}`} />}
+      trailing={t.deadline && !t.done ? <Pill text={`by ${new Date(`${t.deadline}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}`} tone={t.deadline <= localDate(new Date(now.getTime() + 2 * 864e5)) ? "red" : "amber"} /> : undefined}
+      onPress={() => onOpenMove(t)}
+      actions={acts(t)}
+      accessibilityLabel={`Open move ${t.title}`}
+    />
+  );
   return (
-    <View style={s.root}>
-      <View style={s.header}>
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-          <Text style={s.brand}>Today</Text>
-          {!!build && <Text style={s.build}>{build}</Text>}
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Your level" onPress={onOpenMe} style={s.pill}>
-          <Text style={s.pillText}>{levelLabel}</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
-        {!!error && (
-          <Pressable onPress={onDismissNotice} accessibilityRole="button" accessibilityLabel="Dismiss error">
-            <Text accessibilityRole="alert" style={s.error}>
-              {error}
-            </Text>
-          </Pressable>
-        )}
-        {!!notice && (
-          <Pressable onPress={onDismissNotice} accessibilityRole="button" accessibilityLabel="Dismiss status">
-            <Text accessibilityLiveRegion="polite" style={s.notice}>
-              {notice}
-            </Text>
-          </Pressable>
-        )}
-        <Celebrate pulse={celebrate} message="Done ✓" />
-        {processing && (
-          <View style={s.suggest}>
-            <Thinking compact onCancel={onCancelProcessing} />
-          </View>
-        )}
-        {calendar && !calendar.connected && (
-          <View style={s.suggest}>
-            <Text style={s.kickerBlue}>YOUR WEEK</Text>
-            <Text style={s.headline}>Let Flow see your calendar</Text>
-            <Text style={s.body}>Apple and Google, through the phone. Flow plans around what's already there and puts its moves in the gaps.</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Connect calendar" onPress={calendar.onConnect} disabled={busy} style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}>
-              <Text style={s.recordText}>Connect calendar</Text>
-            </Pressable>
-          </View>
-        )}
-        {day && (onCalendar.length > 0 || chases.length > 0 || tomorrow.length > 0) && (
-          <View style={s.threads}>
-            <Text style={s.kicker}>TODAY'S PLAN</Text>
-            {onCalendar.map((e) => (
-              <View key={e.id} style={[s.line, e.mine && s.lineMine]}>
-                <Text style={[s.lineTime, e.mine && s.lineTimeMine]}>{e.allDay ? "all day" : timeLabel(e.start)}</Text>
-                <Text style={[s.lineTitle, e.mine && s.lineTitleMine]} numberOfLines={2}>
-                  {e.title}
-                </Text>
-              </View>
-            ))}
-            {chases.map((t) => (
-              <View key={t.id} style={[s.line, s.lineChase]}>
-                <Text style={[s.lineTime, s.lineTimeChase]}>chase</Text>
-                <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
-                  {t.waitingOn}: {t.title}
-                </Text>
-              </View>
-            ))}
-            {tomorrow.length > 0 && (
-              <>
-                <Text style={[s.kicker, { marginTop: 6 }]}>TOMORROW · WATCH OUT</Text>
-                {tomorrow.map((w, i) => (
-                  <View key={i} style={[s.line, s.lineChase]}>
-                    <Text style={[s.lineTime, s.lineTimeChase]}>{w.kind === "full" ? "full" : w.kind === "trip" ? "away" : "soon"}</Text>
-                    <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
-                      {w.title}
-                    </Text>
-                  </View>
-                ))}
-              </>
-            )}
-          </View>
-        )}
-        {nextTask && (
-          <View style={s.next}>
-            <Text style={s.kicker}>NEXT</Text>
-            <Text style={s.nextTitle} numberOfLines={3}>{moveHeadline(nextTask, timeWindow)}</Text>
-            {nextThread && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Open the thread for your next move" onPress={() => onOpenThread(nextThread.id)}>
-                <Text style={s.nextThread}>from “{nextThread.title}”</Text>
-              </Pressable>
-            )}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Done"
-              onPress={onDoneNext}
-              disabled={busy}
-              style={({ pressed }) => [s.done, (pressed || busy) && { opacity: 0.6 }]}
-            >
-              <Text style={s.doneText}>Done ✓</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Put it on my calendar" onPress={onCalendarNext} disabled={busy} hitSlop={8}>
-              <Text style={s.link}>Put it on my calendar</Text>
-            </Pressable>
-          </View>
-        )}
-        <View style={s.suggest}>
-          <Text style={s.kickerBlue}>FLOW SUGGESTS</Text>
-          <Text style={s.headline}>{suggestion.title}</Text>
-          <Text style={s.body}>{suggestion.prompt}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Record"
-            onPress={onRecord}
-            disabled={busy}
-            style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}
-          >
-            <Text style={s.recordIcon}>●</Text>
-            <Text style={s.recordText}>Record</Text>
-          </Pressable>
-          <View style={s.altRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Write instead" onPress={onWrite} disabled={busy} hitSlop={8}>
-              <Text style={s.link}>write it down</Text>
-            </Pressable>
-            <Text style={s.dotSep}>·</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Something else" onPress={onRecordOther} disabled={busy} hitSlop={8}>
-              <Text style={s.link}>something else</Text>
-            </Pressable>
-          </View>
-        </View>
-      </ScrollView>
-    </View>
+    <Screen
+      title="Today"
+      subtitle={`${dayName} · ${onCalendar.length} event${onCalendar.length === 1 ? "" : "s"} · ${moves.length + evening.length} move${moves.length + evening.length === 1 ? "" : "s"}${build ? " · " + build : ""}`}
+      fab={<Fab onRecord={onRecord} onWrite={onWrite} busy={busy} />}
+    >
+      {!!error && <Notice text={error} tone="red" onDismiss={onDismissNotice} />}
+      {!!notice && <Notice text={notice} onDismiss={onDismissNotice} />}
+      {calendar && !calendar.connected && (
+        <Section label="Your week">
+          <Row first title="Connect your calendar" sub="Apple and Google, through the phone — Flow plans around it" when="›" onPress={calendar.onConnect} accessibilityLabel="Connect calendar" />
+        </Section>
+      )}
+      {(onCalendar.length > 0 || tomorrow.length > 0) && (
+        <Section label="Calendar">
+          {onCalendar.map((e, i) => (
+            <Row key={e.id} first={i === 0} title={e.title} when={e.allDay ? "all day" : timeLabel(e.start)} lead={<Dot color={C.violet} />} />
+          ))}
+          {tomorrow.map((w, i) => (
+            <Row key={`${w.kind}-${i}`} first={onCalendar.length === 0 && i === 0} title={w.title} sub={w.note} lead={<Dot color={C.violet} />} trailing={<Pill text="watch" />} />
+          ))}
+        </Section>
+      )}
+      <Section label="Moves">
+        {moves.length === 0 && evening.length === 0 ? <Empty text="Nothing planned for today. Record what's on your mind." /> : moves.map(moveRow)}
+      </Section>
+      {evening.length > 0 && <Section label="This evening">{evening.map(moveRow)}</Section>}
+      {waiting.length > 0 && (
+        <Section label="Waiting on">
+          {waiting.map((t, i) => (
+            <Row
+              key={t.id}
+              first={i === 0}
+              title={t.title}
+              sub={`${t.waitingOn}${t.chaseDate ? ` · chase ${new Date(`${t.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" })}` : ""}`}
+              lead={<Dot color={C.amber} />}
+              onPress={() => onOpenMove(t)}
+              actions={[
+                { label: "Got it", color: C.green, onPress: () => onTick(t) },
+                { label: "Delete", color: C.red, onPress: () => onDelete(t) },
+              ]}
+              accessibilityLabel={`Open waiting ${t.title}`}
+            />
+          ))}
+        </Section>
+      )}
+      <View style={{ height: 40 }} />
+    </Screen>
   );
 }
-
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.paper },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 84 },
-  brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
-  build: { fontSize: 10, fontWeight: "700", color: C.faint, letterSpacing: 0.5 },
-  suggest: { padding: 18, borderRadius: 22, backgroundColor: C.card, gap: 10 },
-  kickerBlue: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.blue },
-  altRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 },
-  dotSep: { color: C.faint },
-  pill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: C.card, borderWidth: 1, borderColor: C.line, minHeight: 36, justifyContent: "center" },
-  pillText: { fontSize: 13, fontWeight: "700", color: C.ink },
-  page: { paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
-  headline: { fontSize: 26, lineHeight: 32, fontWeight: "700", color: C.ink },
-  body: { fontSize: 16, lineHeight: 23, color: C.muted },
-  kicker: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.muted },
-  record: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: C.blue, borderRadius: 22, paddingVertical: 24 },
-  recordIcon: { color: C.record, fontSize: 20 },
-  recordText: { color: C.white, fontSize: 20, fontWeight: "700" },
-  link: { color: C.blue, fontSize: 14, fontWeight: "600", paddingVertical: 6 },
-  linkCenter: { color: C.blue, fontSize: 14, fontWeight: "600", textAlign: "center", paddingVertical: 6 },
-  next: { padding: 18, borderRadius: 20, backgroundColor: C.hero, gap: 8 },
-  nextTitle: { fontSize: 21, lineHeight: 27, fontWeight: "700", color: C.white },
-  nextThread: { fontSize: 13, color: C.heroMuted },
-  done: { backgroundColor: C.lime, borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 4 },
-  doneText: { color: C.onLime, fontSize: 16, fontWeight: "800" },
-  threads: { gap: 6, marginTop: 4 },
-  line: { flexDirection: "row", gap: 10, alignItems: "flex-start", backgroundColor: C.card, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 },
-  lineMine: { backgroundColor: C.blueSoft, borderLeftWidth: 3, borderLeftColor: C.blue },
-  lineChase: { backgroundColor: "#FFF3E2", borderLeftWidth: 3, borderLeftColor: "#FFB86B" },
-  lineTime: { width: 58, fontSize: 12, fontWeight: "700", color: C.muted, paddingTop: 2 },
-  lineTimeMine: { color: C.blue },
-  lineTimeChase: { color: "#8A5A12" },
-  lineTitle: { flex: 1, fontSize: 15, lineHeight: 20, fontWeight: "600", color: C.ink },
-  lineTitleMine: { color: C.blue },
-  lineTitleChase: { color: "#8A5A12" },
-  card: { padding: 16, borderRadius: 18, backgroundColor: C.card, gap: 8 },
-  cardRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  cardTitle: { flex: 1, fontSize: 17, lineHeight: 22, fontWeight: "700", color: C.ink },
-  cardMeta: { fontSize: 13, color: C.muted },
-  cardMetaLive: { color: C.blue, fontWeight: "700" },
-  dotBadge: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.blue },
-  track: { height: 6, borderRadius: 3, backgroundColor: C.line, overflow: "hidden" },
-  fill: { height: 6, backgroundColor: C.blue, borderRadius: 3 },
-  error: { color: C.red, fontSize: 14, lineHeight: 20 },
-  notice: { color: C.onLime, fontSize: 14, lineHeight: 20, backgroundColor: C.lime, padding: 10, borderRadius: 12, overflow: "hidden" },
-});

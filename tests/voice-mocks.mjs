@@ -156,7 +156,9 @@ export const Animated = {
   parallel: () => animation(),
   sequence: () => animation(),
   loop: () => animation(),
+  spring: () => animation(),
 };
+export const PanResponder = { create: (cfg) => ({ panHandlers: { __pan: cfg } }) };
 export const Easing = { in: (f) => f, inOut: (f) => f, quad: (x) => x };
 export const Dimensions = { get: () => ({ width: 390, height: 844 }) };
 export const Alert = { alert() {} };

@@ -21,6 +21,8 @@ import { extractDueHints, respondToRecording } from "../thread";
 
 export type WeekPlan = {
   noteId: string;
+  /** The model's sentences saying back the recording. */
+  summary?: string;
   placements: Placement[];
   /** The week after placing: the person's events plus Flow's. */
   events: CalEvent[];
@@ -154,6 +156,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
       chaseDate: pl.chaseDate ?? "",
       notes: it.evidence,
       createdAt: now.toISOString(),
+      noteId: note.id,
       ...(it.kind === "waiting" ? { followUp: "waiting" as const } : {}),
       kind: it.kind,
       area: it.area,
@@ -182,7 +185,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     const thread = savedThreads.find((t) => t.id === p.id);
     if (!thread) continue;
     const mine = placements.filter((pl) => (pl.item.projectId ?? (pl.item.project.trim() ? `new:${slug(pl.item.project)}` : "")) === [...projects.entries()].find(([, v]) => v.id === p.id)?.[0]);
-    const breakdown = breakdownOf(mine);
+    const breakdown = { ...breakdownOf(mine), ...(outcome.plan?.summary ? { paragraph: outcome.plan.summary } : {}) };
     const messages = (thread.messages ?? []).map((m) => (m.kind === "transcript" && (m.noteId === note.id || m.noteId === `${note.id}:${slug(p.title)}`) ? { ...m, breakdown } : m));
     await saveDraft({ ...thread, messages });
   }
@@ -197,11 +200,13 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     projects: live0.map((t) => ({ id: t.id, title: t.title, area: t.area, people: t.people })),
     source: modelItems.length ? "model" : "local",
     modelItems: outcome.plan?.items ?? [],
+    summary: outcome.plan?.summary ?? "",
     items,
     placements: placements.map((p) => ({ title: p.item.title, kind: p.item.kind, project: p.item.project, projectId: p.item.projectId, area: p.item.area, date: p.date, start: p.slot?.start, chaseDate: p.chaseDate, note: p.note })),
   }).catch(() => {});
   return {
     noteId: note.id,
+    ...(outcome.plan?.summary ? { summary: outcome.plan.summary } : {}),
     placements,
     events: week,
     watch,

@@ -20,6 +20,8 @@ export type CalEvent = {
   /** Flow's item this event belongs to, when mine. */
   ref?: string;
   location?: string;
+  /** The calendar's name on the phone (Personal, Work, Holidays…). */
+  calendar?: string;
 };
 
 export const FLOW_REF = "Flowthread:";

@@ -92,6 +92,16 @@ export async function saveRecord(kind: string, id: string, payload: unknown) {
   );
 }
 
+export async function loadRecord<T = unknown>(kind: string, id: string): Promise<T | null> {
+  const row = await (await database()).getFirstAsync<{ payload: string }>("SELECT payload FROM records WHERE id=? AND kind=?", id, kind);
+  if (!row) return null;
+  try {
+    return JSON.parse(row.payload) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function listRecordIds(kind: string): Promise<string[]> {
   const rows = await (await database()).getAllAsync<{ id: string }>("SELECT id FROM records WHERE kind=?", kind);
   return rows.map((r) => r.id);

@@ -11,28 +11,53 @@ function token(light: string, dark: string = light): string {
   return os === "ios" && typeof dynamic === "function" && light !== dark ? dynamic({ light, dark }) : light;
 }
 
+/**
+ * The Things-3 language: white paper, one accent, three greys, hairline
+ * dividers. Light only — the app is paper. Old names are kept as aliases so
+ * every screen renders while it is re-laid on the new primitives.
+ */
 export const C = {
-  paper: token("#F6F7FA", "#0E1320"),
-  /** Cards and other raised surfaces. */
-  card: token("#FFFFFF", "#1A2131"),
-  ink: token("#142138", "#F1F4FA"),
-  /** Dark hero surface (the Next card). White text always sits on it. */
-  hero: token("#142138", "#26365A"),
-  heroMuted: token("#B9C3DD", "#B9C3DD"),
-  muted: token("#697386", "#A1AABC"),
-  faint: token("#8D95A4", "#7B849A"),
-  line: token("#E2E6ED", "#2B3345"),
-  blue: token("#345BEE", "#5B7DF5"),
-  blueSoft: token("#EDF0FF", "#1F2A4A"),
-  blueLine: token("#D5DDFB", "#34426E"),
-  lime: "#DFF586",
-  /** Text on lime; stays dark in both modes. */
-  onLime: "#142138",
-  /** Text on the blue accent and hero surfaces; stays white in both modes. */
+  paper: "#FFFFFF",
+  card: "#FFFFFF",
+  tint: "#F5F6F8",
+  ink: "#111827",
+  ink2: "#6B7280",
+  ink3: "#9CA3AF",
+  hair: "#E5E7EB",
+  accent: "#2F6BFF",
+  accentBg: "#EAF0FF",
+  violet: "#8B5CF6",
+  violetBg: "#F1EDFF",
+  amber: "#C77D1E",
+  amberBg: "#FFF4E3",
+  green: "#16A34A",
+  greenBg: "#E7F7EC",
+  red: "#DC2626",
+  redBg: "#FEE2E2",
   white: "#FFFFFF",
-  red: token("#B44343", "#F08080"),
-  danger: token("#C0392B", "#F08080"),
   record: "#FF6B6B",
-  flowBubble: token("#FFFFFF", "#1A2131"),
-  youBubble: token("#345BEE", "#4C6FF0"),
+  // aliases
+  hero: "#111827",
+  heroMuted: "#9CA3AF",
+  muted: "#6B7280",
+  faint: "#9CA3AF",
+  line: "#E5E7EB",
+  blue: "#2F6BFF",
+  blueSoft: "#EAF0FF",
+  blueLine: "#D5DDFB",
+  lime: "#DFF586",
+  onLime: "#111827",
+  danger: "#DC2626",
+  flowBubble: "#F5F6F8",
+  youBubble: "#2F6BFF",
+};
+
+/** Type scale: three sizes, that's it. */
+export const T = {
+  title: { fontSize: 30, fontWeight: "800" as const, letterSpacing: -0.6, color: C.ink, lineHeight: 34 },
+  subtitle: { fontSize: 12, fontWeight: "600" as const, color: C.ink2, marginTop: 2 },
+  section: { fontSize: 11, letterSpacing: 1.2, fontWeight: "700" as const, color: C.ink3 },
+  row: { fontSize: 15, fontWeight: "500" as const, color: C.ink, lineHeight: 20 },
+  sub: { fontSize: 12, fontWeight: "500" as const, color: C.ink2 },
+  when: { fontSize: 12, fontWeight: "600" as const, color: C.ink2 },
 };

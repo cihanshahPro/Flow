@@ -72,6 +72,8 @@ export type ThreadChip = { id: string; label: string };
 /** Otter-style breakdown of one recording: a line of summary and the items Flow took from it, each with where it landed. */
 export type Breakdown = {
   summary: string;
+  /** The model's one or two sentences saying back the recording as a whole. */
+  paragraph?: string;
   items: { title: string; kind: "action" | "waiting" | "appointment" | "later"; when?: string; person?: string }[];
 };
 export type ThreadMessage = {

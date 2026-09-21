@@ -55,11 +55,52 @@ export async function connectReminders(): Promise<boolean> {
   }
 }
 
-/** Every event on the phone between two instants, oldest first. */
+export type PhoneCalendar = { id: string; title: string; source: string; color?: string; writable: boolean; on: boolean };
+
+async function prefs() {
+  const db = await database();
+  await db.execAsync("CREATE TABLE IF NOT EXISTS preferences (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);");
+  return db;
+}
+
+/** Calendars switched off in Me: not read, not planned around. */
+export async function calendarsOff(): Promise<Set<string>> {
+  try {
+    const db = await prefs();
+    const row = await db.getFirstAsync<{ value: string }>("SELECT value FROM preferences WHERE key=?", "calendars_off");
+    return new Set(row ? (JSON.parse(row.value) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export async function setCalendarOn(id: string, on: boolean): Promise<void> {
+  const off = await calendarsOff();
+  if (on) off.delete(id);
+  else off.add(id);
+  const db = await prefs();
+  await db.runAsync("INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)", "calendars_off", JSON.stringify([...off]));
+}
+
+/** The phone's calendars as Me lists them. */
+export async function listCalendars(): Promise<PhoneCalendar[]> {
+  if (!(await calendarConnected())) return [];
+  try {
+    const off = await calendarsOff();
+    const all = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+    return all.map((c) => ({ id: c.id, title: c.title, source: c.source?.name ?? c.source?.type ?? "", color: c.color ?? undefined, writable: !!c.allowsModifications, on: !off.has(c.id) }));
+  } catch {
+    return [];
+  }
+}
+
+/** Every event on the phone between two instants, oldest first. Calendars switched off are skipped. */
 export async function readEvents(from: Date, to: Date): Promise<CalEvent[]> {
   if (!(await calendarConnected())) return [];
-  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+  const off = await calendarsOff();
+  const calendars = (await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT)).filter((c) => !off.has(c.id));
   if (!calendars.length) return [];
+  const names = new Map(calendars.map((c) => [c.id, c.title]));
   const events = await Calendar.getEventsAsync(calendars.map((c) => c.id), from, to);
   return events
     .map((e) => {
@@ -73,6 +114,7 @@ export async function readEvents(from: Date, to: Date): Promise<CalEvent[]> {
         allDay: !!e.allDay,
         ...(ref ? { mine: true, ref } : {}),
         ...(e.location ? { location: e.location } : {}),
+        ...(names.get(e.calendarId) ? { calendar: names.get(e.calendarId) } : {}),
       } satisfies CalEvent;
     })
     .sort((a, b) => a.start.localeCompare(b.start));
@@ -86,8 +128,7 @@ export async function readWeek(now = new Date(), days = 14): Promise<CalEvent[]>
 }
 
 async function preferredCalendarId(): Promise<string | null> {
-  const db = await database();
-  await db.execAsync("CREATE TABLE IF NOT EXISTS preferences (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);");
+  const db = await prefs();
   const saved = await db.getFirstAsync<{ value: string }>("SELECT value FROM preferences WHERE key=?", "calendar");
   const calendars = (await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT)).filter((c) => c.allowsModifications);
   if (saved && calendars.some((c) => c.id === saved.value)) return saved.value;
@@ -198,4 +239,68 @@ export async function seedDemoCalendar(now = new Date()): Promise<number> {
     }
   }
   return n;
+}
+
+/** Mark Flow's reminder done (or remove its event) when the person ticks a move in Flow. */
+export async function completeOnPhone(task: { eventId?: string; reminderId?: string; title: string }): Promise<void> {
+  if (task.reminderId) {
+    try {
+      await Calendar.updateReminderAsync(task.reminderId, { completed: true, completionDate: new Date() });
+    } catch {
+      /* gone */
+    }
+  }
+  if (task.eventId) {
+    try {
+      const e = await Calendar.getEventAsync(task.eventId);
+      if (e?.id && !/^✓ /.test(e.title ?? "")) await Calendar.updateEventAsync(task.eventId, { title: `✓ ${e.title}` });
+    } catch {
+      /* gone */
+    }
+  }
+}
+
+export async function removeFromPhone(task: { eventId?: string; reminderId?: string }): Promise<void> {
+  if (task.reminderId) {
+    try {
+      await Calendar.deleteReminderAsync(task.reminderId);
+    } catch {
+      /* gone */
+    }
+  }
+  if (task.eventId) await deletePlanEvent(task.eventId);
+}
+
+/**
+ * What the person did in Apple Reminders and Calendar since last time: the
+ * ids of Flow reminders they ticked, and the ids of Flow events they deleted.
+ */
+export async function readBack(tasks: { id: string; eventId?: string; reminderId?: string; done: boolean }[]): Promise<{ completed: string[]; removed: string[] }> {
+  const completed: string[] = [];
+  const removed: string[] = [];
+  if (Platform.OS !== "ios") return { completed, removed };
+  if (await remindersConnected()) {
+    for (const t of tasks) {
+      if (!t.reminderId || t.done) continue;
+      try {
+        const r = await Calendar.getReminderAsync(t.reminderId);
+        if (r?.completed) completed.push(t.id);
+      } catch {
+        /* deleted reminder: leave the task alone */
+      }
+    }
+  }
+  if (await calendarConnected()) {
+    for (const t of tasks) {
+      if (!t.eventId || t.done) continue;
+      try {
+        const e = await Calendar.getEventAsync(t.eventId);
+        if (!e?.id) removed.push(t.id);
+        else if (/^✓ /.test(e.title ?? "")) completed.push(t.id);
+      } catch {
+        removed.push(t.id);
+      }
+    }
+  }
+  return { completed: [...new Set(completed)], removed };
 }

@@ -33,6 +33,8 @@ export type Task = {
   kind?: "action" | "waiting" | "appointment" | "later";
   area?: string;
   projectId?: string;
+  /** The recording this move came from. */
+  noteId?: string;
   later?: boolean;
   eventId?: string;
   reminderId?: string;

@@ -6,7 +6,10 @@ import renderer, { act } from "react-test-renderer";
 register("./voice-loader.mjs", import.meta.url);
 const { default: ThreadChat } = await import("../src/components/ThreadChat.tsx");
 const { default: Today } = await import("../src/components/Today.tsx");
-const { default: Threads } = await import("../src/components/Threads.tsx");
+const { default: Recordings } = await import("../src/components/Recordings.tsx");
+const { default: RecordingPage } = await import("../src/components/RecordingPage.tsx");
+const { default: Upcoming } = await import("../src/components/Upcoming.tsx");
+const { default: WeekPlan } = await import("../src/components/WeekPlan.tsx");
 const { default: TabBar } = await import("../src/components/TabBar.tsx");
 const { default: Intake } = await import("../src/components/Intake.tsx");
 const { respondToRecording, answerChip, pendingMessage } = await import("../src/thread.ts");
@@ -104,86 +107,155 @@ test("the meter reflects the fingerprint and expands to the person's own evidenc
   await act(async () => view.unmount());
 });
 
-test("Today is the day's plan: what's on the calendar, the one move, chases, tomorrow's watch-out, one Record button", async () => {
-  const b = toMove(respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now }));
-  const task = { id: "flow:b:auto", title: "Collect the receipts", done: false, createdAt: now.toISOString(), plannedDate: "" };
+test("Today is Things' shape: CALENDAR · MOVES · THIS EVENING · WAITING ON, tickable rows, one Record button", async () => {
+  const task = { id: "flow:b:auto", title: "Collect the receipts", done: false, createdAt: now.toISOString(), plannedDate: "2026-09-19", plannedTime: "10:00", minutes: 20, deadline: "2026-09-25" };
+  const evening = { id: "flow:c:auto", title: "Compare two insurance quotes", done: false, createdAt: now.toISOString(), plannedDate: "2026-09-19", plannedTime: "19:00" };
+  const done = { id: "flow:d:auto", title: "Message Ali about the free app", done: true, completedAt: now.toISOString(), createdAt: now.toISOString(), plannedDate: "2026-09-19" };
   const events = [
     { id: "sync", calendarId: "c", title: "Team sync", start: "2026-09-19T15:00:00.000Z", end: "2026-09-19T15:45:00.000Z", allDay: false },
-    { id: "mine", calendarId: "c", title: "Call the DUI lawyer", start: "2026-09-19T16:00:00.000Z", end: "2026-09-19T16:20:00.000Z", allDay: false, mine: true, ref: "flow:x" },
+    { id: "mine", calendarId: "c", title: "Collect the receipts", start: "2026-09-19T16:00:00.000Z", end: "2026-09-19T16:20:00.000Z", allDay: false, mine: true, ref: "flow:b:auto" },
   ];
   const chase = { id: "flow:dui:chase", title: "Lawyer's follow-up", kind: "waiting", waitingOn: "the lawyer", chaseDate: "2026-09-19", done: false, createdAt: now.toISOString(), plannedDate: "" };
+  const ticked = [], moved = [], opened = [];
   const view = await render(
     React.createElement(Today, {
-      threads: [b], tasks: [task, chase], nextTask: task, nextThread: b, levelLabel: "Starting point",
-      suggestion: { title: "Health", prompt: "What's the one thing in health hanging over you?" },
-      day: { events, moves: [], chases: [chase], tomorrow: [{ kind: "important", date: "2026-09-20", title: "Court hearing", note: "tomorrow · 10am" }] },
+      events, tasks: [task, evening, done, chase], now,
+      tomorrow: [{ kind: "important", date: "2026-09-20", title: "Court hearing", note: "tomorrow · 10am" }],
       calendar: { connected: true, onConnect() {} },
-      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
+      onTick: (t) => ticked.push(t.id), onOpenMove: (t) => opened.push(t.id), onTomorrow: (t) => moved.push(t.id), onEvening() {}, onDelete() {},
+      onRecord() {}, onWrite() {}, onDismissNotice() {},
     }),
   );
   const found = labels(view);
   assert.equal(found.filter((l) => l === "Record").length, 1);
-  assert.ok(found.includes("Done"));
-  assert.ok(!found.some((l) => /Library|My mind|Settings|Get to know me|Connect calendar/.test(l)));
+  assert.ok(!found.some((l) => /Library|My mind|Settings|Get to know me|Connect calendar|Your level|Something else/.test(l)));
   const text = textOf(view);
-  assert.match(text, /TODAY'S PLAN/);
+  for (const label of ["CALENDAR", "MOVES", "THIS EVENING", "WAITING ON"]) assert.match(text, new RegExp(`"${label}"`));
+  assert.doesNotMatch(text, /TODAY'S PLAN|FLOW SUGGESTS|NEXT/);
   assert.match(text, /Team sync/);
-  assert.match(text, /Call the DUI lawyer/);
-  assert.match(text, /"the lawyer",": ","Lawyer's follow-up"/);
-  assert.match(text, /TOMORROW · WATCH OUT/);
+  assert.ok(text.indexOf('"Collect the receipts"') < text.indexOf('"Compare two insurance quotes"'), "evening moves sit under THIS EVENING");
+  assert.match(text, /"by Fri"/, "the due date is a pill, separate from the do-day");
+  assert.match(text, /"the lawyer · chase Saturday"/);
   assert.match(text, /Court hearing/);
-  assert.doesNotMatch(text, /YOUR THREADS|MAKE FLOW FIT YOU/);
+  assert.match(text, /"watch"/);
+  const check = view.root.findAll((n) => n.props.accessibilityRole === "checkbox");
+  assert.equal(check.length, 3, "every move is a tickable row");
+  await act(async () => check[0].props.onPress());
+  assert.deepEqual(ticked, ["flow:b:auto"]);
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Tomorrow")[0].props.onPress());
+  assert.deepEqual(moved, ["flow:b:auto"], "swipe actions: Tomorrow · Evening · Delete");
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Open move Collect the receipts")[0].props.onPress());
+  assert.deepEqual(opened, ["flow:b:auto"], "tap opens the move sheet");
   await act(async () => view.unmount());
   const off = await render(
-    React.createElement(Today, {
-      threads: [], tasks: [], levelLabel: "Me", suggestion: { title: "x", prompt: "y" }, calendar: { connected: false, onConnect() {} },
-      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
-    }),
+    React.createElement(Today, { events: [], tasks: [], now, calendar: { connected: false, onConnect() {} }, onTick() {}, onOpenMove() {}, onTomorrow() {}, onEvening() {}, onDelete() {}, onRecord() {}, onWrite() {}, onDismissNotice() {} }),
   );
-  assert.ok(labels(off).includes("Connect calendar"), "one card until the calendar is connected");
+  assert.ok(labels(off).includes("Connect calendar"), "one row until the calendar is connected");
+  assert.match(textOf(off), /Nothing planned for today/);
   await act(async () => off.unmount());
 });
 
-test("an empty Today is Flow's suggested prompt with one Record button", async () => {
-  const view = await render(
-    React.createElement(Today, {
-      threads: [], tasks: [], levelLabel: "Me",
-      suggestion: { title: "Money & bills", prompt: "What's the one thing in money & bills hanging over you?" },
-      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
-    }),
-  );
-  const found = labels(view);
-  assert.deepEqual(found.sort(), ["Record", "Something else", "Write instead", "Your level"]);
-  assert.match(textOf(view), /FLOW SUGGESTS/);
-  assert.match(textOf(view), /Money & bills/);
-  assert.doesNotMatch(textOf(view), /What's on your mind\?/);
+test("Recordings is Voicenotes' list with search, then projects with a ring; the tab bar is Today · Upcoming · Recordings · Me", async () => {
+  const a = respondToRecording(suggestDraft("a", rich, now), "n1", rich, { now });
+  const notes = [
+    { id: "n1", title: "x", text: rich, createdAt: now.toISOString(), durationMs: 124_000 },
+    { id: "n2", title: "y", text: "The landlord wants an answer on the lease.", createdAt: new Date(now.getTime() - 864e5).toISOString() },
+  ];
+  const tasks = [
+    { id: "t1", noteId: "n1", projectId: "a", title: "Collect the receipts", done: false, createdAt: "", plannedDate: "" },
+    { id: "t2", noteId: "n1", projectId: "a", title: "Email the accountant", done: true, createdAt: "", plannedDate: "" },
+    { id: "t3", noteId: "n1", kind: "waiting", waitingOn: "the accountant", title: "Her numbers", done: false, createdAt: "", plannedDate: "" },
+  ];
+  const opened = [];
+  const view = await render(React.createElement(Recordings, { notes, threads: [a], tasks, now, onOpenRecording: (n) => opened.push(n.id), onOpenProject: (id) => opened.push(id), onRecord() {}, onWrite() {} }));
+  const text = textOf(view);
+  assert.match(text, /"2 moves · 1 waiting · /, "what came of it, not the transcript");
+  assert.match(text, /2:04/);
+  assert.match(text, /"PROJECTS"/);
+  assert.match(text, /"1 open/);
+  assert.ok(labels(view).includes(`Open project ${a.title}`));
+  assert.ok(labels(view).includes("Search") || view.root.findAll((n) => n.props.accessibilityLabel === "Search").length === 1);
+  const rows = labels(view).filter((l) => l.startsWith("Open recording "));
+  assert.equal(rows.length, 2);
+  assert.ok(rows[0].includes(a.title), "newest first, titled by its project");
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === rows[0])[0].props.onPress());
+  assert.deepEqual(opened, ["n1"]);
+  await act(async () => view.unmount());
+  const picked = [];
+  const bar = await render(React.createElement(TabBar, { active: "today", onSelect: (t) => picked.push(t) }));
+  const tabs = bar.root.findAllByType("Pressable").map((n) => n.props.accessibilityLabel);
+  assert.deepEqual(tabs, ["Today", "Upcoming", "Recordings", "Me"]);
+  await act(async () => bar.root.findAllByType("Pressable")[3].props.onPress());
+  assert.deepEqual(picked, ["me"]);
+  await act(async () => bar.unmount());
+});
+
+test("a recording page is Otter's: a paragraph, moves and waiting-ons as rows with ↗ to the words, Ask Flow; the transcript tab marks the evidence", async () => {
+  const a = respondToRecording(suggestDraft("a", rich, now), "n1", rich, { now });
+  const note = { id: "n1", title: "x", text: rich, createdAt: now.toISOString(), durationMs: 124_000, audioUri: "file:///a.m4a" };
+  const tasks = [
+    { id: "t1", noteId: "n1", projectId: "a", title: "Collect the receipts", done: false, createdAt: "", plannedDate: "2026-09-19", plannedTime: "10:00", notes: "I have to collect the receipts" },
+    { id: "t3", noteId: "n1", kind: "waiting", waitingOn: "the accountant", title: "Her numbers", chaseDate: "2026-09-22", done: false, createdAt: "", plannedDate: "" },
+  ];
+  const asked = [];
+  const view = await render(React.createElement(RecordingPage, { note, threads: [a], tasks, now, paragraph: "Taxes with the accountant before Friday; receipts first, then an email tonight.", onBack() {}, onTick() {}, onOpenMove() {}, onAsk: (id) => asked.push(id) }));
+  let text = textOf(view);
+  assert.match(text, /Taxes with the accountant before Friday/);
+  assert.match(text, /"MOVES"/);
+  assert.match(text, /"WAITING ON"/);
+  assert.match(text, /"ASK FLOW"/);
+  assert.match(text, /"the accountant: Her numbers"/);
+  assert.match(text, /chase Tue/);
+  assert.doesNotMatch(text, /finish the tax filing/, "the transcript is not on the summary page");
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === `Ask Flow about ${a.title}`)[0].props.onPress());
+  assert.deepEqual(asked, ["a"]);
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === 'Show where "Collect the receipts" came from')[0].props.onPress());
+  text = textOf(view);
+  assert.match(text, /finish the tax filing/, "↗ lands on the transcript");
+  assert.match(text, /"I have to collect the receipts"/, "the sentence behind the move is its own marked span");
   await act(async () => view.unmount());
 });
 
-test("Threads is a Messages-style list: newest first, quiet ones last, a dot when Flow is waiting, one New thread button; the tab bar has four tabs and a badge", async () => {
-  const a = respondToRecording(suggestDraft("a", vague, now), "n1", vague, { now });
-  const b = { ...respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now: new Date(now.getTime() + 60_000) }), state: "parked" };
-  const c = { ...suggestDraft("c", "Clean the garage this weekend.", now), messages: [], resolvedAt: now.toISOString() };
-  const view = await render(React.createElement(Threads, { threads: [a, b, c], tasks: [], now: new Date(now.getTime() + 3_600_000), onOpenThread() {}, onNew() {} }));
-  const cards = labels(view).filter((l) => l.startsWith("Open thread "));
-  assert.equal(cards.length, 3);
-  assert.equal(cards[0], `Open thread ${a.title}`, "the live thread comes first even though the parked one is newer");
-  assert.ok(labels(view).includes("New thread"));
-  assert.equal(textOf(view).split('"Needs you"').length - 1, 1, "one unread dot: the thread with an open question");
-  assert.match(textOf(view), /"1"," open"/);
-  assert.match(textOf(view), /Parked/);
-  assert.match(textOf(view), /"Done"/);
-  assert.match(textOf(view), /And what else\?/, "the last message is the preview, like Messages");
-  assert.doesNotMatch(textOf(view), /ACTIVE|WAITING/, "no groups, no labels to learn");
+test("Upcoming lists days with the phone's events and Flow's items; Your week is the same rows and ends with closure", async () => {
+  const events = [
+    { id: "sync", calendarId: "c", title: "Team sync", start: "2026-09-19T15:00:00.000Z", end: "2026-09-19T15:45:00.000Z", allDay: false, calendar: "Work" },
+    { id: "court", calendarId: "c", title: "Court hearing", start: "2026-09-20T14:00:00.000Z", end: "2026-09-20T15:00:00.000Z", allDay: false, calendar: "Personal" },
+  ];
+  const tasks = [
+    { id: "t1", title: "Follow up both lawyers", done: false, createdAt: "", plannedDate: "2026-09-20", plannedTime: "16:00" },
+    { id: "t3", kind: "waiting", waitingOn: "the lawyer", title: "His answer", chaseDate: "2026-09-21", done: false, createdAt: "", plannedDate: "" },
+  ];
+  const opened = [];
+  const view = await render(React.createElement(Upcoming, { events, tasks, connected: true, now, onConnect() {}, onOpenMove: (t) => opened.push(t.id), onRecord() {}, onWrite() {} }));
+  const text = textOf(view);
+  assert.match(text, /Work \+ Personal · Flow in blue/);
+  assert.match(text, /"SAT 19"/);
+  assert.match(text, /"TODAY"/);
+  assert.match(text, /"SUN 20"/);
+  assert.match(text, /Chase: the lawyer/);
+  assert.match(text, /nothing planned yet/);
+  assert.equal(labels(view).filter((l) => l === "Record").length, 1);
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Open move Follow up both lawyers")[0].props.onPress());
+  assert.deepEqual(opened, ["t1"]);
   await act(async () => view.unmount());
-  const picked = [];
-  const bar = await render(React.createElement(TabBar, { active: "today", badge: 2, onSelect: (t) => picked.push(t) }));
-  const tabs = bar.root.findAllByType("Pressable").map((n) => n.props.accessibilityLabel);
-  assert.deepEqual(tabs, ["Today", "Threads", "Calendar", "Profile"]);
-  assert.match(textOf(bar), /"2"/);
-  await act(async () => bar.root.findAllByType("Pressable")[3].props.onPress());
-  assert.deepEqual(picked, ["profile"]);
-  await act(async () => bar.unmount());
+  const plan = {
+    noteId: "n", placements: [
+      { item: { title: "Follow up both lawyers", kind: "action", area: "Legal" }, date: "2026-09-20", note: "court is at 10" },
+      { item: { title: "Medical exams", kind: "later", area: "Health" } },
+    ],
+    events, tasks, projects: [{ id: "p", title: "DUI case", area: "Legal", fresh: true }], closure: "That's everything. Nothing left in your head.", summary: "Lawyers this week.", watch: [],
+  };
+  const week = await render(React.createElement(WeekPlan, { plan, now, onOpenProject() {}, onRecord() {}, onDone() {} }));
+  const t = textOf(week);
+  assert.match(t, /"Your week"/);
+  assert.match(t, /2 things, all placed/);
+  assert.match(t, /"PLACED AROUND YOUR WEEK"/);
+  assert.match(t, /court is at 10/);
+  assert.match(t, /Later: Medical exams/);
+  assert.match(t, /Nothing left in your head/);
+  assert.doesNotMatch(t, /And what else/);
+  assert.ok(labels(week).includes("Looks right"));
+  await act(async () => week.unmount());
 });
 
 test("the intake screen shows every starter with its date, one Record button and a quiet way out", async () => {

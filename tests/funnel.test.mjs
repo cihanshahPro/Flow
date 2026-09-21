@@ -5,7 +5,7 @@ import React from "react";
 import renderer, { act } from "react-test-renderer";
 register("./voice-loader.mjs", import.meta.url);
 const { default: Funnel, PLATE_QUESTIONS, FIRST_PROMPT } = await import("../src/components/Funnel.tsx");
-const { default: Profile } = await import("../src/components/Profile.tsx");
+const { default: Me } = await import("../src/components/Me.tsx");
 const { default: Progress } = await import("../src/components/Progress.tsx");
 const { newProfile, ITEMS, FUNNEL_VERSION } = await import("../src/personality.ts");
 const { newProgress } = await import("../src/progress.ts");
@@ -134,44 +134,45 @@ test("the five profile questions are what the plan says, and the first prompt as
   assert.match(FIRST_PROMPT, /^What's on your mind right now\?/);
 });
 
-test("Profile shows the Flow type and an editable plate; Progress shows the level with honest counters", async () => {
-  const profile = {
-    ...newProfile(),
-    answers: ITEMS.map((i) => (i.reverse ? 1 : 5)),
-    completed: true,
-    plate: { areas: ["Work project"], people: ["Boss"], timeWindow: "Mornings", obstacles: ["Money"] },
-  };
+test("Me is calendars · ways in · rhythm · data, as rows; Progress shows the level with honest counters", async () => {
   const progress = { ...newProgress(), unlockedAt: "2026-09-19T00:00:00Z", completedTaskIds: ["a", "b"], understoodThreadIds: ["t"] };
   const threads = [
     suggestDraft("t", "Call Sam about the invoice. Then email the designer.", new Date()),
     suggestDraft("u", "Call Sam about the invoice.", new Date()),
   ];
-  const fb = [];
-  const plates = [];
+  const fb = [], cals = [], times = [];
+  const calendars = [
+    { id: "p", title: "Personal", source: "iCloud", writable: true, on: true },
+    { id: "h", title: "Holidays", source: "subscribed", writable: false, on: false },
+  ];
   const view = await render(
-    React.createElement(Profile, { profile, threads, notes: [{ id: "f", captureKind: "feedback", title: "x", text: "x", createdAt: "" }], onRetake() {}, onFeedback: (m) => fb.push(m), onPlate: (p) => plates.push(p) }),
+    React.createElement(Me, { recordings: 12, projects: 5, calendars, calendarConnected: true, remindersConnected: true, morningTime: "08:30", eveningTime: "19:00", onConnectCalendar() {}, onCalendar: (id, on) => cals.push([id, on]), onConnectReminders() {}, onNotifications() {}, onMorning: (t) => times.push(t), onEvening: (t) => times.push(t), onFeedback: (m) => fb.push(m), onExport() {}, onDeleteAll() {} }),
   );
-  let text = textOf(view);
-  assert.match(text, /Work project/);
-  assert.match(text, /Boss/);
-  assert.match(text, /Sam/);
-  assert.match(text, /Mornings/);
+  const text = textOf(view);
+  assert.match(text, /12 recordings · 5 projects/);
+  for (const label of ["CALENDARS FLOW PLANS AROUND", "WAYS IN", "RHYTHM", "DATA"]) assert.match(text, new RegExp(`"${label}"`));
+  assert.match(text, /"Holidays"/);
+  assert.match(text, /off, not planned around/);
+  assert.match(text, /chases in the .*Flow.* list · ticks sync back/);
+  assert.match(text, /"8:30 AM"/);
+  assert.match(text, /"7:00 PM"/);
+  assert.doesNotMatch(text, /PROFILE COMPLETE|ON YOUR PLATE|Redo the test/, "no personality layer, no gear");
   await press(view, "Record feedback");
   assert.deepEqual(fb, ["voice"]);
-  assert.ok(!labels(view).includes("Redo the test and profile"), "no personality layer in the way");
-  await press(view, "Edit profile");
-  await press(view, "Health");
-  assert.deepEqual(plates.at(-1).areas, ["Work project", "Health"]);
-  await press(view, "Evenings");
-  assert.equal(plates.at(-1).timeWindow, "Evenings");
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Plan around Holidays")[0].props.onValueChange(true));
+  assert.deepEqual(cals, [["h", true]]);
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "Morning plan later by 30 minutes")[0].props.onPress());
+  assert.deepEqual(times, ["09:00"]);
+  assert.ok(labels(view).includes("Export my data"));
+  assert.ok(labels(view).includes("Delete all my data"));
   await act(async () => view.unmount());
 
   const prog = await render(React.createElement(Progress, { progress, threads }));
-  text = textOf(prog);
-  assert.match(text, /Momentum/);
-  assert.match(text, /\["2"\][^]*moves done/);
-  assert.match(text, /THE LADDER/);
-  assert.match(text, /came up in ","2"," threads/);
+  const t = textOf(prog);
+  assert.match(t, /Momentum/);
+  assert.match(t, /\["2"\][^]*moves done/);
+  assert.match(t, /THE LADDER/);
+  assert.match(t, /came up in ","2"," threads/);
   await act(async () => prog.unmount());
 });
 

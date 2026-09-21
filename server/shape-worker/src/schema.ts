@@ -113,6 +113,7 @@ export const planRequestSchema = z.object({
   context: z.string().max(4000).default(""),
 });
 export const planSchema = z.object({
+  summary: z.string().max(600).default(""),
   items: z
     .array(
       z.object({
@@ -134,8 +135,9 @@ export const PLAN_TOOL = {
   description: "Submit the items of the person's weekly plan.",
   input_schema: {
     type: "object",
-    required: ["items"],
+    required: ["items", "summary"],
     properties: {
+      summary: { type: "string", description: "One or two plain sentences saying back what the person said, as a whole, in their words; no advice" },
       items: {
         type: "array",
         maxItems: 12,

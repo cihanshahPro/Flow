@@ -18,20 +18,22 @@ import { StatusBar } from "expo-status-bar";
 import { randomUUID } from "expo-crypto";
 import VoiceCapture, { AudioPlayback, type SavedVoiceNote } from "./src/components/VoiceCapture";
 import Today from "./src/components/Today";
-import Threads from "./src/components/Threads";
-import CalendarTab from "./src/components/CalendarTab";
-import Profile from "./src/components/Profile";
+import Recordings from "./src/components/Recordings";
+import RecordingPage from "./src/components/RecordingPage";
+import Upcoming from "./src/components/Upcoming";
+import Me from "./src/components/Me";
+import MoveSheet from "./src/components/MoveSheet";
 import TabBar, { type Tab } from "./src/components/TabBar";
 import ThreadChat from "./src/components/ThreadChat";
 import WeekPlan from "./src/components/WeekPlan";
 import type { WeekPlan as Plan } from "./src/services/intake";
-import { dayPlan } from "./src/services/intake";
-import { calendarConnected, connectCalendar, connectReminders, readWeek, seedDemoCalendar } from "./src/services/calendar-read";
-import type { CalEvent } from "./src/calendar";
+import { calendarConnected, connectCalendar, connectReminders, listCalendars, readWeek, remindersConnected, seedDemoCalendar, setCalendarOn, type PhoneCalendar } from "./src/services/calendar-read";
+import { deleteMove, editMove, moveToEvening, moveToTomorrow, syncFromPhone, tickMove, untickMove } from "./src/services/moves";
+import { watchOuts, type CalEvent } from "./src/calendar";
 import Thinking from "./src/components/Thinking";
 import Funnel, { type FunnelStep } from "./src/components/Funnel";
 import { C } from "./src/components/theme";
-import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/services/storage";
+import { loadWorkspace, loadRecord, saveNote, registerVoiceNote, saveTask } from "./src/services/storage";
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
@@ -40,21 +42,19 @@ import { buildStamp, mirrorToDev } from "./src/services/mirror";
 import { capabilities } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
 import type { Consent } from "./src/ai-policy";
-import { syncReminders } from "./src/services/reminders";
+import { sendTestReminder, syncReminders } from "./src/services/reminders";
 import { exportAllData, deleteAllData } from "./src/services/data";
 import Constants from "expo-constants";
-import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
 import { newProfile, needsFunnel, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
-import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks, wakeThread } from "./src/thread";
-import { whenFromAnswer, type When } from "./src/when";
+import { modeFor, DEFAULT_MODE } from "./src/flow-voice";
+import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, moveHeadline, plannedDateFor, moveWhen, suggestPrompt, wakeThread } from "./src/thread";
 import { appendPlanUpdate, suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
-type Screen = Tab | "thread" | "intake";
+type Screen = Tab | "thread" | "intake" | "recording";
 type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback"; prompt?: string };
 const EVALUATE_EVERY_MS = 15 * 60 * 1000;
 
@@ -83,7 +83,14 @@ function Flow() {
   const [plan, setPlan] = useState<Plan | null>(null);
   /** The phone's calendar, as last read. */
   const [events, setEvents] = useState<CalEvent[]>([]);
-  const [calendarOn, setCalendarOn] = useState(false);
+  const [calendarOn, setCalendarOnState] = useState(false);
+  const [calendars, setCalendars] = useState<PhoneCalendar[]>([]);
+  const [remindersOn, setRemindersOn] = useState(false);
+  /** The recording page that is open, and the model's paragraph for it. */
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+  const [paragraph, setParagraph] = useState("");
+  /** The move sheet: the task being edited. */
+  const [editing, setEditing] = useState<Task | null>(null);
   const [lastTab, setLastTab] = useState<Tab>("today");
   const [openId, setOpenId] = useState<string | null>(null);
   const [funnel, setFunnel] = useState(false);
@@ -98,7 +105,6 @@ function Flow() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [celebrate, setCelebrate] = useState(0);
   // Plan D: older iPhones ask once before any note text goes to the cloud shaper.
   const [consentAsk, setConsentAsk] = useState<((allowed: boolean) => void) | null>(null);
   const [cloudConsent, setCloudConsentState] = useState<Consent>(undefined);
@@ -115,10 +121,8 @@ function Flow() {
   // Same plain questions for everyone: no personality layer in the path.
   const formula = null;
   const current = threads.find((t) => t.id === openId);
+  const openNote = notes.find((n) => n.id === openNoteId);
   const level = levelForProgress(progress);
-  const type = flowType(profile.answers);
-  const nextTask = pickNextTask(tasks, profile.activeTaskId);
-  const nextThread = nextTask ? threads.find((t) => nextTask.id.startsWith(`flow:${t.id}:`)) : undefined;
 
   /** Thread reminders plus the morning "today's one move" nudge, from the freshly saved data. */
   function syncAll(data: { tasks: Task[]; threads: ThoughtDraft[] }, p: ProfileModel, ask = false) {
@@ -215,17 +219,81 @@ function Flow() {
     };
   }, [ready, mode]);
 
-  /** Read the phone's calendar for the coming two weeks (no-op until connected). */
+  /** Read the phone's calendar for the coming two weeks (no-op until connected), and what the person did there since. */
   async function refreshCalendar() {
     const on = await calendarConnected();
-    setCalendarOn(on);
-    if (on) setEvents(await readWeek().catch(() => []));
+    setCalendarOnState(on);
+    setRemindersOn(await remindersConnected().catch(() => false));
+    if (on) {
+      const back = await syncFromPhone().catch(() => ({ completed: 0, unplaced: 0 }));
+      if (back.completed || back.unplaced) await refresh();
+      setEvents(await readWeek().catch(() => []));
+      setCalendars(await listCalendars().catch(() => []));
+    }
   }
   async function connectCalendarNow(): Promise<boolean> {
     const ok = await connectCalendar();
     if (ok) await connectReminders().catch(() => false);
     await refreshCalendar();
     return ok;
+  }
+  async function connectRemindersNow() {
+    await connectReminders().catch(() => false);
+    await refreshCalendar();
+  }
+
+  /** Every change to a move goes through services/moves, then the screen re-reads. */
+  function onTick(task: Task) {
+    void run(async () => {
+      if (task.done) await untickMove(task);
+      else {
+        await tickMove(task);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+      await refresh();
+    });
+  }
+  function onTomorrow(task: Task) {
+    void run(async () => {
+      await moveToTomorrow(task);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function onEvening(task: Task) {
+    void run(async () => {
+      await moveToEvening(task);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function onDeleteMove(task: Task) {
+    void run(async () => {
+      await deleteMove(task);
+      setEditing(null);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function onSaveMove(task: Task, patch: { title: string; plannedDate: string; plannedTime: string; deadline: string; minutes: number; projectId?: string }) {
+    void run(async () => {
+      await editMove(task, patch);
+      setEditing(null);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function openRecording(id: string) {
+    setOpenNoteId(id);
+    setParagraph("");
+    setScreen("recording");
+    void loadRecord<{ summary?: string }>("intake", `intake:${id}`)
+      .then((r) => setParagraph(r?.summary ?? ""))
+      .catch(() => {});
+  }
+  function closeRecording() {
+    setOpenNoteId(null);
+    setScreen(lastTab);
   }
 
   async function run(fn: () => Promise<void>) {
@@ -284,7 +352,7 @@ function Flow() {
     })().catch(() => {});
   }
   function closeThread() {
-    setScreen(lastTab);
+    setScreen(openNoteId ? "recording" : lastTab);
     setOpenId(null);
   }
   function selectTab(tab: Tab) {
@@ -492,67 +560,6 @@ function Flow() {
     });
   }
 
-  function doneNext() {
-    if (!nextTask) return;
-    void run(async () => {
-      const before = level.level?.number ?? 0;
-      await saveTask(completeTask(nextTask));
-      const thread = nextThread ? (await loadDrafts()).find((t) => t.id === nextThread.id) : undefined;
-      if (thread) await saveDraft(noteMoveDone(thread, nextTask, { mode, formula, plate: profile.plate }));
-      if (profile.activeTaskId === nextTask.id) await updateProfile({ ...profile, activeTaskId: undefined });
-      const data = await refresh();
-      void syncAll(data, { ...profile, activeTaskId: undefined });
-      setCelebrate((n) => n + 1);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      await announceLevel(thread?.id, before);
-      setNotice(thread ? `Done. Flow left you a note in “${thread.title}”.` : "Done.");
-    });
-  }
-  const choose: ChooseCalendar = (options, preferred) =>
-    new Promise((resolve) =>
-      Alert.alert(
-        "Choose your calendar",
-        "Flow remembers this for next time.",
-        [
-          ...options.map((c) => ({ text: c.title + (c.id === preferred ? " · default" : ""), onPress: () => resolve(c.id) })),
-          { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
-        ],
-        { cancelable: false },
-      ),
-    );
-  /** A move without a date and time asks for one moment first, instead of a dead end. */
-  const pickMoment = (): Promise<When | null> =>
-    new Promise((resolve) => {
-      const now = new Date();
-      const options = ["This evening", "Tomorrow morning", "Tomorrow afternoon"]
-        .map((t) => whenFromAnswer(t, now))
-        .filter((w, i, all): w is When => !!w && all.findIndex((o) => o?.date === w.date && o?.time === w.time) === i);
-      Alert.alert(
-        "When will you do it?",
-        "Pick a time and Flow puts it on your calendar.",
-        [
-          ...options.map((w) => ({ text: `${w.label} · ${w.time}`, onPress: () => resolve(w) })),
-          { text: "Cancel", style: "cancel" as const, onPress: () => resolve(null) },
-        ],
-        { cancelable: false },
-      );
-    });
-  function calendarNext() {
-    if (!nextTask) return;
-    void run(async () => {
-      let task = nextTask;
-      if (!task.plannedDate || !task.plannedTime) {
-        const when = await pickMoment();
-        if (!when) return;
-        task = { ...task, plannedDate: when.date, plannedTime: when.time };
-        await saveTask(task);
-        await refresh();
-      }
-      const message = await addTaskToCalendar(task, choose);
-      setNotice(message);
-    });
-  }
-
   const captureTitle =
     capture?.kind === "feedback"
       ? "Tell Flow something"
@@ -712,100 +719,98 @@ function Flow() {
   }
 
   const suggestion = suggestPrompt(profile.plate, threads);
+  const devSeed = typeof __DEV__ !== "undefined" && __DEV__ ? () => void seedDemoCalendar().then(() => refreshCalendar()) : undefined;
+  const record = () => startCapture("voice", null, "thought", suggestion.prompt);
+  const write = () => startCapture("text", null, "thought", suggestion.prompt);
+  const realThreads = threads.filter((t) => !t.example);
+  const projectsCount = realThreads.filter((t) => t.state !== "parked").length;
+  const recordingsCount = notes.filter((n) => !n.planId && (!n.captureKind || n.captureKind === "thought") && n.text?.trim()).length;
 
   return (
     <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <View style={{ flex: 1 }}>
         {screen === "today" && (
           <Today
-            threads={threads}
+            events={events}
             tasks={tasks}
-            nextTask={nextTask}
-            nextThread={nextThread}
-            levelLabel={level.level ? level.level.title : type ? type.name : "Level"}
-            timeWindow={profile.plate?.timeWindow}
-            celebrate={celebrate}
-            suggestion={suggestion}
-            busy={busy}
-            processing={processing && !capture}
-            onCancelProcessing={cancelShaping}
-            day={dayPlan(events, tasks)}
-            calendar={{ connected: calendarOn, onConnect: () => void connectCalendarNow() }}
+            tomorrow={watchOuts(events, new Date(), 2).filter((w) => w.date !== new Date().toISOString().slice(0, 10))}
             build={buildStamp()}
             notice={notice}
-            error={error}
-            onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}
-            onWrite={() => startCapture("text", null, "thought", suggestion.prompt)}
-            onRecordOther={() => startCapture("voice", null, "thought", "Something else that's on your mind. Say where it stands, what you'd want out of it, who's involved, what's in the way.")}
-            onOpenThread={openThread}
-            onDoneNext={doneNext}
-            onCalendarNext={calendarNext}
-            onOpenMe={() => selectTab("calendar")}
+            error={error || processingError}
+            busy={busy}
+            onTick={onTick}
+            onOpenMove={setEditing}
+            onTomorrow={onTomorrow}
+            onEvening={onEvening}
+            onDelete={onDeleteMove}
+            onRecord={record}
+            onWrite={write}
             onDismissNotice={() => {
               setNotice("");
               setError("");
+              setProcessingError("");
             }}
-          />
-        )}
-        {screen === "threads" && (
-          <Threads threads={threads} tasks={tasks} busy={busy} onOpenThread={openThread} onNew={() => startCapture("voice", null, "thought", suggestion.prompt)} />
-        )}
-        {screen === "calendar" && (
-          <CalendarTab
-            events={events}
-            tasks={tasks}
-            connected={calendarOn}
-            busy={busy}
-            onConnect={() => void connectCalendarNow()}
-            onRefresh={() => void refreshCalendar()}
-            onSeed={typeof __DEV__ !== "undefined" && __DEV__ ? () => void seedDemoCalendar().then(() => refreshCalendar()) : undefined}
-          />
-        )}
-        {screen === "profile" && (
-          <Profile
-            profile={profile}
-            threads={threads}
-            notes={notes}
-            busy={busy}
-            onRetake={() =>
-              void run(async () => {
-                await updateProfile({ ...profile, answers: [] });
-                setFunnelStep("test");
-                setFunnel(true);
-              })
-            }
             calendar={{ connected: calendarOn, onConnect: () => void connectCalendarNow() }}
-            onFeedback={(m) => startCapture(m, null, "feedback")}
-            onPlate={(plate) => void run(() => updateProfile({ ...profile, plate }))}
+          />
+        )}
+        {screen === "upcoming" && (
+          <Upcoming events={events} tasks={tasks} connected={calendarOn} busy={busy} onConnect={() => void connectCalendarNow()} onOpenMove={setEditing} onRecord={record} onWrite={write} onSeed={devSeed} />
+        )}
+        {screen === "recordings" && (
+          <Recordings notes={notes} threads={threads} tasks={tasks} busy={busy} onOpenRecording={(n) => openRecording(n.id)} onOpenProject={openThread} onRecord={record} onWrite={write} />
+        )}
+        {screen === "recording" && openNote && (
+          <RecordingPage note={openNote} threads={threads} tasks={tasks} paragraph={paragraph} onBack={closeRecording} onTick={onTick} onOpenMove={setEditing} onAsk={openThread} />
+        )}
+        {screen === "recording" && !openNote && (
+          <View style={s.loading}>
+            <Text style={s.body}>That recording is no longer here.</Text>
+            <Pressable accessibilityRole="button" onPress={closeRecording}>
+              <Text style={s.link}>Back</Text>
+            </Pressable>
+          </View>
+        )}
+        {screen === "me" && (
+          <Me
+            recordings={recordingsCount}
+            projects={projectsCount}
+            calendars={calendars}
+            calendarConnected={calendarOn}
+            remindersConnected={remindersOn}
             notificationsOn={!profile.notificationsOff}
-            morningOn={!profile.morningOff}
             morningTime={profile.morningTime ?? "08:30"}
-            onMorning={(patch) =>
-              void run(async () => {
-                const next = { ...profile, ...patch };
-                await updateProfile(next);
-                await syncAll({ tasks, threads }, next, !next.morningOff);
-              })
-            }
+            eveningTime={profile.eveningTime ?? "19:00"}
             version={Constants.expoConfig?.version ?? ""}
-            onDeviceAi={onDeviceAi}
-            cloudShaping={cloudConsent === "allowed"}
-            onCloudShaping={(on) =>
+            busy={busy}
+            onConnectCalendar={() => void connectCalendarNow()}
+            onCalendar={(id, on) =>
               void run(async () => {
-                await setCloudConsent(on ? "allowed" : "declined");
-                setCloudConsentState(on ? "allowed" : "declined");
+                await setCalendarOn(id, on);
+                await refreshCalendar();
               })
             }
-            onToggleNotifications={(on) =>
+            onConnectReminders={() => void connectRemindersNow()}
+            onNotifications={(on) =>
               void run(async () => {
-                await updateProfile({ ...profile, notificationsOff: on ? undefined : true });
                 const next = { ...profile, notificationsOff: on ? undefined : true };
+                await updateProfile(next);
                 if (on) await syncAll({ tasks, threads }, next, true);
                 else await syncReminders([], [], new Date(), { enabled: false });
               })
             }
+            onMorning={(time) =>
+              void run(async () => {
+                const next = { ...profile, morningTime: time };
+                await updateProfile(next);
+                await syncAll({ tasks, threads }, next, !next.morningOff);
+              })
+            }
+            onEvening={(time) => void run(() => updateProfile({ ...profile, eveningTime: time }))}
+            onFeedback={(m) => startCapture(m, null, "feedback")}
             onExport={() => void run(async () => void (await Share.share({ message: await exportAllData() })))}
+            onDevReminder={typeof __DEV__ !== "undefined" && __DEV__ ? () => void sendTestReminder() : undefined}
+            cloud={onDeviceAi ? undefined : { on: cloudConsent === "allowed", onChange: (on) => void run(async () => { await setCloudConsent(on ? "allowed" : "declined"); setCloudConsentState(on ? "allowed" : "declined"); }) }}
             onDeleteAll={() =>
               Alert.alert("Delete all your data?", "Every thread, move, recording and setting on this phone will be erased. This cannot be undone.", [
                 { text: "Cancel", style: "cancel" },
@@ -832,6 +837,7 @@ function Flow() {
             busy={busy}
             onOpenProject={openThread}
             onRecord={() => startCapture("voice", null, "thought", "Anything else on your mind?")}
+            onWrite={() => startCapture("text", null, "thought", "Anything else on your mind?")}
             onDone={() => {
               setPlan(null);
               selectTab("today");
@@ -864,13 +870,8 @@ function Flow() {
           </View>
         )}
       </View>
-      {screen !== "thread" && screen !== "intake" && (
-        <TabBar
-          active={screen}
-          badge={threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt && pendingMessage(t)).length}
-          onSelect={selectTab}
-        />
-      )}
+      {screen !== "thread" && screen !== "intake" && <TabBar active={screen === "recording" ? "recordings" : screen} onSelect={selectTab} />}
+      <MoveSheet task={editing} projects={realThreads.filter((t) => t.state !== "parked")} onSave={(patch) => editing && onSaveMove(editing, patch)} onDelete={() => editing && onDeleteMove(editing)} onClose={() => setEditing(null)} onOpenSource={editing?.noteId ? () => { const id = editing.noteId!; setEditing(null); openRecording(id); } : undefined} />
       {captureSheet}
     </SafeAreaView>
   );

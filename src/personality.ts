@@ -157,6 +157,8 @@ export type Profile = {
   /** Settings: morning reminder time as "HH:MM" (default 08:30) and an off switch. Additive. */
   morningTime?: string;
   morningOff?: boolean;
+  /** Settings: the evening close as "HH:MM" (default 19:00). Additive. */
+  eveningTime?: string;
   /** When the person tapped "Later" on the get-to-know-you invitation (ISO). Additive. */
   assessmentLaterAt?: string;
 };

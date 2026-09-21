@@ -20,7 +20,7 @@ const config: ExpoConfig = {
   version: "1.0.0",
   orientation: "portrait",
   scheme: "flowthread",
-  userInterfaceStyle: "automatic",
+  userInterfaceStyle: "light",
   icon: "./assets/icon.png",
   ios: {
     supportsTablet: false,
