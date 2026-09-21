@@ -192,12 +192,12 @@ test("an empty non-audio capture fails without writing a note or plan", async ()
   assert.deepEqual(harness.drafts, []);
 });
 
-const OWNER = new URL("./fixtures/owner-dump-1.txt", import.meta.url);
+const SAMPLE = new URL("./fixtures/sample-dump-1.txt", import.meta.url);
 
-test("the owner's dump through the model plan: kinds, people, dates and projects land on the map and around the calendar", async () => {
+test("a spoken dump through the model plan: kinds, people, dates and projects land on the map and around the calendar", async () => {
   harness.reset();
   const fs = await import("node:fs");
-  const dump = fs.readFileSync(OWNER, "utf8").trim();
+  const dump = fs.readFileSync(SAMPLE, "utf8").trim();
   const now = new Date("2026-09-21T08:00:00"); // Monday
   const day = (n, h = 0, m = 0) => new Date(2026, 8, 21 + n, h, m).toISOString();
   harness.events = [
@@ -207,12 +207,12 @@ test("the owner's dump through the model plan: kinds, people, dates and projects
   ];
   harness.plan = {
     items: [
-      { title: "Call the DUI lawyer", kind: "action", project: "DUI case", area: "Legal & admin", person: "the lawyer", when: "this Monday", evidence: "talk to a lawyer" },
-      { title: "Follow up both lawyers", kind: "action", project: "DUI case", area: "Legal & admin", when: "tomorrow", evidence: "do follow-ups tomorrow" },
-      { title: "Lawyer's follow-up", kind: "waiting", project: "DUI case", area: "Legal & admin", person: "the lawyer", evidence: "going to follow up with me" },
-      { title: "Medical exams", kind: "later", project: "Green card", area: "Legal & admin", evidence: "Do medical exams" },
-      { title: "Message a friend about a free app", kind: "action", project: "App portfolio", area: "Work", person: "a friend", evidence: "do a free app for him" },
-      { title: "Invoices from the guy", kind: "waiting", project: "Amazon FBA", area: "Work", person: "the guy", evidence: "supposed to give me noises" },
+      { title: "Call the surveyor", kind: "action", project: "Tenancy case", area: "Home", person: "the surveyor", when: "this Monday", evidence: "talk to a surveyor" },
+      { title: "Follow up both advisers", kind: "action", project: "Tenancy case", area: "Home", when: "tomorrow", evidence: "do follow-ups tomorrow" },
+      { title: "Surveyor's follow-up", kind: "waiting", project: "Tenancy case", area: "Home", person: "the surveyor", evidence: "going to follow up with me" },
+      { title: "Flat measurements", kind: "later", project: "Deposit claim", area: "Home", evidence: "Do the flat measurements" },
+      { title: "Message a friend about a free shoot", kind: "action", project: "Photo portfolio", area: "Work", person: "a friend", evidence: "do a free shoot for him" },
+      { title: "Labels from the guy", kind: "waiting", project: "Etsy shop", area: "Money", person: "the guy", evidence: "supposed to give me labels" },
     ],
   };
   const saved = recording({ captureKind: "thought", text: dump, audioUri: undefined, id: "owner" });
@@ -221,25 +221,25 @@ test("the owner's dump through the model plan: kinds, people, dates and projects
   assert.equal(result.kind, "intake");
   const plan = result.plan;
   assert.equal(plan.source, "model");
-  assert.deepEqual(plan.projects.map((p) => p.title), ["DUI case", "Green card", "App portfolio", "Amazon FBA"]);
+  assert.deepEqual(plan.projects.map((p) => p.title), ["Tenancy case", "Deposit claim", "Photo portfolio", "Etsy shop"]);
   assert.equal(plan.watch.some((w) => /court/i.test(w.title)), true, "the court date is a watch-out before the person says a word");
   assert.equal(plan.watch.some((w) => w.kind === "occasion"), true, "mum's birthday with nothing planned");
   const byTitle = (t) => plan.placements.find((p) => p.item.title === t);
-  assert.equal(byTitle("Call the DUI lawyer").date, "2026-09-21");
-  assert.equal(byTitle("Follow up both lawyers").date, "2026-09-22", "tomorrow, after the court slot");
-  assert.ok(byTitle("Follow up both lawyers").slot.start >= harness.events[0].end, "placed after court, not in the hour before it");
-  assert.ok(byTitle("Lawyer's follow-up").chaseDate >= "2026-09-24");
-  assert.notEqual(byTitle("Lawyer's follow-up").chaseDate, "2026-09-24", "the chase dodges the NYC day");
-  assert.equal(byTitle("Medical exams").date, undefined, "later stays off the calendar");
+  assert.equal(byTitle("Call the surveyor").date, "2026-09-21");
+  assert.equal(byTitle("Follow up both advisers").date, "2026-09-22", "tomorrow, after the court slot");
+  assert.ok(byTitle("Follow up both advisers").slot.start >= harness.events[0].end, "placed after court, not in the hour before it");
+  assert.ok(byTitle("Surveyor's follow-up").chaseDate >= "2026-09-24");
+  assert.notEqual(byTitle("Surveyor's follow-up").chaseDate, "2026-09-24", "the chase dodges the NYC day");
+  assert.equal(byTitle("Flat measurements").date, undefined, "later stays off the calendar");
   const chases = harness.calendarWrites.filter((w) => w.kind === "reminder");
   assert.equal(chases.length, 2, "two chases in Reminders");
   assert.equal(harness.tasks.filter((t) => t.kind === "waiting").every((t) => t.reminderId), true);
-  const dui = harness.drafts.find((d) => d.title === "DUI case");
+  const dui = harness.drafts.find((d) => d.title === "Tenancy case");
   const transcript = dui.messages.find((m) => m.kind === "transcript");
   assert.equal(transcript.breakdown.summary, "2 moves · waiting on 1", "the recording shows as what Flow made of it");
   assert.deepEqual(transcript.breakdown.items.map((i) => [i.kind, !!i.when]), [["action", true], ["action", true], ["waiting", true]]);
-  assert.deepEqual(dui.people, ["the lawyer"]);
-  assert.equal(dui.area, "Legal & admin");
+  assert.deepEqual(dui.people, ["the surveyor"]);
+  assert.equal(dui.area, "Home");
   assert.ok(harness.tasks.some((t) => t.projectId === dui.id));
 });
 

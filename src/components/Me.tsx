@@ -135,7 +135,7 @@ export default function Me({
         <Row title="Delete everything" when="›" onPress={onDeleteAll} accessibilityLabel="Delete all my data" />
         {onDevReminder && <Row title="Send a test reminder (dev)" when="›" onPress={onDevReminder} accessibilityLabel="Send a test reminder" />}
         {onDevScheduled && <Row title="Scheduled pushes (dev)" when="›" onPress={onDevScheduled} accessibilityLabel="Scheduled pushes" />}
-        {onDevImport && <Row title="Load the owner's phone data (dev)" sub="his real recordings and threads, from the mini" when="›" onPress={onDevImport} accessibilityLabel="Load owner data" />}
+        {onDevImport && <Row title="Load the test phone's data (dev)" sub="recordings and threads mirrored on the dev server" when="›" onPress={onDevImport} accessibilityLabel="Load test data" />}
         {!!version && <Row title={`Flowthread ${version}${build ? " · " + build : ""}`} />}
       </Section>
       <View style={{ height: 40 }} />

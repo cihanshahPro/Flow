@@ -44,7 +44,7 @@ When they land, flip the rows in `src/components/Me.tsx` from SOON to ON and upd
 | 3 | Siri "Tell Flow…" App Intent + Shortcut (Action button) → `flowthread://record?text=…`; handle the URL in `App.tsx`. | Samil | Me › Siri row flips to ON; a Shortcut run lands as a move. |
 | 4 | Share extension → same URL. | Samil | Me › Share sheet ON; sharing a mail lands as a move. |
 | 5 | Lock-screen widget (WidgetKit + App Group JSON written on refresh). | Samil | Me › Widget ON; the widget shows "first: …". |
-| 6 | Test on Cihan's real data, never demo data: `tests/fixtures/owner/phone-2026-09-21.json` (his six recordings, his threads) runs through the app in `tests/owner-phone.test.mjs`; on a dev device, Me › "Load the owner's phone data (dev)" pulls the same data from the dev server (`GET /mirror/<install>`). New phone snapshots go next to it. | both | The test stays green; new snapshots added when he records. |
+| 6 | Test on realistic data, never demo data — and never real personal data in git: `tests/fixtures/sample/phone-1.json` (an invented person, six recordings, same shape as a phone snapshot) runs through the app in `tests/sample-phone.test.mjs`. Real snapshots stay outside the repo. | both | The test stays green; new snapshots added when he records. |
 | 7 | Decide the thread meter ("Getting to know this · %") and the "What Flow got" cards: keep or drop now that the thread is an assistant chat. | Cihan | One line in this doc. |
 | 8 | Whisper on the dev server: `large-v3-turbo` (done on the mini); document for any other dev Mac in `.env.processor.example` (done). | — | — |
 

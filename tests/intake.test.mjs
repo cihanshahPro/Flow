@@ -41,17 +41,17 @@ test("the model's titles win where it listed the same subject; its extra grounde
   assert.ok(extra.some((s) => s.title === "Knee pain"));
 });
 
-test("the owner's own two-minute dump (Whisper transcript) comes out as its four things", async () => {
+test("a two-minute spoken dump (sample fixture, invented person) comes out as its four things", async () => {
   const fs = await import("node:fs");
-  const dump = fs.readFileSync(new URL("./fixtures/owner-dump-1.txt", import.meta.url), "utf8").trim();
+  const dump = fs.readFileSync(new URL("./fixtures/sample-dump-1.txt", import.meta.url), "utf8").trim();
   const subjects = segmentDump(dump);
-  assert.deepEqual(subjects.map((s) => s.title), ["My DEY case", "The defense lawyer", "An app portfolio", "Amazon FPA"]);
+  assert.deepEqual(subjects.map((s) => s.title), ["My tenancy case", "The building surveyor", "A photo portfolio", "An Etsy shop"]);
   assert.match(subjects[0].evidence, /^Starting with having to do a few things/, "the intro rides with the first item");
-  assert.match(subjects[1].evidence, /immigration lawyer as well/);
-  assert.match(subjects[1].evidence, /medical exams/);
-  assert.match(subjects[2].evidence, /free app for him/, "'one of the things' continues the app subject");
+  assert.match(subjects[1].evidence, /housing adviser as well/);
+  assert.match(subjects[1].evidence, /flat measurements/);
+  assert.match(subjects[2].evidence, /free shoot for him/, "'one of the things' continues the app subject");
   assert.doesNotMatch(subjects.map((s) => s.title).join(), /stuff on my mind|Starting with/);
   // The on-device model's shorter list names two of them; the local pass keeps the other two.
-  const merged = subjectsOf(dump, [{ title: "Legal Follow-ups", evidence: "reach out to it" }, { title: "App Portfolio Development", evidence: "build apps for people" }]);
-  assert.deepEqual(merged.map((s) => s.title), ["Legal Follow-ups", "The defense lawyer", "App Portfolio Development", "Amazon FPA"]);
+  const merged = subjectsOf(dump, [{ title: "Housing Follow-ups", evidence: "reach out to it" }, { title: "Portfolio Website", evidence: "shoot events for people" }]);
+  assert.deepEqual(merged.map((s) => s.title), ["Housing Follow-ups", "The building surveyor", "Portfolio Website", "An Etsy shop"]);
 });

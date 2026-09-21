@@ -51,7 +51,7 @@ When they land, flip the three rows in `src/components/Me.tsx` from SOON to ON a
 | 3 | Siri "Tell Flow…" App Intent + Shortcut (Action button) → `flowthread://record?text=…`; handle the URL in `App.tsx`. | Samil | Me › Siri row ON; a Shortcut run lands as a move. |
 | 4 | Share extension → the same URL. | Samil | Me › Share sheet ON; a shared mail lands as a move. |
 | 5 | Lock-screen widget: WidgetKit + App Group JSON written on refresh. | Samil | Me › Widget ON; it shows "first: …". |
-| 6 | Test on Cihan's real data, never demo data: `tests/fixtures/owner/phone-2026-09-21.json` (his six recordings and threads) runs through the app's own path in `tests/owner-phone.test.mjs`. New snapshots of his phone go next to it. | both | The test stays green as the app changes. |
+| 6 | Test on realistic data, never demo data — and never real personal data in git: `tests/fixtures/sample/phone-1.json` (an invented person, six recordings, same shape as a phone snapshot) runs through the app in `tests/sample-phone.test.mjs`. Real snapshots stay outside the repo. | both | The test stays green as the app changes. |
 | 7 | Decide the thread meter ("Getting to know this · %") and the "What Flow got" cards — keep or drop now that the thread is an assistant chat. | Cihan | One line in `docs/HANDOFF.md`. |
 
 ## 6 · Known gaps, honestly

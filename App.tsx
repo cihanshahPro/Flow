@@ -918,12 +918,12 @@ function Flow() {
             onDevReminder={typeof __DEV__ !== "undefined" && __DEV__ ? () => void sendTestReminder() : undefined}
             onDevScheduled={typeof __DEV__ !== "undefined" && __DEV__ ? () => void scheduledSummary().then((lines) => Alert.alert("Scheduled", lines.join("\n") || "Nothing scheduled.")) : undefined}
             onDevImport={
-              typeof __DEV__ !== "undefined" && __DEV__ && devLanConfig()
+              typeof __DEV__ !== "undefined" && __DEV__ && devLanConfig() && process.env.EXPO_PUBLIC_TEST_INSTALL
                 ? () =>
                     void run(async () => {
-                      // The owner's phone, as mirrored on the dev server: the real scenario every test runs on.
+                      // A test phone's data, as mirrored on the dev server (install id from the dev .env, never in code).
                       const lan = devLanConfig()!;
-                      const res = await fetch(`${lan.url}/mirror/${process.env.EXPO_PUBLIC_OWNER_INSTALL ?? "110da00b-1bb2-48da-9df9-4c747141d76e"}`, { headers: { Authorization: "Bearer " + lan.token } });
+                      const res = await fetch(`${lan.url}/mirror/${process.env.EXPO_PUBLIC_TEST_INSTALL}`, { headers: { Authorization: "Bearer " + lan.token } });
                       if (!res.ok) throw new Error("No mirror on the dev server.");
                       const got = await importAllData(await res.json());
                       // A simulator has no life on its calendar: the demo week stands in for the owner's.
@@ -931,7 +931,7 @@ function Flow() {
                       if (!week.some((e) => !e.mine && !e.allDay)) await seedDemoCalendar().catch(() => 0);
                       await refresh();
                       await refreshCalendar();
-                      setNotice(`Loaded ${got.records} records and ${got.threads} threads from the owner's phone.`);
+                      setNotice(`Loaded ${got.records} records and ${got.threads} threads from the test phone.`);
                     })
                 : undefined
             }

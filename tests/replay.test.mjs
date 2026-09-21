@@ -63,10 +63,10 @@ for (const file of files) {
   });
 }
 
-test("the owner's transcript replays through the local floor without a model", () => {
-  const text = readFileSync(new URL("./fixtures/owner-dump-1.txt", import.meta.url), "utf8").trim();
+test("the sample transcript replays through the local floor without a model", () => {
+  const text = readFileSync(new URL("./fixtures/sample-dump-1.txt", import.meta.url), "utf8").trim();
   const items = localPlan(text, new Date("2026-09-21T08:00:00"));
-  assert.deepEqual(items.map((i) => i.title), ["My DEY case", "The defense lawyer", "An app portfolio", "Amazon FPA"]);
+  assert.deepEqual(items.map((i) => i.title), ["My tenancy case", "The building surveyor", "A photo portfolio", "An Etsy shop"]);
   assert.ok(items.every((i) => ["action", "waiting", "later"].includes(i.kind)));
   assert.ok(items.some((i) => i.kind === "waiting"), "'supposed to give me' is a waiting-for");
   const norm = (x) => x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
