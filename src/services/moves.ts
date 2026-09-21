@@ -107,3 +107,24 @@ export async function rollOver(now = new Date()): Promise<Task[]> {
   for (const t of late) moved.push(await moveToDay(t, today, now));
   return moved;
 }
+
+/**
+ * The calendar moved under a Flow block (a dentist landed on it): the block
+ * finds the next gap that day. Returns the moves that were re-placed.
+ */
+export async function replanConflicts(now = new Date()): Promise<Task[]> {
+  const today = localDate(now);
+  const events = await readWeek(now, 14).catch(() => []);
+  const theirs = events.filter((e) => !e.mine && !e.allDay);
+  const { tasks } = await loadWorkspace();
+  const moved: Task[] = [];
+  for (const t of tasks) {
+    if (t.done || !t.eventId || !t.plannedDate || t.plannedDate < today) continue;
+    const mine = events.find((e) => e.id === t.eventId || e.ref === t.id);
+    if (!mine) continue;
+    const clash = theirs.some((e) => e.start < mine.end && e.end > mine.start);
+    if (!clash) continue;
+    moved.push(await moveToDay(t, t.plannedDate, now));
+  }
+  return moved;
+}

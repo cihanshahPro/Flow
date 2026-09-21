@@ -15,6 +15,11 @@ export async function resolve(specifier, context, next) {
     if (specifier === "./processors") return next(specifier + ".ts", context);
     if (["../drafts", "../model", "../ai-policy", "../calendar", "../map", "../intake", "../thread"].includes(specifier)) return next(specifier + ".ts", context);
   }
+  if (parent.endsWith("/services/moves.ts") || parent.endsWith("/services/tomorrow.ts")) {
+    if (["./storage", "./drafts", "./calendar-read"].includes(specifier)) return { url: mocks, shortCircuit: true };
+    if (["./moves"].includes(specifier)) return next(specifier + ".ts", context);
+    if (["../task-flow", "../model", "../calendar", "../thread", "../tomorrow"].includes(specifier)) return next(specifier + ".ts", context);
+  }
   if (parent.endsWith("/services/processing.ts") || parent.endsWith("/services/processors.ts")) {
     if (MOCKED.includes(specifier)) return { url: mocks, shortCircuit: true };
     if (["./processors", "./intake"].includes(specifier)) return next(specifier + ".ts", context);

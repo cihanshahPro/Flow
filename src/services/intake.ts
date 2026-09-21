@@ -9,7 +9,7 @@ import { planText, type ShapeOptions } from "./processors";
 import { readWeek, writePlanEvent, writeReminder } from "./calendar-read";
 import { eventsOn, timeLabel, watchOuts, weekDays, type CalEvent, type WatchOut } from "../calendar";
 import { AREAS, attachItems, placePlan, type Area, type Placement, type PlanItem, type ProjectRef } from "../map";
-import { contentWords as contentWordsOf, localPlan } from "../intake";
+import { contentWords as contentWordsOf, isQuickLine, localPlan } from "../intake";
 import { extractDueHints, respondToRecording } from "../thread";
 
 /**
@@ -27,6 +27,8 @@ export type WeekPlan = {
   placements: Placement[];
   /** Items that were already on the week (said before), left as they were. */
   known?: number;
+  /** One short line, added without the week screen. */
+  quick?: boolean;
   /** The week after placing: the person's events plus Flow's. */
   events: CalEvent[];
   watch: WatchOut[];
@@ -83,7 +85,9 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   // 1. Read the words into items: the model when it answers, the local pass otherwise.
   const live0 = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt);
   const context = [calendarContextText(calendarLines(events, now)), projectsContextText(live0)].filter(Boolean).join("\n\n");
-  const outcome = await planText(text, context, options);
+  // Quick Add: one short line skips the model and lands straight on the week.
+  const quick = isQuickLine(text);
+  const outcome = quick ? { plan: null } : await planText(text, context, options);
   // Items that merely restate a calendar event are the model reading the context back; they are not new.
   const known = events.filter((e) => !e.mine).map((e) => contentWordsOf(e.title));
   const restates = (i: PlanShapeItem) => {
@@ -228,6 +232,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     ...(outcome.plan?.summary ? { summary: outcome.plan.summary } : {}),
     placements: fresh,
     known: already,
+    quick,
     events: week,
     watch,
     projects: [...projects.values()].map(({ id, title, area, fresh }) => ({ id, title, area, fresh })),

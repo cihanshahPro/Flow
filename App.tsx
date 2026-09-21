@@ -32,7 +32,7 @@ import ThreadChat from "./src/components/ThreadChat";
 import WeekPlan from "./src/components/WeekPlan";
 import type { WeekPlan as Plan } from "./src/services/intake";
 import { calendarConnected, connectCalendar, connectReminders, listCalendars, readWeek, remindersConnected, seedDemoCalendar, setCalendarOn, type PhoneCalendar } from "./src/services/calendar-read";
-import { deleteMove, editMove, moveToEvening, moveToTomorrow, syncFromPhone, tickMove, untickMove } from "./src/services/moves";
+import { deleteMove, editMove, moveToEvening, moveToTomorrow, replanConflicts, syncFromPhone, tickMove, untickMove } from "./src/services/moves";
 import { watchOuts, type CalEvent } from "./src/calendar";
 import Thinking from "./src/components/Thinking";
 import Funnel, { type FunnelStep } from "./src/components/Funnel";
@@ -277,7 +277,10 @@ function Flow() {
     setRemindersOn(await remindersConnected().catch(() => false));
     if (on) {
       const back = await syncFromPhone().catch(() => ({ completed: 0, unplaced: 0 }));
-      if (back.completed || back.unplaced) await refresh();
+      // Something new on the calendar sat on a Flow block: the block moves, and the person hears about it.
+      const moved = await replanConflicts().catch(() => []);
+      if (moved.length) setNotice(`Moved ${moved.map((t) => t.title).slice(0, 2).join(" and ")}${moved.length > 2 ? ` and ${moved.length - 2} more` : ""} — something landed on ${moved.length === 1 ? "it" : "them"}.`);
+      if (back.completed || back.unplaced || moved.length) await refresh();
       setEvents(await readWeek().catch(() => []));
       setCalendars(await listCalendars().catch(() => []));
     }
@@ -505,9 +508,18 @@ function Flow() {
       const stayedHere = captureOpen.current;
       setCapture(null);
       if (result.kind === "intake") {
+        setEvents(result.plan.events);
+        const first = result.plan.placements[0];
+        if (result.plan.quick && first) {
+          // One line, one move: say where it landed and stay put.
+          const when = first.slot ? `${new Date(first.slot.start).toLocaleDateString("en-US", { weekday: "short" })} ${new Date(first.slot.start).toTimeString().slice(0, 5)}` : first.chaseDate ? `chase ${new Date(`${first.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : first.date ? new Date(`${first.date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }) : "later";
+          setNotice(`Added: ${first.item.title} · ${when}`);
+          await evaluateAll(data);
+          await refreshTomorrow();
+          return;
+        }
         // The week, planned around the calendar. Shown once; nothing is asked.
         setPlan(result.plan);
-        setEvents(result.plan.events);
         if (stayedHere) setScreen("intake");
         else setNotice(`Flow placed ${result.plan.placements.length} things on your week.`);
         await evaluateAll(data);

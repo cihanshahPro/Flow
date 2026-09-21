@@ -128,3 +128,19 @@ export const FlowIntelligence = new Proxy(
     },
   },
 );
+
+// moves / tomorrow stand-ins
+export async function removeTask(id) {
+  harness.tasks = harness.tasks.filter((t) => t.id !== id);
+}
+export async function completeOnPhone() {}
+export async function removeFromPhone(task) {
+  harness.calendarWrites.push({ kind: "remove", ...task });
+}
+export async function readBack() {
+  return { completed: [], removed: [] };
+}
+export async function loadRecord(kind, id) {
+  return (harness.records ?? []).find((r) => r.kind === kind && r.id === id)?.payload ?? null;
+}
+export async function deletePlanEvent() {}

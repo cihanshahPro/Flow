@@ -141,6 +141,16 @@ const PERSON = /\b(?:my|the|our) (?:(?:new|old|other) )?((?:\w+ )?(?:lawyer|atto
 const WAITING = /\b(?:supposed to (?:give|send|get back|call)|waiting (?:on|for)|will (?:get back|follow up|call me|send)|owes? me|hasn'?t (?:sent|replied|got back|called)|he'?s going to (?:follow up|send|call)|she'?s going to (?:follow up|send|call)|they'?re going to (?:follow up|send|call))\b/i;
 const LATER = /\b(?:someday|one day|at some point|eventually|maybe later|down the line|no rush|when i get (?:a chance|time)|would be nice)\b/i;
 
+/** One short line ("call the dentist tomorrow") is a move, not a dump: no model, no week screen. */
+export function isQuickLine(text: string): boolean {
+  const t = text.trim();
+  if (t.length > 90 || t.length < 3) return false;
+  const words = t.split(/\s+/);
+  if (words.length > 14) return false;
+  if (/[.!?;]\s+\S/.test(t)) return false;
+  return !/\b(and then|also|another thing|the other one)\b/i.test(t);
+}
+
 /** The floor when no model is available: subjects from the local pass, one item each. */
 export function localPlan(text: string, now = new Date()): PlanItem[] {
   return segmentDump(text).map((s) => {
