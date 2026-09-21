@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { timeLabel } from "../calendar.ts";
 import type { Task } from "../model.ts";
 import { EVERY_DAY, WEEKDAYS, type Decision, type Proposal, type Routine } from "../tomorrow.ts";
-import { Button, Check, Chips, Dot, Empty, Fab, Pill, Row, Screen, Section } from "./ui.tsx";
+import { Button, Check, Chips, Dot, Empty, Pill, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
 /**
@@ -84,9 +84,15 @@ export default function PlanTomorrow({
       back="Today"
       onBack={onBack}
       footer={<Button label={total || onCount ? `Lock in tomorrow · ${total} move${total === 1 ? "" : "s"}${onCount ? ` · ${onCount} routine${onCount === 1 ? "" : "s"}` : ""}` : "Lock in tomorrow"} busy={busy} style={{ marginTop: 0 }} onPress={() => onLock({ keep: [...keep], carry: [...carry], added, routines: mine })} />}
-      fab={<Fab onRecord={onTalk} onWrite={onType} label="Tell Flow" busy={busy} />}
     >
       <Text style={s.lead}>Say what tomorrow holds — Flow connects it to your list and suggests. Then lock it in and let it go.</Text>
+      <View style={s.tell}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Tell Flow" onPress={onTalk} onLongPress={onType} disabled={busy} style={({ pressed }) => [s.tellButton, (pressed || busy) && { opacity: 0.7 }]}>
+          <View style={s.tellDot} />
+          <Text style={s.tellText}>Tell Flow about tomorrow</Text>
+        </Pressable>
+        <Text style={s.tellHint} onPress={onType} accessibilityRole="button" accessibilityLabel="Type it instead">or type it</Text>
+      </View>
       {(proposal.events.length > 0 || proposal.watch.length > 0) && (
         <Section label="Calendar">
           {proposal.events.map((e, i) => (
@@ -145,5 +151,10 @@ export default function PlanTomorrow({
 const s = StyleSheet.create({
   lead: { fontSize: 14.5, lineHeight: 21, color: C.ink2, paddingHorizontal: 20, paddingTop: 8 },
   add: { paddingHorizontal: 20, paddingVertical: 8, gap: 4 },
+  tell: { paddingHorizontal: 20, paddingTop: 12, gap: 6, alignItems: "center" },
+  tellButton: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.accent, borderRadius: 26, paddingVertical: 14 },
+  tellDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.record },
+  tellText: { color: C.white, fontSize: 15, fontWeight: "700" },
+  tellHint: { color: C.accent, fontSize: 13, fontWeight: "600", paddingVertical: 4 },
   input: { backgroundColor: C.tint, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: C.ink },
 });
