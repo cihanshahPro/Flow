@@ -73,10 +73,13 @@ export async function lockTomorrow(decision: Decision, now = new Date()): Promis
     if (!routinesOn(decision.routines, date).some((r) => r.id === t.routineId)) await editMove(t, { plannedDate: "", plannedTime: "" }, now);
   }
   let added = 0;
+  // Carry-overs just took gaps; read the day again so typed lines land after them, and keep each new one out of the next gap.
+  let week = await readWeek(now, 3).catch(() => events);
   for (const line of decision.added.map((s) => s.trim()).filter(Boolean)) {
     const id = `flow:day:${date}:${line.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`;
     if (tasks.some((t) => t.id === id)) continue;
-    const slot = placeInGap(events, date, 20, now, away, 1);
+    const slot = placeInGap(week, date, 20, now, away, 1);
+    if (slot) week = [...week, { id: `new:${id}`, calendarId: "", title: line, start: slot.start, end: slot.end, allDay: false, mine: true, ref: id }];
     const task: Task = {
       id,
       title: line,
