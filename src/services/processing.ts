@@ -113,17 +113,16 @@ async function processThoughtNote(
     if (!(openOffer && readAcceptance(text))) {
       const context = chatContextText(chatBrief(plan, threads, workspace.tasks, await readWeek().catch(() => [])));
       const turn = await chatText(text, context, options);
-      if (turn.chat) {
-        const answered = respondToRecording(appendPlanUpdate(plan, suggestDraft(note.id, text)), note.id, text, {
-          mode,
-          formula,
-          reply: turn.chat.reply,
-          plate: profile?.plate,
-          assistant: { question: turn.chat.question, move: turn.chat.move },
-        });
-        await saveDraft(answered);
-        return answered;
-      }
+      // With a brain: its reply, its one question or one move. Without one: a plain acknowledgement — never the script's "And what else?".
+      const answered = respondToRecording(appendPlanUpdate(plan, suggestDraft(note.id, text)), note.id, text, {
+        mode,
+        formula,
+        ...(turn.chat ? { reply: turn.chat.reply } : {}),
+        plate: profile?.plate,
+        assistant: turn.chat ? { question: turn.chat.question, move: turn.chat.move } : {},
+      });
+      await saveDraft(answered);
+      return answered;
     }
   }
   let draft = suggestDraft(note.id, text);

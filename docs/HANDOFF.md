@@ -36,6 +36,18 @@ Cihan is not on the EAS project; add him as a member or run this yourself. Permi
 
 When they land, flip the rows in `src/components/Me.tsx` from SOON to ON and update screen 7 in SKELETON.html.
 
+### What's left — the task list (owner in brackets)
+| # | Task | Owner | How you know it's done |
+|---|---|---|---|
+| 1 | **Set up the brain.** Decide worker-with-key vs on-device-only for build 9; if worker: `npx wrangler secret put ANTHROPIC_API_KEY`, KV id in `wrangler.toml`, `npx wrangler deploy`, then check `EXPO_PUBLIC_SHAPE_URL` answers `/v1/plan` and `/v1/chat`. | Samil | A recording on a TestFlight phone yields moves titled with verbs ("Call the DUI lawyer"), not project names. |
+| 2 | Build 9: `eas build --platform ios --profile production --auto-submit`; add Cihan to the EAS project. | Samil | Build 1.0.0 (9) in TestFlight, Kodavena Internal. |
+| 3 | Siri "Tell Flow…" App Intent + Shortcut (Action button) → `flowthread://record?text=…`; handle the URL in `App.tsx`. | Samil | Me › Siri row flips to ON; a Shortcut run lands as a move. |
+| 4 | Share extension → same URL. | Samil | Me › Share sheet ON; sharing a mail lands as a move. |
+| 5 | Lock-screen widget (WidgetKit + App Group JSON written on refresh). | Samil | Me › Widget ON; the widget shows "first: …". |
+| 6 | Test on Cihan's real data, never demo data: `tests/fixtures/owner/phone-2026-09-21.json` (his six recordings, his threads) runs through the app in `tests/owner-phone.test.mjs`; new phone snapshots go next to it. | both | The test stays green; new snapshots added when he records. |
+| 7 | Decide the thread meter ("Getting to know this · %") and the "What Flow got" cards: keep or drop now that the thread is an assistant chat. | Cihan | One line in this doc. |
+| 8 | Whisper on the dev server: `large-v3-turbo` (done on the mini); document for any other dev Mac in `.env.processor.example` (done). | — | — |
+
 ### Known gaps
 - The three native pieces above.
 - Every screen is only as good as the brain: with the Apple fallback the titles and answers are weak; with Claude they are right. Judge screens with the real brain.
