@@ -103,6 +103,50 @@ export default function Today({
             <Thinking compact onCancel={onCancelProcessing} />
           </View>
         )}
+        {calendar && !calendar.connected && (
+          <View style={s.suggest}>
+            <Text style={s.kickerBlue}>YOUR WEEK</Text>
+            <Text style={s.headline}>Let Flow see your calendar</Text>
+            <Text style={s.body}>Apple and Google, through the phone. Flow plans around what's already there and puts its moves in the gaps.</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Connect calendar" onPress={calendar.onConnect} disabled={busy} style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}>
+              <Text style={s.recordText}>Connect calendar</Text>
+            </Pressable>
+          </View>
+        )}
+        {day && (onCalendar.length > 0 || chases.length > 0 || tomorrow.length > 0) && (
+          <View style={s.threads}>
+            <Text style={s.kicker}>TODAY'S PLAN</Text>
+            {onCalendar.map((e) => (
+              <View key={e.id} style={[s.line, e.mine && s.lineMine]}>
+                <Text style={[s.lineTime, e.mine && s.lineTimeMine]}>{e.allDay ? "all day" : timeLabel(e.start)}</Text>
+                <Text style={[s.lineTitle, e.mine && s.lineTitleMine]} numberOfLines={2}>
+                  {e.title}
+                </Text>
+              </View>
+            ))}
+            {chases.map((t) => (
+              <View key={t.id} style={[s.line, s.lineChase]}>
+                <Text style={[s.lineTime, s.lineTimeChase]}>chase</Text>
+                <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
+                  {t.waitingOn}: {t.title}
+                </Text>
+              </View>
+            ))}
+            {tomorrow.length > 0 && (
+              <>
+                <Text style={[s.kicker, { marginTop: 6 }]}>TOMORROW · WATCH OUT</Text>
+                {tomorrow.map((w, i) => (
+                  <View key={i} style={[s.line, s.lineChase]}>
+                    <Text style={[s.lineTime, s.lineTimeChase]}>{w.kind === "full" ? "full" : w.kind === "trip" ? "away" : "soon"}</Text>
+                    <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
+                      {w.title}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        )}
         {nextTask && (
           <View style={s.next}>
             <Text style={s.kicker}>NEXT</Text>
@@ -150,50 +194,6 @@ export default function Today({
             </Pressable>
           </View>
         </View>
-        {calendar && !calendar.connected && (
-          <View style={s.suggest}>
-            <Text style={s.kickerBlue}>YOUR WEEK</Text>
-            <Text style={s.headline}>Let Flow see your calendar</Text>
-            <Text style={s.body}>Apple and Google, through the phone. Flow plans around what's already there and puts its moves in the gaps.</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Connect calendar" onPress={calendar.onConnect} disabled={busy} style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}>
-              <Text style={s.recordText}>Connect calendar</Text>
-            </Pressable>
-          </View>
-        )}
-        {day && (onCalendar.length > 0 || chases.length > 0 || tomorrow.length > 0) && (
-          <View style={s.threads}>
-            <Text style={s.kicker}>TODAY'S PLAN</Text>
-            {onCalendar.map((e) => (
-              <View key={e.id} style={[s.line, e.mine && s.lineMine]}>
-                <Text style={[s.lineTime, e.mine && s.lineTimeMine]}>{e.allDay ? "all day" : timeLabel(e.start)}</Text>
-                <Text style={[s.lineTitle, e.mine && s.lineTitleMine]} numberOfLines={2}>
-                  {e.title}
-                </Text>
-              </View>
-            ))}
-            {chases.map((t) => (
-              <View key={t.id} style={[s.line, s.lineChase]}>
-                <Text style={[s.lineTime, s.lineTimeChase]}>chase</Text>
-                <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
-                  {t.waitingOn}: {t.title}
-                </Text>
-              </View>
-            ))}
-            {tomorrow.length > 0 && (
-              <>
-                <Text style={[s.kicker, { marginTop: 6 }]}>TOMORROW · WATCH OUT</Text>
-                {tomorrow.map((w, i) => (
-                  <View key={i} style={[s.line, s.lineChase]}>
-                    <Text style={[s.lineTime, s.lineTimeChase]}>{w.kind === "full" ? "full" : w.kind === "trip" ? "away" : "soon"}</Text>
-                    <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
-                      {w.title}
-                    </Text>
-                  </View>
-                ))}
-              </>
-            )}
-          </View>
-        )}
       </ScrollView>
     </View>
   );

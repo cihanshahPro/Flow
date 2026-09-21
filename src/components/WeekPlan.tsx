@@ -44,7 +44,7 @@ export default function WeekPlan({ plan, busy = false, now = new Date(), onOpenP
               .map((p, i) => (
                 <View key={i} style={[s.item, s.wait]}>
                   <Text style={s.itemTitle} numberOfLines={2}>
-                    {p.item.person ?? p.item.project}: {p.item.title}
+                    {p.item.person && !p.item.title.toLowerCase().includes(p.item.person.toLowerCase()) ? `${p.item.person}: ` : ""}{p.item.title}
                   </Text>
                   <Text style={s.itemChase}>chase {p.chaseDate ? new Date(`${p.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }) : "soon"}</Text>
                 </View>
