@@ -332,3 +332,20 @@ test("inside a thread Flow is an assistant: it answers from the project, asks on
   assert.match(after.draft.messages.at(-1).text, /on your Today/);
   assert.ok(!pendingMessage(after.draft), "nothing left open");
 });
+
+test("inside a thread, a message with a second subject gets New thread · → Existing… · Keep here before any move", async () => {
+  harness.reset();
+  const { respondToRecording, pendingMessage } = await import("../src/thread.ts");
+  const { suggestDraft } = await import("../src/drafts.ts");
+  const dui = respondToRecording({ ...suggestDraft("dui", "I have to reach out to the lawyer about my DUI case."), title: "DUI case", area: "Legal & admin", people: ["the lawyer"] }, "d0", "I have to reach out to the lawyer about my DUI case.", { quiet: true });
+  const home = { ...suggestDraft("home", "The bathroom fan is broken."), title: "Home admin", area: "Home" };
+  harness.drafts = [dui, home];
+  harness.chat = { reply: "Before the hearing: the letter to your lawyer.", question: "", move: { title: "Send the lawyer the court letter", when: "today" } };
+  const msg = recording({ captureKind: "thought", text: "What do I still need before the court hearing? Also I need to book the dentist for the kids next week.", audioUri: undefined, id: "m3", planId: "dui" });
+  harness.notes = [structuredClone(msg)];
+  const result = await processCapturedNote(msg);
+  const open = pendingMessage(result.draft);
+  assert.equal(open.kind, "branch", "the split offer comes first");
+  assert.deepEqual(open.chips.map((c) => c.label), ["New thread", "→ Existing…", "Keep here"]);
+  assert.ok(!result.draft.messages.some((m) => m.kind === "offer" && !m.answered && m.id.includes("m3")), "no move until the split is answered");
+});

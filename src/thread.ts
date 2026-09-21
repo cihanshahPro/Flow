@@ -881,6 +881,35 @@ export function respondToRecording(
     text: reply || templateReply(text, thread.threadPoints, points, isFirst, mode, noteId),
   });
   if (options.assistant) {
+    // More than one thing in the message: the split offer comes first (New thread · → Existing… · Keep here); the move waits.
+    const heardNow = [...(options.branches ?? []), ...detectBranches(text, thread)];
+    const sameAs = (a: string, b: string) => {
+      const x = a.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      const y = b.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      return x === y || x.includes(y) || y.includes(x);
+    };
+    const offeredEarlier = (thread.messages ?? []).filter((m) => m.kind === "branch").flatMap((m) => m.branches ?? []);
+    const sideNow = heardNow
+      .filter((b) => b.title.trim() && b.evidence.trim())
+      .filter((b, i, all) => all.findIndex((o) => sameAs(o.title, b.title) || sameAs(o.evidence, b.evidence)) === i)
+      .filter((b) => !offeredEarlier.some((o) => sameAs(o.title, b.title) || sameAs(o.evidence, b.evidence)))
+      .slice(0, 3);
+    if (sideNow.length) {
+      const ties = tieCandidates(sideNow, (options.others ?? []).filter((o) => o.id !== thread.id));
+      push({
+        from: "flow",
+        kind: "branch",
+        text: sideNow.length === 1 ? `“${sideNow[0].title}” — its own thread, or part of one you have?` : `I heard ${sideNow.length + 1} separate things. Keep this one on “${next.title}” and give ${sideNow.map((b) => `“${b.title}”`).join(" and ")} their own threads?`,
+        branches: sideNow,
+        chips: [
+          { id: "split", label: "New thread" },
+          ...ties.map((t) => ({ id: `to:${t.id}`, label: `→ ${t.title.length > 26 ? t.title.slice(0, 25).trimEnd() + "…" : t.title}` })),
+          ...((options.others ?? []).some((o) => o.id !== thread.id && !ties.some((t) => t.id === o.id)) ? [{ id: "pick", label: "→ Existing…" }] : []),
+          { id: "keep", label: "Keep here" },
+        ],
+      });
+      return { ...withMessages(next, added), hypeGiven: [...hyped] };
+    }
     // The assistant asks its own one question, or puts one move on the table; the script stays out of the way.
     const q = options.assistant.question?.trim();
     const mv = options.assistant.move;

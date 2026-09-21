@@ -11,7 +11,7 @@ import type { DirectionContext, Note, Task } from "../model";
 import { loadProfile } from "./profile";
 import { modeFor, DEFAULT_MODE } from "../flow-voice";
 import { formulaPrompt } from "../formula";
-import { extractDueHints, readAcceptance, respondToRecording, routeRecording, threadContextFor, threadTasks } from "../thread";
+import { detectBranches, extractDueHints, readAcceptance, respondToRecording, routeRecording, threadContextFor, threadTasks } from "../thread";
 import { chatContextText } from "../ai-policy";
 import { chatText, planText } from "./processors";
 import { readWeek } from "./calendar-read";
@@ -114,12 +114,16 @@ async function processThoughtNote(
       const context = chatContextText(chatBrief(plan, threads, workspace.tasks, await readWeek().catch(() => [])));
       const turn = await chatText(text, context, options);
       // With a brain: its reply, its one question or one move. Without one: a plain acknowledgement — never the script's "And what else?".
+      // Side subjects are read against the thread as it was before this message joined it.
+      const sides = detectBranches(text, plan);
       const answered = respondToRecording(appendPlanUpdate(plan, suggestDraft(note.id, text)), note.id, text, {
         mode,
         formula,
+        branches: sides,
         ...(turn.chat ? { reply: turn.chat.reply } : {}),
         plate: profile?.plate,
         assistant: turn.chat ? { question: turn.chat.question, move: turn.chat.move } : {},
+        others: threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt).map((t) => ({ id: t.id, title: t.title, words: [t.source, ...t.updates].join(" "), people: t.people })),
       });
       await saveDraft(answered);
       return answered;
