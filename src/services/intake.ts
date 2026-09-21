@@ -91,7 +91,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   const live = live0;
   const refs: ProjectRef[] = live.map((t) => ({ id: t.id, title: t.title, area: t.area, people: t.people, words: [t.source, ...t.updates].join(" ") }));
   // A project named after an area ("Work", "Other") is the model shrugging: that item is a one-off on its area.
-  const attached = attachItems(items.map((i) => ((AREAS as readonly string[]).includes(i.project.trim()) ? { ...i, project: "" } : i)), refs);
+  const attached = attachItems(items.map((i) => (vagueProject(i.project) ? { ...i, project: "" } : i)), refs);
   // 3. Place around the week.
   const placements = placePlan(attached, events, now);
   // 4. Projects: a thread per project (GTD: more than one step, or a named outcome); one-offs sit on their area.
@@ -231,6 +231,14 @@ export function breakdownOf(placements: Placement[]): Breakdown {
   const later = items.filter((i) => i.kind === "later").length;
   const bits = [moves ? `${moves} move${moves === 1 ? "" : "s"}` : "", waiting ? `waiting on ${waiting}` : "", later ? `${later} for later` : ""].filter(Boolean);
   return { summary: bits.length ? bits.join(" · ") : "noted", items };
+}
+
+/** "Work", "Other (self)", "Personal", "Misc": the model shrugging, not a project. */
+function vagueProject(name: string): boolean {
+  const words = name.toLowerCase().replace(/[^a-z& ]/g, " ").split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const vague = new Set(["other", "self", "me", "misc", "general", "personal", "various", "stuff", "things", "life", "admin", "legal", "work", "money", "health", "home", "family", "friends", "learning", "and"]);
+  return words.every((w) => vague.has(w)) || (AREAS as readonly string[]).includes(name.trim());
 }
 
 function similar(a: string, b: string): boolean {
