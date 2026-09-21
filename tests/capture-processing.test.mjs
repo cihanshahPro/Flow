@@ -282,3 +282,18 @@ test("saying the same things again adds nothing twice: no repeated passage, no d
   const dui = harness.drafts.find((d) => d.title === "DUI case");
   assert.equal(dui.messages.filter((m) => m.kind === "transcript").length, 1, "the repeated sentence did not land twice");
 });
+
+test("earlier recordings that never went through the intake are replayed once, newest first", async () => {
+  harness.reset();
+  const { replayOldRecordings } = await import("../src/services/processing.ts");
+  harness.notes = [
+    { id: "old1", captureKind: "thought", text: "I need to call the DUI lawyer tomorrow. Also the gym renews next week.", createdAt: "2026-09-20T10:00:00Z" },
+    { id: "old2", captureKind: "thought", text: "Book the dentist for the kids, my wife keeps asking. And sort the car insurance renewal before the end of the month.", createdAt: "2026-09-20T12:00:00Z" },
+    { id: "reply", captureKind: "thought", planId: "t1", text: "that's it", createdAt: "2026-09-20T13:00:00Z" },
+    { id: "fb", captureKind: "feedback", text: "confusing", createdAt: "2026-09-20T14:00:00Z" },
+  ];
+  assert.equal(await replayOldRecordings(), 2, "thread replies and feedback are not dumps");
+  assert.ok(harness.records.some((r) => r.id === "intake:old1") && harness.records.some((r) => r.id === "intake:old2"));
+  assert.ok(harness.tasks.length >= 2);
+  assert.equal(await replayOldRecordings(), 0, "once");
+});

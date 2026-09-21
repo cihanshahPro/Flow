@@ -91,3 +91,8 @@ export async function saveRecord(kind: string, id: string, payload: unknown) {
     JSON.stringify(payload),
   );
 }
+
+export async function listRecordIds(kind: string): Promise<string[]> {
+  const rows = await (await database()).getAllAsync<{ id: string }>("SELECT id FROM records WHERE kind=?", kind);
+  return rows.map((r) => r.id);
+}

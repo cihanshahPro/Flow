@@ -35,7 +35,8 @@ import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/serv
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
-import { processCapturedNote } from "./src/services/processing";
+import { processCapturedNote, replayOldRecordings } from "./src/services/processing";
+import { buildStamp, mirrorToDev } from "./src/services/mirror";
 import { capabilities } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
 import type { Consent } from "./src/ai-policy";
@@ -134,6 +135,8 @@ function Flow() {
     setTasks(w.tasks);
     setNotes(w.notes);
     setThreads(d);
+    // Dev only: the phone's data mirrors to the Mac mini so the real threads can be read and replayed there.
+    void mirrorToDev("refresh");
     try {
       setProgress(await syncProgress());
     } catch {
@@ -182,7 +185,14 @@ function Flow() {
         setFunnelStep("intro");
         await evaluateAll(data);
         setReady(true);
-        void refreshCalendar();
+        await refreshCalendar();
+        // Earlier recordings that never went through the intake are planned now, from their transcripts.
+        void replayOldRecordings().then(async (n) => {
+          if (!n) return;
+          setNotice(`Planned ${n === 1 ? "an earlier recording" : `${n} earlier recordings`} into your week.`);
+          await evaluateAll(await refresh());
+          await refreshCalendar();
+        }).catch(() => {});
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : "Flow could not open its saved data.");
@@ -722,6 +732,7 @@ function Flow() {
             onCancelProcessing={cancelShaping}
             day={dayPlan(events, tasks)}
             calendar={{ connected: calendarOn, onConnect: () => void connectCalendarNow() }}
+            build={buildStamp()}
             notice={notice}
             error={error}
             onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}

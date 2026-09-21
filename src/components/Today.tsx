@@ -27,6 +27,7 @@ export default function Today({
   onCancelProcessing,
   day,
   calendar,
+  build,
   notice = "",
   error = "",
   onRecord,
@@ -57,6 +58,8 @@ export default function Today({
   day?: { events: CalEvent[]; moves: Task[]; chases: Task[]; tomorrow: WatchOut[] };
   /** Calendar connection: shown as one card until connected. */
   calendar?: { connected: boolean; onConnect: () => void };
+  /** The commit this bundle was built from, so a phone and a screenshot can be matched to code. */
+  build?: string;
   notice?: string;
   error?: string;
   onRecord: () => void;
@@ -77,6 +80,7 @@ export default function Today({
       <View style={s.header}>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
           <Text style={s.brand}>Today</Text>
+          {!!build && <Text style={s.build}>{build}</Text>}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Your level" onPress={onOpenMe} style={s.pill}>
           <Text style={s.pillText}>{levelLabel}</Text>
@@ -203,6 +207,7 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.paper },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 10, paddingRight: 84 },
   brand: { fontSize: 26, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
+  build: { fontSize: 10, fontWeight: "700", color: C.faint, letterSpacing: 0.5 },
   suggest: { padding: 18, borderRadius: 22, backgroundColor: C.card, gap: 10 },
   kickerBlue: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.blue },
   altRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 },

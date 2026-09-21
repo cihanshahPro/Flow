@@ -1,4 +1,4 @@
-import { saveNote, loadWorkspace } from "./storage";
+import { saveNote, loadWorkspace, listRecordIds } from "./storage";
 import { loadDrafts, saveDraft } from "./drafts";
 import {
   suggestDraft,
@@ -178,4 +178,29 @@ export async function createThoughtDraft(
     const draft = suggestDraft(id, text);
     return direction ? { ...draft, direction } : draft;
   }
+}
+
+/**
+ * Recordings made before the intake existed (or before it planned the week)
+ * are run through it once, from their saved transcripts: projects, moves,
+ * chases, calendar — nothing to re-record. Newest first, a few at a time,
+ * in the background after launch.
+ */
+export async function replayOldRecordings(limit = 6, options: ShapeOptions = {}): Promise<number> {
+  const [workspace, records] = await Promise.all([loadWorkspace().catch(() => ({ tasks: [], notes: [] as Note[] })), listRecordIds("intake")]);
+  const done = new Set(records);
+  const pending = workspace.notes
+    .filter((n) => !n.planId && (!n.captureKind || n.captureKind === "thought") && n.text?.trim() && !done.has(`intake:${n.id}`))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
+  let n = 0;
+  for (const note of pending) {
+    try {
+      await runIntake(note, note.text, options);
+      n++;
+    } catch {
+      /* the next launch tries again */
+    }
+  }
+  return n;
 }

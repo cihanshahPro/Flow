@@ -140,6 +140,7 @@ export function createVoiceServer({
   plan,
   webOrigin,
   fixturesDir,
+  config = { temp: "/tmp" },
   log = console.log,
 }) {
   if (!token || token.length < 32)
@@ -179,9 +180,36 @@ export function createVoiceServer({
       req.resume();
       return;
     }
-    if (req.method !== "POST" || (req.url !== "/process" && req.url !== "/plan")) {
+    if (req.method !== "POST" || (req.url !== "/process" && req.url !== "/plan" && req.url !== "/mirror")) {
       reply(404, { error: "Not found" });
       req.resume();
+      return;
+    }
+    if (req.url === "/mirror") {
+      // Dev only: the phone's whole data set, kept as the latest snapshot per install plus a history.
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > MAX_BYTES) {
+          reply(413, { error: "Mirror too large." });
+          req.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      }
+      try {
+        const snapshot = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        const install = String(snapshot.install ?? "unknown").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 64) || "unknown";
+        const dir = join(fixturesDir || config.temp, "mirror");
+        await mkdir(dir, { recursive: true });
+        await writeFile(join(dir, `${install}.json`), JSON.stringify(snapshot, null, 2));
+        await writeFile(join(dir, `${install}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`), JSON.stringify(snapshot));
+        log(JSON.stringify({ stage: "mirror", install, build: snapshot.build, reason: snapshot.reason, threads: snapshot.data?.threads?.length, records: snapshot.data?.records?.length }));
+        reply(200, { ok: true });
+      } catch {
+        reply(400, { error: "Bad mirror payload." });
+      }
       return;
     }
     const wantPlan = req.url === "/plan";
@@ -342,6 +370,7 @@ if (
     token: process.env.FLOW_PROCESSOR_TOKEN,
     webOrigin: process.env.FLOW_PROCESSOR_WEB_ORIGIN,
     fixturesDir: process.env.FLOW_FIXTURES_DIR,
+    config,
     transcribe: (bytes) => transcribeAudio(bytes, config),
     shape: process.env.FLOW_SHAPER_BIN
       ? (text, context, mode) => shapeText(text, process.env.FLOW_SHAPER_BIN, context, mode)

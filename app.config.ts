@@ -1,5 +1,16 @@
 import type { ExpoConfig } from "expo/config";
 
+/** The commit this bundle was built from, shown small in the app so nobody guesses which build a phone runs. */
+function buildStamp(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const cp = require("child_process") as { execSync(cmd: string, opts: unknown): { toString(): string } };
+    return cp.execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return "dev";
+  }
+}
+
 const PHOTO_LIBRARY_PURPOSE =
   "Flowthread doesn't access your photo library. This permission is only requested if you choose to save or share an export.";
 
@@ -58,8 +69,9 @@ const config: ExpoConfig = {
       },
     ],
   ],
-  extra: process.env.EAS_PROJECT_ID
-    ? { eas: { projectId: process.env.EAS_PROJECT_ID } }
-    : {},
+  extra: {
+    build: buildStamp(),
+    ...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),
+  },
 };
 export default config;
