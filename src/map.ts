@@ -147,6 +147,19 @@ export function placePlan(items: (PlanItem & { projectId?: string; area: Area })
         continue;
       }
       note = clash ? `${saidTime} is taken` : undefined;
+      // An evening move stays in the evening: the next free half hour up to 22:00.
+      if (clash && Number(saidTime.slice(0, 2)) >= 17) {
+        for (let t = start.getTime() + 30 * 60000; t + minutes * 60000 <= new Date(`${date}T22:00:00`).getTime(); t += 30 * 60000) {
+          const s2 = new Date(t), e2 = new Date(t + minutes * 60000);
+          if (!placed.some((e) => !e.allDay && new Date(e.start) < e2 && new Date(e.end) > s2)) {
+            const slot: FreeSlot = { date, start: s2.toISOString(), end: e2.toISOString(), minutes };
+            out.push({ item, date, slot, note: `${saidTime} is taken` });
+            placed.push(fake(item.title, slot));
+            break;
+          }
+        }
+        if (placed.at(-1)?.title === item.title) continue;
+      }
     }
     if (item.kind === "appointment" && said?.time) {
       const start = new Date(`${date}T${said.time}:00`);

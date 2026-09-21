@@ -104,7 +104,7 @@ export async function readEvents(from: Date, to: Date): Promise<CalEvent[]> {
   const events = await Calendar.getEventsAsync(calendars.map((c) => c.id), from, to);
   return events
     .map((e) => {
-      const ref = refOf(e.notes);
+      const ref = refOf(e.notes) ?? (/^✓ /.test(e.title ?? "") ? "done" : undefined);
       return {
         id: e.id,
         calendarId: e.calendarId,
@@ -242,7 +242,7 @@ export async function seedDemoCalendar(now = new Date()): Promise<number> {
 }
 
 /** Mark Flow's reminder done (or remove its event) when the person ticks a move in Flow. */
-export async function completeOnPhone(task: { eventId?: string; reminderId?: string; title: string }): Promise<void> {
+export async function completeOnPhone(task: { id?: string; eventId?: string; reminderId?: string; title: string }): Promise<void> {
   if (task.reminderId) {
     try {
       await Calendar.updateReminderAsync(task.reminderId, { completed: true, completionDate: new Date() });
@@ -253,7 +253,8 @@ export async function completeOnPhone(task: { eventId?: string; reminderId?: str
   if (task.eventId) {
     try {
       const e = await Calendar.getEventAsync(task.eventId);
-      if (e?.id && !/^✓ /.test(e.title ?? "")) await Calendar.updateEventAsync(task.eventId, { title: `✓ ${e.title}` });
+      // The notes carry Flow's reference; they go back with the title so the event stays Flow's on the next read.
+      if (e?.id && !/^✓ /.test(e.title ?? "")) await Calendar.updateEventAsync(task.eventId, { title: `✓ ${e.title}`, notes: e.notes && refOf(e.notes) ? e.notes : `${FLOW_REF} ${task.id ?? ""}\n${e.notes ?? ""}`.trim() });
     } catch {
       /* gone */
     }

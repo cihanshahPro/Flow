@@ -83,3 +83,11 @@ test("the clock the person said is kept when free; 'by Friday' is a deadline wit
   assert.equal(placed[2].date, "2026-09-21", "done in the first gap, not on Friday");
   assert.equal(placed[3].slot.start, at(1, 14), "tomorrow 2pm");
 });
+
+test("an evening move whose time is taken stays in the evening", () => {
+  const dinner = { id: "dinner", calendarId: "c", title: "Dinner with Sam", start: at(0, 19), end: at(0, 20, 30), allDay: false };
+  const items = attachItems([{ title: "Compare two insurance quotes", kind: "action", project: "", when: "this evening", evidence: "b" }], []);
+  const placed = placePlan(items, [...week, dinner], new Date(2026, 8, 21, 8, 0));
+  assert.equal(placed[0].slot.start, at(0, 20, 30), "after dinner, same evening");
+  assert.equal(placed[0].note, "19:00 is taken");
+});
