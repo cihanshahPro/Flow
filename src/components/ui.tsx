@@ -9,7 +9,15 @@ import { C, T } from "./theme.ts";
  */
 
 export function Screen({ title, subtitle, back, onBack, right, children, scroll = true, fab, tabs, footer }: { title: string; subtitle?: string; back?: string; onBack?: () => void; right?: React.ReactNode; children: React.ReactNode; scroll?: boolean; fab?: React.ReactNode; tabs?: React.ReactNode; /** Pinned under the body: the one button a screen ends with. */ footer?: React.ReactNode }) {
-  const body = scroll ? <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">{children}</ScrollView> : <View style={[s.body, { flex: 1 }]}>{children}</View>;
+  const ref = useRef<ScrollView>(null);
+  const atEnd = useRef(false);
+  // Dev only: a long press on the title jumps to the end and back, so the simulator driver can reach every row.
+  const jump = typeof __DEV__ !== "undefined" && __DEV__ && scroll ? () => {
+    if (atEnd.current) ref.current?.scrollTo({ y: 0, animated: false });
+    else ref.current?.scrollToEnd({ animated: false });
+    atEnd.current = !atEnd.current;
+  } : undefined;
+  const body = scroll ? <ScrollView ref={ref} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">{children}</ScrollView> : <View style={[s.body, { flex: 1 }]}>{children}</View>;
   return (
     <View style={s.screen}>
       <View style={s.nav}>
@@ -19,7 +27,7 @@ export function Screen({ title, subtitle, back, onBack, right, children, scroll 
               <Text style={s.back}>‹ {back}</Text>
             </Pressable>
           )}
-          <Text style={[T.title, back ? { fontSize: 22, lineHeight: 26 } : null]} numberOfLines={back ? 2 : 1}>
+          <Text style={[T.title, back ? { fontSize: 22, lineHeight: 26 } : null]} numberOfLines={back ? 2 : 1} onLongPress={jump} accessibilityLabel={jump ? `${title} (long press: jump)` : undefined}>
             {title}
           </Text>
           {!!subtitle && <Text style={T.subtitle}>{subtitle}</Text>}
