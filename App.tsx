@@ -406,6 +406,8 @@ function Flow() {
     setOpenId(null);
   }
   function selectTab(tab: Tab) {
+    // Leaving Your week by a tab is the same as "Looks right".
+    if (screen === "intake") setPlan(null);
     setLastTab(tab);
     setScreen(tab);
     setNotice("");
@@ -928,7 +930,7 @@ function Flow() {
           </View>
         )}
       </View>
-      {screen !== "thread" && screen !== "intake" && screen !== "tomorrow" && <TabBar active={screen === "recording" ? "recordings" : screen} onSelect={selectTab} />}
+      {screen !== "thread" && screen !== "tomorrow" && <TabBar active={screen === "recording" ? "recordings" : screen === "intake" ? "today" : screen} onSelect={selectTab} />}
       <MoveSheet task={editing} projects={realThreads.filter((t) => t.state !== "parked")} onSave={(patch) => editing && onSaveMove(editing, patch)} onDelete={() => editing && onDeleteMove(editing)} onClose={() => setEditing(null)} onOpenSource={editing?.noteId ? () => { const id = editing.noteId!; setEditing(null); openRecording(id); } : undefined} />
       {captureSheet}
     </SafeAreaView>

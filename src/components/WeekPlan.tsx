@@ -54,7 +54,7 @@ export default function WeekPlan({ plan, busy = false, now = new Date(), onOpenP
         </Section>
       )}
       <View style={s.closure}>
-        <Text style={s.closureText}>✓ {plan.closure}</Text>
+        <Text style={s.closureText}>{plan.closure}</Text>
       </View>
       <Button label="Looks right" onPress={onDone} quiet busy={busy} />
       <View style={{ height: 60 }} />

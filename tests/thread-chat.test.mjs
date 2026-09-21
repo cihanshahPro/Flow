@@ -253,6 +253,7 @@ test("Upcoming lists days with the phone's events and Flow's items; Your week is
   assert.match(t, /court is at 10/);
   assert.match(t, /Later: Medical exams/);
   assert.match(t, /Nothing left in your head/);
+  assert.doesNotMatch(t, /✓ ✅/);
   assert.doesNotMatch(t, /And what else/);
   assert.ok(labels(week).includes("Looks right"));
   await act(async () => week.unmount());
