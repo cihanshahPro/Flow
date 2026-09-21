@@ -1,22 +1,36 @@
-# Working together on Anchor
+# Working together on Flowthread
 
-The development team owns app implementation, fixes, tests, pull requests, and beta-feedback triage. The release collaborator owns Apple/App Store Connect and TestFlight work, signing and release coordination, and support integration. In-app purchases remain future work; the current capability stays disabled.
+Two builders, one deployer, one repo. Written 21 Sep 2026 after the build 9 handoff; replaces the earlier draft.
 
-## A small PR workflow
+## Who does what
 
-1. Start a focused `codex/` feature branch from current `main`.
-2. Implement one reviewable change and run the relevant checks. Record actual device testing separately from automated checks.
-3. Open a PR into `main` using the repository template. Explain the problem, user impact, results, and any migration or compatibility implications.
-4. Address review feedback before merging. The release collaborator reviews changes affecting distribution, native permissions/configuration, support integration, or release readiness. Their GitHub username is **TBD**; no reviewer identity or access is assumed.
+| | Cihan (owner, product) | Claude on Cihan's side (`seanjohnzon`) | Samil + his Claude (Kodavena) |
+|---|---|---|---|
+| Owns | the product, decisions, his phone as the test device | building, tests, the dev runtime, handoff docs | last touches, release fixes, Apple/App Store Connect, TestFlight, the cloud worker, the website |
+| Pushes as | `cihanshahPro` | `seanjohnzon` | `samilaltun1997-source` |
+| Builds | — | on the dev runtime (never shipped) | locally with Xcode (`docs/RELEASE.md`) |
 
-A merge is a source-code update. This workflow does not automatically publish builds, submit to TestFlight, or release to the App Store. Publishing remains a deliberate action owned by the release collaborator; no automatic publishing CI is configured by these documents.
+## One repo
 
-## Invite-only beta and feedback
+**`cihanshahPro/Flow` is the hub.** Everything lives there: code, `docs/`, fixtures, the worker. No copies. Samil's temporary private copy is archived once his branch is pushed here.
 
-The team agrees a small tester list with the release collaborator and supplies the build's scope, known limits, and checks to try. The release collaborator coordinates signed preview/TestFlight distribution and invitations. A public source repository does not make the beta an open enrollment program.
+- Branches: `cihan/<topic>` for Cihan's side, `kodavena/<topic>` for Samil's side. Long-lived: `kodavena/build9` (current release line) → `testing` → `main`.
+- PRs into `kodavena/build9`; the other side reviews. Never rebase or force-push a shared branch. `--ff-only` pulls.
+- Before starting anything, one WhatsApp line: *"starting: move timing"*. Two people fixed the same thing twice on 19–20 Sep; that is the only rule that prevents it.
+- `npm run verify` (tsc + 300+ tests) green before every PR; worker `npx vitest run` green when the worker changes.
 
-Use the issue template for reproducible, sanitized feedback: device, OS, exact build, steps, expected result, and actual result. The team triages reports into actionable issues and links fixes to PRs. Confirm the fix on the affected build/device where practical.
+## Handoffs
 
-Because this repository is public, beta invitations must identify a private feedback route before collecting sensitive material. That route is **TBD** with the release collaborator; these documents do not establish a mailbox, invite testers, or grant repository access. Keep raw recordings, personal notes, and legal/medical details out of public issues and PRs by default.
+A handoff is one file in the repo, `docs/HANDOFF-<build>.md`, plus the same file as a PDF on WhatsApp. Sections, always in this order: what the app is now · how to verify · the build command · the brain · what's left as a task table with an owner per row · known gaps. The reply comes back the same way (`docs/REPLY-<build>.md`), with its open decisions numbered so the answer can be one line per number.
 
-Use [the developer handoff](HANDOFF.md) for build prerequisites and device acceptance checks, and [the validation record](VALIDATION.md) for what has actually been tested.
+Nothing in a handoff may depend on a machine the other side cannot reach. Dev-runtime details go in `docs/HANDOFF.md` under "Current testing runtime", nowhere else.
+
+## Data
+
+- No real personal data in git, ever. Fixtures are invented people with the same shape (`tests/fixtures/sample/`). Real phone snapshots stay outside the repo.
+- Keys and tokens live only in Cloudflare secrets and local `.env*` files (git-ignored). The app never calls Anthropic directly.
+- Beta feedback and recordings go through a private route, never issues or PRs.
+
+## Release
+
+Merging is not releasing. Samil uploads builds (Xcode archive, `docs/RELEASE.md`), keeps the Apple-blocker list in every build, and announces the build number on WhatsApp. Cihan is App Manager in App Store Connect and in the TestFlight group.
