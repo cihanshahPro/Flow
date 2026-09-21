@@ -1,4 +1,4 @@
-import { loadWorkspace, saveRecord, saveTask } from "./storage";
+import { loadWorkspace, saveNote, saveRecord, saveTask } from "./storage";
 import { loadDrafts, saveDraft } from "./drafts";
 import { loadProfile } from "./profile";
 import { appendPlanUpdate, suggestDraft, type Breakdown, type ThoughtDraft } from "../drafts";
@@ -88,6 +88,8 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   const context = [calendarContextText(calendarLines(events, now)), projectsContextText(live0)].filter(Boolean).join("\n\n");
   // Quick Add: one short line skips the model and lands straight on the week.
   const quick = isQuickLine(text);
+  // A quick line is a move, not a recording: it leaves the Threads list.
+  if (quick && note.captureKind !== "note") await saveNote({ ...note, captureKind: "note" }).catch(() => {});
   const outcome = quick ? { plan: null } : await planText(text, context, options);
   // Items that merely restate a calendar event are the model reading the context back; they are not new.
   const known = events.filter((e) => !e.mine).map((e) => contentWordsOf(e.title));
