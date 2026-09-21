@@ -91,3 +91,15 @@ test("profile context names the Flow type and plate, never raw quiz answers", ()
   assert.deepEqual(ctx, { areas: ["Work"], people: ["Partner"], timeWindow: "Evenings", obstacles: ["Energy"] });
   assert.match(contextText({ type: "Architect", typeLine: "Facts first." }), /Working type: Architect/);
 });
+
+test("a plan item is dropped when its title is not about the person's words (the model reading the calendar back)", async () => {
+  const { parsePlan } = await import("../src/ai-policy.ts");
+  const text = "I need to follow up with the traffic court lawyer tomorrow and start the app portfolio.";
+  const plan = parsePlan({ items: [
+    { title: "Follow up with traffic court lawyer", kind: "action", project: "DUI case", area: "Legal & admin", evidence: "follow up with the traffic court lawyer" },
+    { title: "Dinner with Sam", kind: "appointment", project: "", area: "Family & friends", evidence: "start the app portfolio" },
+    { title: "Start app portfolio", kind: "action", project: "App portfolio", area: "Work", evidence: "start the app portfolio" },
+    { title: "Invented thing", kind: "action", project: "", area: "Other", evidence: "not in the text" },
+  ] }, text);
+  assert.deepEqual(plan.items.map((i) => i.title), ["Follow up with traffic court lawyer", "Start app portfolio"]);
+});

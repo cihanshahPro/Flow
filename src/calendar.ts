@@ -98,7 +98,8 @@ export function freeSlots(events: CalEvent[], date: string, now = new Date(), mi
 export function dayIsFull(events: CalEvent[], date: string): boolean {
   const on = eventsOn(events, date);
   if (on.some((e) => e.allDay && TRAVEL.test(e.title))) return true;
-  return busyMinutes(events, date) >= 360 || on.filter((e) => !e.allDay).length >= 5;
+  // Flow's own placed moves never fill a day; only the person's commitments do.
+  return busyMinutes(events.filter((e) => !e.mine), date) >= 360 || on.filter((e) => !e.allDay && !e.mine).length >= 5;
 }
 
 const IMPORTANT = /\b(court|hearing|trial|judge|lawyer|attorney|deadline|due|interview|exam|test|surgery|doctor|dentist|hospital|clinic|appointment|visa|embassy|immigration|passport|tax|irs|audit|closing|move|moving|flight|✈|wedding|funeral|presentation|demo|pitch|launch|deploy|review)\b/i;

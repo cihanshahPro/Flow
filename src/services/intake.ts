@@ -9,7 +9,7 @@ import { planText, type ShapeOptions } from "./processors";
 import { readWeek, writePlanEvent, writeReminder } from "./calendar-read";
 import { eventsOn, timeLabel, watchOuts, weekDays, type CalEvent, type WatchOut } from "../calendar";
 import { attachItems, areaFor, placePlan, type Area, type Placement, type PlanItem, type ProjectRef } from "../map";
-import { segmentDump } from "../intake";
+import { contentWords as contentWordsOf, segmentDump } from "../intake";
 import { cleanMove, extractDueHints, respondToRecording, secondPerson } from "../thread";
 
 /**
@@ -86,7 +86,14 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   ]);
   // 1. Read the words into items: the model when it answers, the local pass otherwise.
   const outcome = await planText(text, calendarContextText(calendarLines(events, now)), options);
-  const items: PlanItem[] = outcome.plan?.items.length ? outcome.plan.items.map(fromShape) : localPlan(text, now);
+  // Items that merely restate a calendar event are the model reading the context back; they are not new.
+  const known = events.map((e) => contentWordsOf(e.title));
+  const restates = (i: PlanShapeItem) => {
+    const w = contentWordsOf(i.title);
+    return w.size > 0 && known.some((k) => k.size > 0 && [...w].filter((x) => k.has(x)).length / Math.min(w.size, k.size) >= 0.6);
+  };
+  const modelItems = (outcome.plan?.items ?? []).filter((i) => !restates(i));
+  const items: PlanItem[] = modelItems.length ? modelItems.map(fromShape) : localPlan(text, now);
   // 2. Attach each item to the map.
   const live = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt);
   const refs: ProjectRef[] = live.map((t) => ({ id: t.id, title: t.title, area: t.area, people: t.people, words: [t.source, ...t.updates].join(" ") }));
@@ -176,7 +183,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     projects: [...projects.values()].map(({ id, title, area, fresh }) => ({ id, title, area, fresh })),
     tasks,
     closure: closureLine(placements, watch),
-    source: outcome.plan?.items.length ? "model" : "local",
+    source: modelItems.length ? "model" : "local",
   };
 }
 

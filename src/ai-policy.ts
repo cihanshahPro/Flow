@@ -321,6 +321,8 @@ export const PLAN_TOOL = {
   },
 };
 
+const TITLE_STOP = new Set(["with", "about", "from", "your", "their", "this", "that", "them", "into", "call", "send", "email", "follow", "check", "book", "start", "finish", "make", "talk", "chase", "wait", "waiting", "message", "reach"]);
+
 /** Validate and ground a plan from any shaper. Ungrounded items are dropped, not fixed. */
 export function parsePlan(value: unknown, sourceText: string): PlanShape {
   const raw = typeof value === "string" ? safeJson(value) : value;
@@ -335,9 +337,14 @@ export function parsePlan(value: unknown, sourceText: string): PlanShape {
     const kind = PLAN_KINDS.find((k) => k === r.kind);
     if (!title || !evidence || !kind) continue;
     if (!normalized.includes(evidence.toLowerCase())) continue;
+    // The title must be about something the person said, not a line from their calendar context.
+    const person = (str(r.person, 120) ?? "").trim();
+    const titleWords = title.toLowerCase().replace(/[^a-z0-9\s']/g, " ").split(/\s+/).filter((w) => w.length > 3 && !TITLE_STOP.has(w));
+    const personWords = person.toLowerCase().split(/\s+/).filter((w) => w.length > 2 && !["the", "our"].includes(w));
+    // A transcript can misspell a word the model corrects ("noises" → invoices); the person named still ties it to the text.
+    if (titleWords.length && !titleWords.some((w) => normalized.includes(w)) && !personWords.some((w) => normalized.includes(w))) continue;
     const area = PLAN_AREAS.find((a) => a === r.area);
     const project = (str(r.project, 120) ?? "").trim();
-    const person = (str(r.person, 120) ?? "").trim();
     const when = (str(r.when, 120) ?? "").trim();
     const minutes = typeof r.minutes === "number" && r.minutes >= 5 && r.minutes <= 120 ? Math.round(r.minutes) : undefined;
     items.push({ title, kind, project, ...(area ? { area } : {}), ...(person ? { person } : {}), ...(when ? { when } : {}), ...(minutes ? { minutes } : {}), evidence });
