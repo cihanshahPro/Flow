@@ -296,7 +296,7 @@ test("the move sheet: day, time, due and takes as chips, project as a field, sav
   await tap("Save");
   assert.equal(saved.length, 1);
   assert.deepEqual(saved[0], { title: "Call the DUI lawyer", plannedDate: "2026-09-20", plannedTime: "14:00", deadline: "2026-09-23", minutes: 30, projectId: "p" });
-  await tap("Delete");
+  await tap("Delete this move");
   assert.equal(deleted.length, 1);
   await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "From: “I have to reach out to the lawyer” ↗")[0].props.onPress());
   assert.equal(opened.length, 1);

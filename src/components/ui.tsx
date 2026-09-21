@@ -250,9 +250,9 @@ export function Field({ label, value, onPress }: { label: string; value: string;
   );
 }
 
-export function Button({ label, onPress, busy = false, quiet = false, style }: { label: string; onPress: () => void; busy?: boolean; quiet?: boolean; style?: ViewStyle }) {
+export function Button({ label, onPress, busy = false, quiet = false, style, accessibilityLabel }: { label: string; onPress: () => void; busy?: boolean; quiet?: boolean; style?: ViewStyle; accessibilityLabel?: string }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={busy} style={({ pressed }) => [quiet ? s.quiet : s.button, (pressed || busy) && { opacity: 0.6 }, style]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} onPress={onPress} disabled={busy} style={({ pressed }) => [quiet ? s.quiet : s.button, (pressed || busy) && { opacity: 0.6 }, style]}>
       <Text style={quiet ? s.quietText : s.buttonText}>{label}</Text>
     </Pressable>
   );

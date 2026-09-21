@@ -81,7 +81,7 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
       {!!task.notes && <Field label="From" value={`“${task.notes.slice(0, 60)}${task.notes.length > 60 ? "…" : ""}” ↗`} onPress={onOpenSource} />}
       <View style={{ height: 6 }} />
       <Button label="Save" onPress={() => onSave({ title: title.trim() || task.title, plannedDate: date, plannedTime: time, deadline: due, minutes, projectId })} />
-      <Button label="Delete" onPress={onDelete} quiet />
+      <Button label="Delete" accessibilityLabel="Delete this move" onPress={onDelete} quiet />
     </Sheet>
   );
 }
