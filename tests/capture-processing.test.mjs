@@ -314,7 +314,7 @@ test("inside a thread Flow is an assistant: it answers from the project, asks on
   assert.ok(chatCall, "the assistant was asked");
   const sent = JSON.parse(chatCall.body);
   assert.match(sent.context, /PROJECT: DUI case/);
-  assert.match(sent.context, /Call the DUI lawyer · Tue 22 10:00/);
+  assert.match(sent.context, /Call the DUI lawyer · Tue Sep 22 10:00/);
   assert.match(sent.context, /CONVERSATION:/);
   const msgs = result.draft.messages;
   assert.equal(msgs.at(-2).text, "The call with the lawyer is on Tuesday at 10. Nothing else is pending on this.");

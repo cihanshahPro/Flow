@@ -234,7 +234,7 @@ export function chatBrief(thread: ThoughtDraft, threads: ThoughtDraft[], tasks: 
   const mine = threadTasks(thread, tasks);
   const day = (d: string) => {
     const x = new Date(`${d}T12:00:00`);
-    return `${x.toLocaleDateString("en-US", { weekday: "short" })} ${x.getDate()}`;
+    return `${x.toLocaleDateString("en-US", { weekday: "short" })} ${x.toLocaleDateString("en-US", { month: "short" })} ${x.getDate()}`;
   };
   const linked = matchEvents(events.filter((e) => !e.mine), [{ id: thread.id, title: thread.title, area: thread.area, people: thread.people, words: [thread.source, ...thread.updates].join(" ") }]).get(thread.id) ?? [];
   const recent = (thread.messages ?? []).filter((m) => ["transcript", "ack", "question", "reply", "offer"].includes(m.kind)).slice(-10).map((m) => ({ from: m.from, text: m.text }));
@@ -245,7 +245,7 @@ export function chatBrief(thread: ThoughtDraft, threads: ThoughtDraft[], tasks: 
     said: [thread.source, ...thread.updates].join(" "),
     moves: mine.filter((t) => t.kind !== "waiting").map((t) => ({ title: t.title, when: t.plannedDate ? `${day(t.plannedDate)}${t.plannedTime ? " " + t.plannedTime : ""}` : "", done: t.done })),
     waiting: mine.filter((t) => t.kind === "waiting" && !t.done).map((t) => ({ title: t.title, who: t.waitingOn, chase: t.chaseDate ? day(t.chaseDate) : "" })),
-    events: linked.slice(0, 6).map((e) => `${e.title} · ${new Date(e.start).toLocaleDateString("en-US", { weekday: "short" })} ${new Date(e.start).getDate()}${e.allDay ? "" : " " + timeLabel(e.start)}`),
+    events: linked.slice(0, 6).map((e) => `${e.title} · ${new Date(e.start).toLocaleDateString("en-US", { weekday: "short" })} ${new Date(e.start).toLocaleDateString("en-US", { month: "short" })} ${new Date(e.start).getDate()}${e.allDay ? "" : " " + timeLabel(e.start)}`),
     others: threads.filter((t) => t.id !== thread.id && !t.example && t.state !== "parked" && !t.resolvedAt).slice(0, 6).map((t) => t.title),
     recent,
     ...(openOffer ? { openMove: openOffer.text } : {}),
