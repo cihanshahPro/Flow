@@ -45,6 +45,7 @@ export default function Me({
   onExport,
   onDeleteAll,
   onDevReminder,
+  onDevScheduled,
   cloud,
 }: {
   name?: string;
@@ -68,6 +69,7 @@ export default function Me({
   onExport: () => void;
   onDeleteAll: () => void;
   onDevReminder?: () => void;
+  onDevScheduled?: () => void;
   /** Older phones: shape on a secure server. Absent when the phone shapes on-device. */
   cloud?: { on: boolean; onChange: (on: boolean) => void };
 }) {
@@ -122,6 +124,7 @@ export default function Me({
         <Row title="Privacy policy" when="›" onPress={() => void Linking.openURL(PRIVACY_URL).catch(() => {})} accessibilityLabel="Privacy policy" />
         <Row title="Delete everything" when="›" onPress={onDeleteAll} accessibilityLabel="Delete all my data" />
         {onDevReminder && <Row title="Send a test reminder (dev)" when="›" onPress={onDevReminder} accessibilityLabel="Send a test reminder" />}
+        {onDevScheduled && <Row title="Scheduled pushes (dev)" when="›" onPress={onDevScheduled} accessibilityLabel="Scheduled pushes" />}
         {!!version && <Row title={`Flowthread ${version}`} />}
       </Section>
       <View style={{ height: 40 }} />

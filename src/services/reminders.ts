@@ -169,3 +169,21 @@ export async function sendTestReminder(seconds = 5): Promise<boolean> {
     return false;
   }
 }
+
+/** Dev: what Flow has scheduled, one line each. */
+export async function scheduledSummary(): Promise<string[]> {
+  if (Platform.OS === "web") return [];
+  try {
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    return all
+      .filter((n) => n.identifier.startsWith(PREFIX))
+      .map((n) => {
+        const t = n.trigger as { date?: number | string | Date } | null;
+        const when = t && "date" in t && t.date ? new Date(t.date as number).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : "?";
+        return `${when} · ${n.content.title}: ${n.content.body}`;
+      })
+      .sort();
+  } catch {
+    return [];
+  }
+}

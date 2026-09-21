@@ -46,7 +46,7 @@ import { buildStamp, mirrorToDev } from "./src/services/mirror";
 import { capabilities } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
 import type { Consent } from "./src/ai-policy";
-import { EVENING_ID, sendTestReminder, syncReminders } from "./src/services/reminders";
+import { EVENING_ID, scheduledSummary, sendTestReminder, syncReminders } from "./src/services/reminders";
 import { exportAllData, deleteAllData } from "./src/services/data";
 import Constants from "expo-constants";
 import { newProfile, needsFunnel, type Profile as ProfileModel } from "./src/personality";
@@ -887,6 +887,7 @@ function Flow() {
             onFeedback={(m) => startCapture(m, null, "feedback")}
             onExport={() => void run(async () => void (await Share.share({ message: await exportAllData() })))}
             onDevReminder={typeof __DEV__ !== "undefined" && __DEV__ ? () => void sendTestReminder() : undefined}
+            onDevScheduled={typeof __DEV__ !== "undefined" && __DEV__ ? () => void scheduledSummary().then((lines) => Alert.alert("Scheduled", lines.join("\n") || "Nothing scheduled.")) : undefined}
             cloud={onDeviceAi ? undefined : { on: cloudConsent === "allowed", onChange: (on) => void run(async () => { await setCloudConsent(on ? "allowed" : "declined"); setCloudConsentState(on ? "allowed" : "declined"); }) }}
             onDeleteAll={() =>
               Alert.alert("Delete all your data?", "Every thread, move, recording and setting on this phone will be erased. This cannot be undone.", [
