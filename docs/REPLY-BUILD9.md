@@ -1,7 +1,6 @@
-# Flowthread — reply to Samil.s build 9 review (paste this into your Claude)
+# Flowthread — reply to Samil's build 9 review (paste this into your Claude)
 
 Head: `git log -1` on `kodavena/v1.0.0` · rules: `docs/HANDOFF-PROTOCOL.md` · decisions: `docs/DECISIONS.md`
-
 
 From Cihan's side · 21 Sep 2026 · repo hub `cihanshahPro/Flow`, branch `kodavena/v1.0.0`, head see `git log -1`.
 
