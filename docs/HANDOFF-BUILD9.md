@@ -2,7 +2,7 @@
 
 Everything you need to ship TestFlight build 9 from `kodavena/v1.0.0`, decide the brain, and finish the three native pieces. **You do not need the Mac mini for any of it** — the mini is Cihan's dev runtime; its steps are in the last section, addressed to him. Same text lives in the repo: `docs/HANDOFF.md` (top section) and `docs/SKELETON.html`. Written 21 Sep 2026.
 
-## 1 · What the app is now (branch `kodavena/v1.0.0`, head `3c52d7a`)
+## 1 · What the app is now (branch `kodavena/v1.0.0`, head `69555d9`)
 
 Expo SDK 57 · React Native 0.86 · TypeScript strict. Tabs **Today · Threads · Calendar · Me**, one Record button. The person talks → Flow reads the calendar first → one model call turns the words into moves / waiting-fors / later / projects → placed around the week → written to Apple Calendar + a "Flow" Reminders list (two-way) → "Your week". Threads are projects; inside a thread Flow is an assistant with the project in front of it. Evening ritual "Plan tomorrow" with routines. Two pushes a day. Screen-by-screen match with the skeleton: Skeleton vs App (https://claude.ai/artifact/TDKxHu6qHMny8j2XhJD3xB).
 
@@ -12,7 +12,7 @@ Expo SDK 57 · React Native 0.86 · TypeScript strict. Tabs **Today · Threads �
 
 ## 2 · Build 9 — your one command
 
-**Everything is pushed.** `origin/kodavena/v1.0.0` = `3c52d7a`. Your own commits on the branch are all there under yours. PR #14 (kodavena/v1.0.0 → testing) has **no conflicts**: `testing` has nothing the branch lacks, so it merges clean when you want it. Start with `git fetch origin && git checkout kodavena/v1.0.0 && git pull --ff-only` — do not rebase or force-push; if you had local work, branch from the head and open a PR into `kodavena/v1.0.0`.
+**Everything is pushed.** `origin/kodavena/v1.0.0` = `69555d9`. Your own commits on the branch are all there under yours. PR #14 (kodavena/v1.0.0 → testing) has **no conflicts**: `testing` has nothing the branch lacks, so it merges clean when you want it. Start with `git fetch origin && git checkout kodavena/v1.0.0 && git pull --ff-only` — do not rebase or force-push; if you had local work, branch from the head and open a PR into `kodavena/v1.0.0`.
 
 ```
 git fetch origin && git checkout kodavena/v1.0.0 && git pull --ff-only
