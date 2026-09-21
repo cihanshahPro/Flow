@@ -125,3 +125,22 @@ Who: Cihan's side (Claude, pushes as `seanjohnzon`) builds 10 and 11 in JS on `c
 | D14 | Name in the header: "Flow" with an avatar like Muse, or no avatar? | avatar · none | Simple mark, no character; D8 said no personality |
 
 Nothing is built until D10 and D11 are answered. D12–D14 can be answered before build 12.
+
+## 10 · Name (D15)
+
+"Flow" is out: 28 App Store apps named Flow, the top one with 404K ratings. "Muse" is theirs (53 apps, Meta's at 27K). Checked 70 four-letter words against the App Store search API (exact first-word matches, ratings of the biggest) and RDAP/whois for domains, 21 Sep 2026.
+
+| Name | Why it fits | App Store today | Domains |
+|---|---|---|---|
+| **Dote** | "to dote on" = to look after with attention. "Dote on your day." One syllable, works as a verb ("Dote handled it") | **0** apps named Dote | dote.app / .com / .ai / .day taken; dote.so registered but unused; `dotehq.com`, `getdote.app` style needed |
+| Heed | pays attention, takes notice. "Heed keeps track" | 4 apps, none above 1 rating (a blocker, an attention trainer, HR) | heed.app/.com/.ai/.so/.co taken |
+| Deft | skilful and quick | 1 app (flashcards, 15 ratings) | deft.app/.com/.ai/.so/.co taken; deft.ai registered May 2026 — someone may be building "Deft AI" |
+| Tend | tends to your day — the best meaning | **67** apps incl. Tend Dental (3.9K) | — |
+| Duly | done duly, on time | Duly Health and Care (2.9K, US) | — |
+| Keel | steady | "Keel: Daily AI Planner" already exists | — |
+
+Recommendation: **Dote**. Empty on the App Store, says what the product does, one syllable next to Muse. App Store name "Dote — your day, handled"; bundle id and scheme `dote://` change in build 10 (Samil: new App Store Connect record, since the bundle id cannot be renamed). Trademark search (USPTO TESS, class 9/42) is Samil's check before build 12.
+
+## 11 · Goals as the funnel
+
+Muse's Tasks tab is goals with check-ins. Ours: onboarding ends with one question — "What's one thing you want done this month?" — that becomes the first thread with a step tree, and the first Idea the next morning is its first step. Every later voice dump adds threads to the same Tasks tab. Progress ring per goal = steps done. Nothing else in onboarding (D7 value-first stands).
