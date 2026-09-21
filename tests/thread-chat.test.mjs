@@ -51,7 +51,7 @@ test("a dumped thread shows the transcript, Flow's reply, the script's question 
   assert.ok(view.root.findAllByType("TextInput").some((n) => n.props.accessibilityLabel === "Message Flow"), "a real message bar");
   assert.ok(!found.includes("Do this"), "no move offered before the thread is understood");
   assert.ok(!found.some((l) => /mark done|add task|classify/i.test(l)));
-  assert.match(text, /Getting to know this/);
+  assert.doesNotMatch(text, /Getting to know this|\d+%/, "no meter, no percent: the thread is a conversation, not a score");
   await act(async () => view.unmount());
 });
 
@@ -65,7 +65,6 @@ test("an understood thread shows the hype bubble, Flow gets it, and a move with 
   const found = labels(view);
   assert.ok(!found.includes("Do this"), "a move is accepted by replying, not by a button");
   assert.match(textOf(view), /full picture/);
-  assert.match(textOf(view), /Flow gets it/);
   assert.match(textOf(view), /Say “do it”/);
   await act(async () => view.unmount());
 });
@@ -92,19 +91,6 @@ test("the split question is the only place with buttons, and answered ones disap
   assert.ok(!labels(view2).includes("Yes"), "answered buttons are gone");
   assert.match(textOf(view2), /"No"/, "the reply shows as the person's bubble");
   await act(async () => view2.unmount());
-});
-
-test("the meter reflects the fingerprint and expands to the person's own evidence", async () => {
-  const thread = respondToRecording(suggestDraft("t4", rich, now), "n1", rich, { now });
-  const view = await render(
-    React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "connector", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
-  );
-  const meter = view.root.findAllByType("Pressable").find((n) => /Flow is \d+% of the way/.test(n.props.accessibilityLabel));
-  assert.ok(meter);
-  await act(async () => meter.props.onPress());
-  assert.match(textOf(view), /Outcome/);
-  assert.match(textOf(view), /finish the tax filing/);
-  await act(async () => view.unmount());
 });
 
 test("Today is Things' shape: CALENDAR · MOVES · THIS EVENING · WAITING ON, tickable rows, one Record button", async () => {

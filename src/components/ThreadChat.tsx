@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ThoughtDraft, ThreadMessage } from "../drafts.ts";
 import type { Note, Task } from "../model.ts";
 import { celebrationEmoji, type Mode } from "../flow-voice.ts";
-import { pendingMessage, stageFor, threadTasks, understoodPercent } from "../thread.ts";
+import { pendingMessage, stageFor, threadTasks } from "../thread.ts";
 import type { Formula } from "../formula.ts";
 import { eventsOn, timeLabel, weekDays, type CalEvent } from "../calendar.ts";
 import { matchEvents } from "../map.ts";
@@ -69,9 +69,7 @@ export default function ThreadChat({
 }) {
   const messages = thread.messages ?? [];
   const pending = pendingMessage(thread);
-  const percent = understoodPercent(thread, formula ?? undefined);
   const stage = stageFor(thread, tasks);
-  const [showPoints, setShowPoints] = useState(false);
   const [titleOpen, setTitleOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [rain, setRain] = useState<string | null>(null);
@@ -121,38 +119,9 @@ export default function ThreadChat({
           <Text style={s.title} numberOfLines={titleOpen ? undefined : 1}>
             {thread.title}
           </Text>
-          <View style={s.subRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={percent >= 100 ? "Flow gets it" : `Flow is ${percent}% of the way to getting this`}
-              onPress={() => setShowPoints((v) => !v)}
-              hitSlop={8}
-              style={s.meterChip}
-            >
-              <Text style={s.stage}>{percent >= 100 ? "Flow gets it" : "Getting to know this"}</Text>
-              <View style={s.miniTrack}>
-                <View style={[s.miniFill, { width: `${Math.min(100, percent)}%` }]} />
-              </View>
-              <Text style={s.meterCount}>{percent}%</Text>
-            </Pressable>
-          </View>
+          <Text style={s.stage}>{[thread.area, moves.filter((t) => !t.done).length ? `${moves.filter((t) => !t.done).length} open` : stage === "done" ? "done" : undefined].filter(Boolean).join(" · ") || "talk it through"}</Text>
         </Pressable>
       </View>
-      {showPoints && (
-        <View style={s.points}>
-          <Text style={s.meterLabel}>WHAT FLOW HAS</Text>
-          {(thread.threadPoints ?? []).map((p) => (
-            <View key={p.id} style={s.point}>
-              <Text style={[s.dot, p.state !== "known" && { color: C.faint }]}>{p.state === "known" ? "✓" : "·"}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.pointLabel}>{p.label}</Text>
-                {p.state === "known" && !!p.value && <Text style={s.pointValue}>“{p.value}”</Text>}
-                {p.state !== "known" && <Text style={s.pointMissing}>not yet</Text>}
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
       <ScrollView ref={scroll} contentContainerStyle={s.list} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         {(moves.length > 0 || linked.length > 0) && (
           <View style={s.summary}>
@@ -349,7 +318,7 @@ const s = StyleSheet.create({
   back: { paddingTop: 2 },
   title: { fontSize: 20, lineHeight: 25, fontWeight: "700", color: C.ink },
   subRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  stage: { fontSize: 13, fontWeight: "600", color: C.blue },
+  stage: { fontSize: 12, fontWeight: "600", color: C.ink2 },
   meterChip: { flexDirection: "row", alignItems: "center", gap: 8 },
   miniTrack: { width: 56, height: 6, borderRadius: 3, backgroundColor: C.line, overflow: "hidden" },
   miniFill: { height: 6, backgroundColor: C.blue, borderRadius: 3 },
@@ -365,15 +334,15 @@ const s = StyleSheet.create({
   list: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, paddingBottom: 16 },
   row: { flexDirection: "row", alignItems: "flex-end", gap: 8, maxWidth: "100%" },
   rowYou: { justifyContent: "flex-end" },
-  avatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.hero, color: C.white, textAlign: "center", lineHeight: 26, fontWeight: "800", fontSize: 12, overflow: "hidden" },
+  avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.accentBg, color: C.accent, textAlign: "center", lineHeight: 24, fontWeight: "800", fontSize: 11, overflow: "hidden" },
   bubble: { maxWidth: "86%", paddingHorizontal: 14, paddingVertical: 11, borderRadius: 18, gap: 8 },
   flow: { backgroundColor: C.flowBubble, borderBottomLeftRadius: 6 },
   you: { backgroundColor: C.youBubble, borderBottomRightRadius: 6 },
   flowText: { fontSize: 16, lineHeight: 23, color: C.ink },
   youText: { fontSize: 16, lineHeight: 23, color: C.white },
   more: { fontSize: 13, fontWeight: "700", color: C.blue },
-  hype: { backgroundColor: C.lime },
-  hypeText: { fontSize: 18, lineHeight: 25, fontWeight: "700", color: C.onLime },
+  hype: { backgroundColor: C.greenBg },
+  hypeText: { fontSize: 17, lineHeight: 24, fontWeight: "700", color: C.green },
   offer: { backgroundColor: C.blueSoft, borderWidth: 1, borderColor: C.blueLine },
   offerKicker: { fontSize: 10, letterSpacing: 1.4, fontWeight: "700", color: C.blue },
   offerText: { fontSize: 17, lineHeight: 23, fontWeight: "700" },
