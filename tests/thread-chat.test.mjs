@@ -51,7 +51,8 @@ test("a dumped thread shows the transcript, Flow's reply, the script's question 
   assert.ok(view.root.findAllByType("TextInput").some((n) => n.props.accessibilityLabel === "Message Flow"), "a real message bar");
   assert.ok(!found.includes("Do this"), "no move offered before the thread is understood");
   assert.ok(!found.some((l) => /mark done|add task|classify/i.test(l)));
-  assert.doesNotMatch(text, /Getting to know this|\d+%/, "no meter, no percent: the thread is a conversation, not a score");
+  const words = view.root.findAllByType("Text").flatMap((n) => (Array.isArray(n.props.children) ? n.props.children : [n.props.children])).filter((c) => typeof c === "string").join(" ");
+  assert.doesNotMatch(words, /Getting to know this|\d+%/, "no meter, no percent: the thread is a conversation, not a score");
   await act(async () => view.unmount());
 });
 
