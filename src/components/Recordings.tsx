@@ -22,9 +22,13 @@ export function recordingTasks(note: Note, threads: ThoughtDraft[], tasks: Task[
 }
 
 const GENERIC = new Set<string>([...AREAS, "Other (self)", "Many things going on"]);
+/** Threads named after an area (older data) are not projects worth listing. */
+export function isGenericTitle(title: string): boolean {
+  return GENERIC.has(title) || /^Other\b/.test(title);
+}
 
 export function recordingTitle(note: Note, threads: ThoughtDraft[], tasks: Task[] = []): string {
-  const mine = recordingProjects(note, threads, tasks).filter((t) => !GENERIC.has(t.title) && !/^Other\b/.test(t.title));
+  const mine = recordingProjects(note, threads, tasks).filter((t) => !isGenericTitle(t.title));
   if (mine.length) return mine.map((t) => t.title).slice(0, 3).join(", ");
   const first = note.text.split(/(?<=[.!?])\s+/)[0] ?? note.text;
   return first.length > 48 ? first.slice(0, 47).trimEnd() + "…" : first;

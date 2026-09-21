@@ -5,7 +5,7 @@ import type { Note, Task } from "../model.ts";
 import { localDate } from "../model.ts";
 import { AudioPlayback } from "./VoiceCapture.tsx";
 import { Check, Dot, Empty, Row, Screen, Section, Segmented } from "./ui.tsx";
-import { duration, recordingProjects, recordingTasks, recordingTitle, stamp } from "./Recordings.tsx";
+import { duration, isGenericTitle, recordingProjects, recordingTasks, recordingTitle, stamp } from "./Recordings.tsx";
 import { C } from "./theme.ts";
 
 /**
@@ -43,7 +43,7 @@ export default function RecordingPage({
   const moves = mine.filter((t) => t.kind !== "waiting" && !t.later);
   const waiting = mine.filter((t) => t.kind === "waiting");
   const later = mine.filter((t) => t.later);
-  const projects = recordingProjects(note, threads, tasks);
+  const projects = recordingProjects(note, threads, tasks).filter((t) => !isGenericTitle(t.title));
   const title = recordingTitle(note, threads, tasks);
   const today = localDate(now);
   const when = (t: Task) => (t.done ? "done" : t.kind === "waiting" ? (t.chaseDate ? `chase ${new Date(`${t.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : "waiting") : t.plannedDate ? `${t.plannedDate === today ? "Today" : new Date(`${t.plannedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}${t.plannedTime ? " " + t.plannedTime : ""}` : "");
@@ -51,7 +51,6 @@ export default function RecordingPage({
     setHighlight(t.notes || null);
     setTab("Transcript");
   };
-  const fallback = mine.length ? `${moves.length ? `${moves.length} move${moves.length === 1 ? "" : "s"}` : ""}${waiting.length ? `${moves.length ? ", " : ""}waiting on ${waiting.length}` : ""}${later.length ? `, ${later.length} for later` : ""}.` : "Nothing came of this yet.";
   // The transcript as paragraphs, with the sentence behind each move marked.
   const marks = mine.map((t) => (t.notes || "").trim()).filter((x) => x.length > 8);
   const paragraphs = note.text.split(/\n+|(?<=[.!?])\s+(?=[A-Z])/).reduce<string[]>((acc, s) => {
@@ -94,7 +93,7 @@ export default function RecordingPage({
       <ScrollView ref={scroll} contentContainerStyle={{ paddingBottom: 60 }}>
         {tab === "Summary" ? (
           <>
-            {(!!paragraph?.trim() || mine.length > 0) && <Text style={s.lead}>{paragraph?.trim() || fallback}</Text>}
+            {!!paragraph?.trim() && <Text style={s.lead}>{paragraph.trim()}</Text>}
             {moves.length > 0 && (
               <Section label="Moves">
                 {moves.map((t, i) => (
