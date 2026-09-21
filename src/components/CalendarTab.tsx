@@ -1,8 +1,8 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { eventsOn, timeLabel, weekDays, type CalEvent } from "../calendar.ts";
+import { eventsOn, timeLabel, watchOuts, weekDays, type CalEvent } from "../calendar.ts";
 import { localDate, type Task } from "../model.ts";
-import { Dot, Empty, Fab, Row, Screen, Section } from "./ui.tsx";
+import { Dot, Empty, Fab, Pill, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
 /** Everything on one day, in order: the phone's events, Flow's moves (blue), chases (amber). */
@@ -22,11 +22,11 @@ export function dayItems(events: CalEvent[], tasks: Task[], date: string) {
 }
 
 /**
- * Fantastical's list: days down the page, each with the phone's events and
- * Flow's items. Tap a Flow item to change it. Long-press a day header for
- * the dev seed.
+ * The week as Flow sees it: what to watch out for first, then the days down
+ * the page, each with the phone's events and Flow's items. Tap a Flow item
+ * to change it.
  */
-export default function Upcoming({
+export default function CalendarTab({
   events,
   tasks,
   connected,
@@ -53,10 +53,11 @@ export default function Upcoming({
 }) {
   const list = weekDays(now, days);
   const today = localDate(now);
+  const watch = watchOuts(events, now, 7);
   const sources = [...new Set(events.filter((e) => !e.mine).map((e) => e.calendar).filter(Boolean))];
   return (
     <Screen
-      title="Upcoming"
+      title="Calendar"
       subtitle={connected ? `${sources.length ? sources.slice(0, 2).join(" + ") : "your calendar"} · Flow in blue` : "connect your calendar"}
       right={
         onSeed ? (
@@ -70,6 +71,13 @@ export default function Upcoming({
       {!connected && (
         <Section label="Your week">
           <Row first title="Connect your calendar" sub="Apple and Google, through the phone — Flow plans around it" when="›" onPress={onConnect} accessibilityLabel="Connect calendar" />
+        </Section>
+      )}
+      {watch.length > 0 && (
+        <Section label="Watch out">
+          {watch.map((w, i) => (
+            <Row key={`${w.kind}-${w.date}-${i}`} first={i === 0} title={w.title} sub={w.note} lead={<Dot color={C.violet} />} trailing={<Pill text={w.kind === "full" ? "full" : w.kind === "trip" ? "away" : w.kind === "occasion" ? "nothing planned" : "watch"} tone={w.kind === "important" ? "red" : "amber"} />} />
+          ))}
         </Section>
       )}
       {list.map((date) => {

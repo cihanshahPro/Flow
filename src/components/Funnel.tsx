@@ -13,6 +13,7 @@ import {
   type Profile,
 } from "../personality.ts";
 import { flowType } from "../flow-voice.ts";
+import { eventsOn, timeLabel, watchOuts, weekDays, type CalEvent } from "../calendar.ts";
 import { C } from "./theme.ts";
 
 const RATINGS = ["Not me", "Not really", "Somewhat", "Mostly", "Very me"];
@@ -22,7 +23,7 @@ const RATINGS = ["Not me", "Not really", "Somewhat", "Mostly", "Very me"];
  * a planned week. The personality test and profile questions remain as
  * optional steps reachable from Profile only; they are not in the path.
  */
-export type FunnelStep = "intro" | "calendar" | "test" | "reveal" | "plate" | "first";
+export type FunnelStep = "intro" | "calendar" | "week" | "test" | "reveal" | "plate" | "first";
 
 export const PLATE_QUESTIONS: {
   key: keyof Plate;
@@ -54,6 +55,7 @@ export default function Funnel({
   onExit,
   onConnectCalendar,
   calendarConnected = false,
+  events = [],
   busy = false,
   error = "",
 }: {
@@ -69,6 +71,8 @@ export default function Funnel({
   /** Asks the phone once; resolves true when Flow may read the calendar. */
   onConnectCalendar?: () => Promise<boolean>;
   calendarConnected?: boolean;
+  /** The phone's week, once connected: shown before the first recording so Flow's read comes first. */
+  events?: CalEvent[];
   busy?: boolean;
   error?: string;
 }) {
@@ -110,7 +114,7 @@ export default function Funnel({
         <>
           <Text style={s.headline}>Say it once.{"\n"}Your week plans itself.</Text>
           <Text style={s.body}>Talk about everything on your mind. Flow sorts it, puts it on your calendar around what's already there, and tells you what today looks like.</Text>
-          <Primary label="Get started" onPress={() => onStep(calendarConnected ? "first" : "calendar")} busy={busy} />
+          <Primary label="Get started" onPress={() => onStep(calendarConnected ? "week" : "calendar")} busy={busy} />
         </>
       )}
       {step === "calendar" && (
@@ -120,7 +124,7 @@ export default function Funnel({
           <Text style={s.body}>Apple Calendar and any Google calendar on this phone, through one permission. Flow plans around what's already there and puts its moves in the gaps. It never changes your events.</Text>
           <Primary
             label="Connect calendar"
-            onPress={() => void (onConnectCalendar ? onConnectCalendar() : Promise.resolve(false)).then(() => onStep("first"))}
+            onPress={() => void (onConnectCalendar ? onConnectCalendar() : Promise.resolve(false)).then((ok) => onStep(ok ? "week" : "first"))}
             busy={busy}
           />
           <Pressable accessibilityRole="button" accessibilityLabel="Not now" onPress={() => onStep("first")} hitSlop={8} style={{ alignSelf: "center" }}>
@@ -236,6 +240,37 @@ export default function Funnel({
           )}
         </>
       )}
+      {step === "week" && (
+        <>
+          <Text style={s.kicker}>FLOW SEES YOUR WEEK</Text>
+          <Text style={s.headline}>Apple + Google, read once · nothing changed</Text>
+          <View style={s.week}>
+            {weekDays(new Date(), 7).map((date) => {
+              const d = new Date(`${date}T12:00:00`);
+              const on = eventsOn(events, date).filter((e) => !e.mine);
+              return (
+                <View key={date} style={s.weekRow}>
+                  <Text style={s.weekDay}>{d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()} {d.getDate()}</Text>
+                  <Text style={s.weekEvents} numberOfLines={2}>{on.length ? on.map((e) => `${e.title}${e.allDay ? "" : " " + timeLabel(e.start)}`).join(" · ") : "—"}</Text>
+                </View>
+              );
+            })}
+          </View>
+          {watchOuts(events, new Date(), 7).length > 0 && (
+            <>
+              <Text style={s.kicker}>WATCH OUT</Text>
+              {watchOuts(events, new Date(), 7).map((w, i) => (
+                <Text key={i} style={s.body}>
+                  <Text style={s.bodyStrong}>{w.title}</Text> · {w.note}
+                </Text>
+              ))}
+            </>
+          )}
+          <Text style={s.bodyStrong}>Got your week. Now tell me what's on your mind — everything, in any order.</Text>
+          <Primary label="Record" onPress={() => void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onRecordFirst(FIRST_PROMPT))} busy={busy} />
+          <Secondary label="or type it" onPress={() => void onFinish({ ...profile, completed: true, stage: "guide", funnelVersion: FUNNEL_VERSION }).then(() => onWriteFirst(FIRST_PROMPT))} busy={busy} />
+        </>
+      )}
       {step === "first" && (
         <>
           <Text style={s.kicker}>2 OF 2</Text>
@@ -329,4 +364,8 @@ const s = StyleSheet.create({
   recordIcon: { color: C.record, fontSize: 20 },
   recordText: { color: C.white, fontSize: 19, fontWeight: "700" },
   error: { color: C.red, fontSize: 14, lineHeight: 20 },
+  week: { gap: 6, marginTop: 4 },
+  weekRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  weekDay: { width: 58, fontSize: 11, letterSpacing: 1, fontWeight: "700", color: C.ink3, paddingTop: 2 },
+  weekEvents: { flex: 1, fontSize: 14, lineHeight: 20, color: C.ink },
 });

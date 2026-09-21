@@ -3,7 +3,9 @@ import { readWeek } from "./calendar-read";
 import { editMove, moveToDay } from "./moves";
 import { localDate, type Task } from "../model";
 import { placeInGap, awayDays } from "../calendar";
-import { closureLine, proposeTomorrow, ROUTINE_SUGGESTIONS, routinesOn, routineTask, routineTaskId, tomorrowOf, type Decision, type Proposal, type Routine } from "../tomorrow";
+import { closureLine, connectToList, proposeTomorrow, ROUTINE_SUGGESTIONS, routinesOn, routineTask, routineTaskId, tomorrowOf, type Decision, type Proposal, type Routine, type Suggestion } from "../tomorrow";
+import { planText, type ShapeOptions } from "./processors";
+import { localPlan } from "../intake";
 
 /**
  * The evening ritual on the device: load the routines, put the proposal
@@ -112,4 +114,16 @@ export async function startDay(now = new Date()): Promise<number> {
   if (await dayPlanFor(date)) return 0;
   const routines = await loadRoutines();
   return (await ensureRoutines(date, routines, now)).length;
+}
+
+/**
+ * The smart connector: what the person said about tomorrow, read into items
+ * (the model when it answers, the local pass otherwise) and matched to the
+ * moves already on the list. Nothing is saved as a recording or a thread.
+ */
+export async function suggestForTomorrow(text: string, now = new Date(), options: ShapeOptions = {}): Promise<Suggestion> {
+  const { tasks } = await loadWorkspace();
+  const outcome = await planText(text, "", options).catch(() => ({ plan: null }));
+  const items = outcome.plan?.items?.length ? outcome.plan.items : localPlan(text, now);
+  return connectToList(items.map((i) => ({ title: i.title, evidence: i.evidence })), tasks, tomorrowOf(now));
 }

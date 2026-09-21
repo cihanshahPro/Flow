@@ -92,7 +92,7 @@ export default function RecordingPage({
     );
   };
   return (
-    <Screen title={title} subtitle={`${stamp(note.createdAt, now)}${note.durationMs ? " · " + duration(note.durationMs) : ""}`} back="Recordings" onBack={onBack} scroll={false}>
+    <Screen title={title} subtitle={`${stamp(note.createdAt, now)}${note.durationMs ? " · " + duration(note.durationMs) : ""}`} back="Threads" onBack={onBack} scroll={false}>
       <Segmented items={["Summary", "Transcript"]} value={tab} onChange={setTab} />
       <ScrollView ref={scroll} contentContainerStyle={{ paddingBottom: 60 }}>
         {tab === "Summary" ? (

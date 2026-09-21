@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { WeekPlan as Plan } from "../services/intake.ts";
 import { eventsOn, weekDays } from "../calendar.ts";
-import { dayItems } from "./Upcoming.tsx";
+import { dayItems } from "./CalendarTab.tsx";
 import { Button, Dot, Fab, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 

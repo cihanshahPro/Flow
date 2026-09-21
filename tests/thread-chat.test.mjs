@@ -6,9 +6,9 @@ import renderer, { act } from "react-test-renderer";
 register("./voice-loader.mjs", import.meta.url);
 const { default: ThreadChat } = await import("../src/components/ThreadChat.tsx");
 const { default: Today } = await import("../src/components/Today.tsx");
-const { default: Recordings } = await import("../src/components/Recordings.tsx");
+const { default: Threads } = await import("../src/components/Threads.tsx");
 const { default: RecordingPage } = await import("../src/components/RecordingPage.tsx");
-const { default: Upcoming } = await import("../src/components/Upcoming.tsx");
+const { default: CalendarTab } = await import("../src/components/CalendarTab.tsx");
 const { default: WeekPlan } = await import("../src/components/WeekPlan.tsx");
 const { default: TabBar } = await import("../src/components/TabBar.tsx");
 const { respondToRecording, answerChip, pendingMessage } = await import("../src/thread.ts");
@@ -50,8 +50,7 @@ test("a dumped thread shows the transcript, Flow's reply, the script's question 
   assert.ok(view.root.findAllByType("TextInput").some((n) => n.props.accessibilityLabel === "Message Flow"), "a real message bar");
   assert.ok(!found.includes("Do this"), "no move offered before the thread is understood");
   assert.ok(!found.some((l) => /mark done|add task|classify/i.test(l)));
-  const words = view.root.findAllByType("Text").flatMap((n) => (Array.isArray(n.props.children) ? n.props.children : [n.props.children])).filter((c) => typeof c === "string").join(" ");
-  assert.doesNotMatch(words, /Getting to know this|\d+%/, "no meter, no percent: the thread is a conversation, not a score");
+  assert.match(text, /Getting to know this/, "the meter from the thread vision");
   await act(async () => view.unmount());
 });
 
@@ -65,6 +64,7 @@ test("an understood thread shows the hype bubble, Flow gets it, and a move with 
   const found = labels(view);
   assert.ok(!found.includes("Do this"), "a move is accepted by replying, not by a button");
   assert.match(textOf(view), /full picture/);
+  assert.match(textOf(view), /Flow gets it/);
   assert.match(textOf(view), /Say “do it”/);
   await act(async () => view.unmount());
 });
@@ -141,7 +141,7 @@ test("Today is Things' shape: CALENDAR · MOVES · THIS EVENING · WAITING ON, t
   await act(async () => off.unmount());
 });
 
-test("Recordings is Voicenotes' list with search, then projects with a ring; the tab bar is Today · Upcoming · Recordings · Me", async () => {
+test("Threads is Messages' list with a ring per project, recordings under it, search; the tab bar is Today · Threads · Calendar · Me", async () => {
   const a = respondToRecording(suggestDraft("a", rich, now), "n1", rich, { now });
   const notes = [
     { id: "n1", title: "x", text: rich, createdAt: now.toISOString(), durationMs: 124_000 },
@@ -153,13 +153,15 @@ test("Recordings is Voicenotes' list with search, then projects with a ring; the
     { id: "t3", noteId: "n1", kind: "waiting", waitingOn: "the accountant", title: "Her numbers", done: false, createdAt: "", plannedDate: "" },
   ];
   const opened = [];
-  const view = await render(React.createElement(Recordings, { notes, threads: [a], tasks, now, onOpenRecording: (n) => opened.push(n.id), onOpenProject: (id) => opened.push(id), onRecord() {}, onWrite() {} }));
+  const view = await render(React.createElement(Threads, { notes, threads: [a], tasks, now, onOpenRecording: (n) => opened.push(n.id), onOpenThread: (id) => opened.push(id), onRecord() {}, onWrite() {} }));
   const text = textOf(view);
+  assert.match(text, /"1 open"/, "the header counts open threads");
   assert.match(text, /"2 moves · 1 waiting · /, "what came of it, not the transcript");
   assert.match(text, /2:04/);
-  assert.match(text, /"PROJECTS"/);
-  assert.match(text, /"1 open/);
-  assert.ok(labels(view).includes(`Open project ${a.title}`));
+  assert.match(text, /"RECORDINGS"/);
+  assert.ok(labels(view).includes(`Open thread ${a.title}`));
+  assert.equal(textOf(view).split('"Needs you"').length - 1, 1, "one dot: Flow is waiting on this thread");
+  assert.match(text, /And what else\?/, "the last message is the preview, like Messages");
   assert.ok(labels(view).includes("Search") || view.root.findAll((n) => n.props.accessibilityLabel === "Search").length === 1);
   const rows = labels(view).filter((l) => l.startsWith("Open recording "));
   assert.equal(rows.length, 2);
@@ -170,7 +172,7 @@ test("Recordings is Voicenotes' list with search, then projects with a ring; the
   const picked = [];
   const bar = await render(React.createElement(TabBar, { active: "today", onSelect: (t) => picked.push(t) }));
   const tabs = bar.root.findAllByType("Pressable").map((n) => n.props.accessibilityLabel);
-  assert.deepEqual(tabs, ["Today", "Upcoming", "Recordings", "Me"]);
+  assert.deepEqual(tabs, ["Today", "Threads", "Calendar", "Me"]);
   await act(async () => bar.root.findAllByType("Pressable")[3].props.onPress());
   assert.deepEqual(picked, ["me"]);
   await act(async () => bar.unmount());
@@ -202,7 +204,7 @@ test("a recording page is Otter's: a paragraph, moves and waiting-ons as rows wi
   await act(async () => view.unmount());
 });
 
-test("Upcoming lists days with the phone's events and Flow's items; Your week is the same rows and ends with closure", async () => {
+test("Calendar lists watch-outs, then days with the phone's events and Flow's items; Your week is the same rows and ends with closure", async () => {
   const events = [
     { id: "sync", calendarId: "c", title: "Team sync", start: "2026-09-19T15:00:00.000Z", end: "2026-09-19T15:45:00.000Z", allDay: false, calendar: "Work" },
     { id: "court", calendarId: "c", title: "Court hearing", start: "2026-09-20T14:00:00.000Z", end: "2026-09-20T15:00:00.000Z", allDay: false, calendar: "Personal" },
@@ -212,9 +214,12 @@ test("Upcoming lists days with the phone's events and Flow's items; Your week is
     { id: "t3", kind: "waiting", waitingOn: "the lawyer", title: "His answer", chaseDate: "2026-09-21", done: false, createdAt: "", plannedDate: "" },
   ];
   const opened = [];
-  const view = await render(React.createElement(Upcoming, { events, tasks, connected: true, now, onConnect() {}, onOpenMove: (t) => opened.push(t.id), onRecord() {}, onWrite() {} }));
+  const view = await render(React.createElement(CalendarTab, { events, tasks, connected: true, now, onConnect() {}, onOpenMove: (t) => opened.push(t.id), onRecord() {}, onWrite() {} }));
   const text = textOf(view);
+  assert.match(text, /"Calendar"/);
   assert.match(text, /Work \+ Personal · Flow in blue/);
+  assert.match(text, /"WATCH OUT"/);
+  assert.match(text, /Court hearing/);
   assert.match(text, /"SAT 19"/);
   assert.match(text, /"TODAY"/);
   assert.match(text, /"SUN 20"/);

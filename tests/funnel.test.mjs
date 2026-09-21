@@ -43,6 +43,7 @@ test("new people get value first: welcome, connect the calendar, then the first 
     onRecordFirst: (prompt) => recorded.push(prompt),
     onWriteFirst: () => {},
     onConnectCalendar: async () => (connected++, true),
+    events: [{ id: "court", calendarId: "c", title: "Court hearing", start: new Date(Date.now() + 864e5).toISOString(), end: new Date(Date.now() + 864e5 + 36e5).toISOString(), allDay: false }],
   });
   const view = await render(React.createElement(Funnel, props()));
   const rerender = () => act(async () => view.update(React.createElement(Funnel, props())));
@@ -56,11 +57,13 @@ test("new people get value first: welcome, connect the calendar, then the first 
   await press(view, "Connect calendar");
   await rerender();
   assert.equal(connected, 1);
-  assert.equal(step, "first");
-  assert.match(textOf(view), /What's on your mind right now\?/);
-  assert.deepEqual(labels(view), ["Talk it out", "Type it"], "two equal ways in");
-  assert.match(textOf(view), /Your voice stays on your iPhone\./);
-  await press(view, "Talk it out");
+  assert.equal(step, "week", "the calendar is read before the person says a word");
+  assert.match(textOf(view), /FLOW SEES YOUR WEEK/);
+  assert.match(textOf(view), /Court hearing/);
+  assert.match(textOf(view), /WATCH OUT/);
+  assert.match(textOf(view), /Got your week\. Now tell me what's on your mind/);
+  assert.deepEqual(labels(view), ["Record", "or type it"]);
+  await press(view, "Record");
   assert.equal(finished.length, 1);
   assert.equal(finished[0].funnelVersion, FUNNEL_VERSION);
   assert.equal(finished[0].answers.length, 0, "the test is not taken yet");

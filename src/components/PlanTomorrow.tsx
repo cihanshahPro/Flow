@@ -3,7 +3,7 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 import { timeLabel } from "../calendar.ts";
 import type { Task } from "../model.ts";
 import { EVERY_DAY, WEEKDAYS, type Decision, type Proposal, type Routine } from "../tomorrow.ts";
-import { Button, Check, Chips, Dot, Empty, Pill, Row, Screen, Section } from "./ui.tsx";
+import { Button, Check, Chips, Dot, Empty, Fab, Pill, Row, Screen, Section } from "./ui.tsx";
 import { C } from "./theme.ts";
 
 /**
@@ -14,18 +14,26 @@ import { C } from "./theme.ts";
 export default function PlanTomorrow({
   proposal,
   routines,
+  suggestedLines = [],
   busy = false,
   onLock,
   onOpenMove,
   onBack,
+  onTalk,
+  onType,
 }: {
   proposal: Proposal;
   /** Every routine the person has, on or off. */
   routines: Routine[];
+  /** New lines Flow heard in what the person said about tomorrow. */
+  suggestedLines?: string[];
   busy?: boolean;
   onLock: (decision: Decision) => void;
   onOpenMove: (task: Task) => void;
   onBack: () => void;
+  /** Say what tomorrow holds; Flow connects it to the list. Nothing is saved as a recording. */
+  onTalk: () => void;
+  onType: () => void;
 }) {
   const [keep, setKeep] = useState<Set<string>>(new Set());
   const [carry, setCarry] = useState<Set<string>>(new Set());
@@ -37,8 +45,11 @@ export default function PlanTomorrow({
   const [routineTime, setRoutineTime] = useState("07:00");
   useEffect(() => {
     setKeep(new Set(proposal.moves.map((t) => t.id)));
-    setCarry(new Set(proposal.carry.map((t) => t.id)));
-  }, [proposal.date, proposal.moves.length, proposal.carry.length]);
+    setCarry((c) => new Set([...proposal.carry.map((t) => t.id), ...(proposal.suggested ?? []).map((t) => t.id), ...[...c].filter((id) => proposal.carry.some((t) => t.id === id) || proposal.suggested?.some((t) => t.id === id))]));
+  }, [proposal.date, proposal.moves.length, proposal.carry.length, proposal.suggested?.length]);
+  useEffect(() => {
+    if (suggestedLines.length) setAdded((a) => [...a, ...suggestedLines.filter((l) => !a.includes(l))]);
+  }, [suggestedLines]);
   useEffect(() => setMine(routines), [routines]);
   const d = new Date(`${proposal.date}T12:00:00`);
   const day = d.getDay();
@@ -63,6 +74,7 @@ export default function PlanTomorrow({
     setLine("");
   };
   const total = keep.size + carry.size + added.length;
+  const suggested = proposal.suggested ?? [];
   const onCount = mine.filter((r) => r.on && r.days.includes(day)).length;
   const hours = Math.round(proposal.freeMinutes / 30) / 2;
   return (
@@ -72,8 +84,9 @@ export default function PlanTomorrow({
       back="Today"
       onBack={onBack}
       footer={<Button label={total || onCount ? `Lock in tomorrow · ${total} move${total === 1 ? "" : "s"}${onCount ? ` · ${onCount} routine${onCount === 1 ? "" : "s"}` : ""}` : "Lock in tomorrow"} busy={busy} style={{ marginTop: 0 }} onPress={() => onLock({ keep: [...keep], carry: [...carry], added, routines: mine })} />}
+      fab={<Fab onRecord={onTalk} onWrite={onType} label="Tell Flow" busy={busy} />}
     >
-      <Text style={s.lead}>Plan it now, then let it go. In the morning you just start.</Text>
+      <Text style={s.lead}>Say what tomorrow holds — Flow connects it to your list and suggests. Then lock it in and let it go.</Text>
       {(proposal.events.length > 0 || proposal.watch.length > 0) && (
         <Section label="Calendar">
           {proposal.events.map((e, i) => (
@@ -110,8 +123,11 @@ export default function PlanTomorrow({
         {proposal.moves.map((t, i) => (
           <Row key={t.id} first={added.length === 0 && i === 0} title={t.title} sub={[t.area, t.minutes ? `${t.minutes} min` : ""].filter(Boolean).join(" · ")} when={t.plannedTime} lead={<Check on={keep.has(t.id)} onPress={() => setKeep(toggle(keep, t.id))} label={`${keep.has(t.id) ? "Drop" : "Keep"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
         ))}
-        {proposal.carry.map((t, i) => (
-          <Row key={t.id} first={added.length === 0 && proposal.moves.length === 0 && i === 0} title={t.title} sub="not done today" when="→" lead={<Check on={carry.has(t.id)} onPress={() => setCarry(toggle(carry, t.id))} label={`${carry.has(t.id) ? "Leave" : "Bring"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
+        {suggested.map((t, i) => (
+          <Row key={t.id} first={added.length === 0 && proposal.moves.length === 0 && i === 0} title={t.title} sub={`from your list${t.plannedDate ? " · was " + new Date(`${t.plannedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }) : ""}`} when="→" lead={<Check on={carry.has(t.id)} onPress={() => setCarry(toggle(carry, t.id))} label={`${carry.has(t.id) ? "Leave" : "Bring"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
+        ))}
+        {proposal.carry.filter((t) => !suggested.some((x) => x.id === t.id)).map((t, i) => (
+          <Row key={t.id} first={added.length === 0 && proposal.moves.length === 0 && suggested.length === 0 && i === 0} title={t.title} sub="not done today" when="→" lead={<Check on={carry.has(t.id)} onPress={() => setCarry(toggle(carry, t.id))} label={`${carry.has(t.id) ? "Leave" : "Bring"} ${t.title}`} />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
         ))}
       </Section>
       {proposal.chases.length > 0 && (

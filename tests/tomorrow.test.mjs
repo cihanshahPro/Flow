@@ -99,3 +99,32 @@ test("the Tomorrow screen: rows with checks, a line to add, one button; the deci
   assert.ok(d.routines.find((r) => r.id === "emails").days.includes(1));
   await act(async () => view.unmount());
 });
+
+test("the smart connector: what you say about tomorrow pulls known moves in and adds the rest as lines", async () => {
+  const { connectToList } = await import("../src/tomorrow.ts");
+  const tasks = [
+    task("a", { title: "Reach out to immigration lawyer", plannedDate: "2026-09-23", notes: "I need to talk to an immigration lawyer" }),
+    task("b", { title: "Book the dentist for the kids", plannedDate: "" }),
+    task("c", { title: "Compare insurance quotes", plannedDate: "2026-09-20", done: true }),
+    task("d", { title: "Call the DUI lawyer", plannedDate: "2026-09-20" }),
+  ];
+  const s = connectToList([{ title: "Follow up with the immigration lawyer" }, { title: "Buy milk" }, { title: "Dentist for the kids" }, { title: "Call the DUI lawyer" }], tasks, "2026-09-20");
+  assert.deepEqual(s.existing.map((t) => t.id), ["a", "b"], "the lawyer and the dentist are already on the list; the DUI call is already on tomorrow");
+  assert.deepEqual(s.lines, ["Buy milk"]);
+});
+
+test("the Tomorrow screen shows suggested moves from the list as rows to bring, and heard lines as new", async () => {
+  const p = { date: "2026-09-21", events: [], watch: [], routines: [], moves: [], carry: [], chases: [], freeMinutes: 120, suggested: [task("a", { title: "Reach out to immigration lawyer", plannedDate: "2026-09-23" })] };
+  const locked = [];
+  const view = await render(React.createElement(PlanTomorrow, { proposal: p, routines: [], suggestedLines: ["Buy milk"], onLock: (d) => locked.push(d), onOpenMove() {}, onBack() {}, onTalk() {}, onType() {} }));
+  const text = textOf(view);
+  assert.match(text, /from your list · was Wed/);
+  assert.match(text, /"Buy milk"/);
+  const find = (label) => view.root.findAll((n) => n.props.accessibilityLabel === label)[0];
+  assert.ok(find("Leave Reach out to immigration lawyer"), "suggested moves come pre-ticked");
+  assert.ok(find("Tell Flow"), "one button to say what tomorrow holds");
+  await act(async () => view.root.findAll((n) => (n.props.accessibilityLabel || "").startsWith("Lock in tomorrow"))[0].props.onPress());
+  assert.deepEqual(locked[0].carry, ["a"]);
+  assert.deepEqual(locked[0].added, ["Buy milk"]);
+  await act(async () => view.unmount());
+});

@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ThoughtDraft, ThreadMessage } from "../drafts.ts";
 import type { Note, Task } from "../model.ts";
 import { celebrationEmoji, type Mode } from "../flow-voice.ts";
-import { pendingMessage, stageFor, threadTasks } from "../thread.ts";
+import { pendingMessage, stageFor, threadTasks, understoodPercent } from "../thread.ts";
 import type { Formula } from "../formula.ts";
 import { eventsOn, timeLabel, weekDays, type CalEvent } from "../calendar.ts";
 import { matchEvents } from "../map.ts";
@@ -97,6 +97,7 @@ export default function ThreadChat({
     return () => clearInterval(t);
   }, [processing]);
   const moves = threadTasks(thread, tasks);
+  const percent = understoodPercent(thread, formula ?? undefined);
   const [showTranscripts, setShowTranscripts] = useState(false);
   const linked = matchEvents(events.filter((e) => !e.mine), [{ id: thread.id, title: thread.title, area: thread.area, people: thread.people, words: [thread.source, ...thread.updates].join(" ") }]).get(thread.id) ?? [];
   const today = weekDays()[0];
@@ -119,7 +120,13 @@ export default function ThreadChat({
           <Text style={s.title} numberOfLines={titleOpen ? undefined : 1}>
             {thread.title}
           </Text>
-          <Text style={s.stage}>{[thread.area, moves.filter((t) => !t.done).length ? `${moves.filter((t) => !t.done).length} open` : stage === "done" ? "done" : undefined].filter(Boolean).join(" · ") || "talk it through"}</Text>
+          <View style={s.subRow} accessibilityLabel={percent >= 100 ? "Flow gets it" : `Flow is ${percent}% of the way to getting this`}>
+            <Text style={s.stage}>{percent >= 100 ? "Flow gets it" : "Getting to know this"}</Text>
+            <View style={s.miniTrack}>
+              <View style={[s.miniFill, { width: `${Math.min(100, percent)}%` }]} />
+            </View>
+            <Text style={s.meterCount}>{percent}%</Text>
+          </View>
         </Pressable>
       </View>
       <ScrollView ref={scroll} contentContainerStyle={s.list} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
@@ -318,7 +325,7 @@ const s = StyleSheet.create({
   back: { paddingTop: 2 },
   title: { fontSize: 20, lineHeight: 25, fontWeight: "700", color: C.ink },
   subRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  stage: { fontSize: 12, fontWeight: "600", color: C.ink2 },
+  stage: { fontSize: 12, fontWeight: "600", color: C.accent },
   meterChip: { flexDirection: "row", alignItems: "center", gap: 8 },
   miniTrack: { width: 56, height: 6, borderRadius: 3, backgroundColor: C.line, overflow: "hidden" },
   miniFill: { height: 6, backgroundColor: C.blue, borderRadius: 3 },

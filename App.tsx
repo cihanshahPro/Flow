@@ -18,13 +18,13 @@ import { StatusBar } from "expo-status-bar";
 import { randomUUID } from "expo-crypto";
 import VoiceCapture, { AudioPlayback, type SavedVoiceNote } from "./src/components/VoiceCapture";
 import Today from "./src/components/Today";
-import Recordings from "./src/components/Recordings";
+import Threads from "./src/components/Threads";
 import RecordingPage from "./src/components/RecordingPage";
-import Upcoming from "./src/components/Upcoming";
+import CalendarTab from "./src/components/CalendarTab";
 import Me from "./src/components/Me";
 import MoveSheet from "./src/components/MoveSheet";
 import PlanTomorrow from "./src/components/PlanTomorrow";
-import { dayPlanFor, loadRoutines, lockTomorrow, proposal as loadProposal, startDay } from "./src/services/tomorrow";
+import { dayPlanFor, loadRoutines, lockTomorrow, proposal as loadProposal, startDay, suggestForTomorrow } from "./src/services/tomorrow";
 import { morningLine, tomorrowOf, type Decision, type Proposal, type Routine } from "./src/tomorrow";
 import * as Notifications from "expo-notifications";
 import TabBar, { type Tab } from "./src/components/TabBar";
@@ -59,7 +59,7 @@ import { appendPlanUpdate, suggestDraft, taskForStep, type ThoughtDraft } from "
 import type { Note, Task } from "./src/model";
 
 type Screen = Tab | "thread" | "intake" | "recording" | "tomorrow";
-type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback"; prompt?: string };
+type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback" | "tomorrow"; prompt?: string };
 const EVALUATE_EVERY_MS = 15 * 60 * 1000;
 
 export default function App() {
@@ -100,6 +100,7 @@ function Flow() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [tomorrowSet, setTomorrowSet] = useState<{ date: string; closure: string } | null>(null);
+  const [suggestedLines, setSuggestedLines] = useState<string[]>([]);
   const [lastTab, setLastTab] = useState<Tab>("today");
   const [openId, setOpenId] = useState<string | null>(null);
   const [funnel, setFunnel] = useState(false);
@@ -125,6 +126,8 @@ function Flow() {
   const shapingAbort = useRef<AbortController | null>(null);
   const captureOpen = useRef(false);
   captureOpen.current = !!capture;
+  const captureKindRef = useRef<Capture["kind"] | null>(null);
+  captureKindRef.current = capture?.kind ?? captureKindRef.current;
 
   const mode = modeFor(profile.answers) ?? DEFAULT_MODE;
   // Same plain questions for everyone: no personality layer in the path.
@@ -153,6 +156,7 @@ function Flow() {
     const [p, r] = await Promise.all([loadProposal(), loadRoutines()]);
     setProposal(p);
     setRoutines(r);
+    setSuggestedLines([]);
     setScreen("tomorrow");
   }
   async function refreshTomorrow() {
@@ -426,7 +430,7 @@ function Flow() {
   function startCapture(
     mode: "voice" | "text",
     threadId: string | null,
-    kind: "thought" | "feedback" = "thought",
+    kind: "thought" | "feedback" | "tomorrow" = "thought",
     prompt?: string,
   ) {
     captureId.current = randomUUID();
@@ -464,7 +468,7 @@ function Flow() {
     await registerVoiceNote({
       ...v,
       planId: capture?.kind === "thought" ? capture.threadId ?? undefined : undefined,
-      captureKind: capture?.kind === "feedback" ? "feedback" : v.captureKind ?? "thought",
+      captureKind: capture?.kind === "feedback" ? "feedback" : capture?.kind === "tomorrow" ? "note" : v.captureKind ?? "thought",
       id: v.audioUri,
       createdAt: new Date().toISOString(),
     });
@@ -473,7 +477,7 @@ function Flow() {
     const entry: Note = {
       ...saved,
       planId: capture?.kind === "thought" ? capture.threadId ?? undefined : undefined,
-      captureKind: capture?.kind === "feedback" ? "feedback" : "thought",
+      captureKind: capture?.kind === "feedback" ? "feedback" : capture?.kind === "tomorrow" ? "note" : "thought",
       id: saved.audioUri,
       createdAt: new Date().toISOString(),
     };
@@ -499,8 +503,19 @@ function Flow() {
     setProcessingError("");
     const before = level.level?.number ?? 0;
     try {
+      const forTomorrow = captureKindRef.current === "tomorrow";
       const result = await processCapturedNote(entry, { askCloudConsent, signal: abort.signal });
       const data = await refresh();
+      if (result.kind === "note" && forTomorrow) {
+        // The smart connector: what was said about tomorrow, matched to the list. Not a recording, not a thread.
+        const s = await suggestForTomorrow(result.note.text, new Date(), { askCloudConsent, signal: abort.signal });
+        setProposal((p) => (p ? { ...p, suggested: [...(p.suggested ?? []), ...s.existing.filter((t) => !(p.suggested ?? []).some((x) => x.id === t.id))] } : p));
+        setSuggestedLines((l) => [...l, ...s.lines.filter((x) => !l.includes(x))]);
+        setCapture(null);
+        setScreen("tomorrow");
+        setNotice(s.existing.length || s.lines.length ? `Got it: ${s.existing.length} from your list, ${s.lines.length} new.` : "Nothing new in that — tomorrow stays as proposed.");
+        return;
+      }
       if (result.kind === "note") {
         setCapture(null);
         setNotice("Saved. Thank you — it stays on this phone.");
@@ -548,7 +563,7 @@ function Flow() {
       const n: Note = {
         id,
         planId: capture.kind === "thought" ? capture.threadId ?? undefined : undefined,
-        captureKind: capture.kind,
+        captureKind: capture.kind === "tomorrow" ? "note" : capture.kind,
         title: text.slice(0, 80),
         text,
         createdAt: new Date().toISOString(),
@@ -631,7 +646,9 @@ function Flow() {
   }
 
   const captureTitle =
-    capture?.kind === "feedback"
+    capture?.kind === "tomorrow"
+      ? "Tomorrow"
+      : capture?.kind === "feedback"
       ? "Tell Flow something"
       : capture?.threadId
         ? current?.title ?? "Add to this thread"
@@ -656,7 +673,7 @@ function Flow() {
           <View style={{ flex: 1 }}>
             <View style={s.sheetHead}>
               <Text style={s.kicker} numberOfLines={1}>
-                {capture?.kind === "feedback" ? "FEEDBACK" : capture?.threadId ? "THIS THREAD" : ""}
+                {capture?.kind === "feedback" ? "FEEDBACK" : capture?.kind === "tomorrow" ? "PLAN TOMORROW" : capture?.threadId ? "THIS THREAD" : ""}
               </Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeCapture} disabled={voiceBusy || busy || processing} hitSlop={12}>
                 <Text style={s.link}>Close</Text>
@@ -781,6 +798,7 @@ function Flow() {
           onWriteFirst={(prompt) => startCapture("text", null, "thought", prompt)}
           onConnectCalendar={connectCalendarNow}
           calendarConnected={calendarOn}
+          events={events}
           onExit={needsFunnel(profile) ? undefined : () => void run(async () => { await updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() }); setFunnel(false); selectTab("today"); })}
         />
         {captureSheet}
@@ -830,13 +848,23 @@ function Flow() {
           />
         )}
         {screen === "tomorrow" && proposal && (
-          <PlanTomorrow proposal={proposal} routines={routines} busy={busy} onLock={lockDay} onOpenMove={setEditing} onBack={() => setScreen("today")} />
+          <PlanTomorrow
+            proposal={proposal}
+            routines={routines}
+            suggestedLines={suggestedLines}
+            busy={busy}
+            onLock={lockDay}
+            onOpenMove={setEditing}
+            onBack={() => setScreen("today")}
+            onTalk={() => startCapture("voice", null, "tomorrow", "What does tomorrow hold? Say it all — Flow connects it to your list.")}
+            onType={() => startCapture("text", null, "tomorrow", "What does tomorrow hold? Say it all — Flow connects it to your list.")}
+          />
         )}
-        {screen === "upcoming" && (
-          <Upcoming events={events} tasks={tasks} connected={calendarOn} busy={busy} onConnect={() => void connectCalendarNow()} onOpenMove={setEditing} onRecord={record} onWrite={write} onSeed={devSeed} />
+        {screen === "calendar" && (
+          <CalendarTab events={events} tasks={tasks} connected={calendarOn} busy={busy} onConnect={() => void connectCalendarNow()} onOpenMove={setEditing} onRecord={record} onWrite={write} onSeed={devSeed} />
         )}
-        {screen === "recordings" && (
-          <Recordings notes={notes} threads={threads} tasks={tasks} busy={busy} onOpenRecording={(n) => openRecording(n.id)} onOpenProject={openThread} onRecord={record} onWrite={write} />
+        {screen === "threads" && (
+          <Threads notes={notes} threads={threads} tasks={tasks} busy={busy} onOpenRecording={(n) => openRecording(n.id)} onOpenThread={openThread} onRecord={record} onWrite={write} />
         )}
         {screen === "recording" && openNote && (
           <RecordingPage note={openNote} threads={threads} tasks={tasks} paragraph={paragraph} alsoTaskIds={alsoTaskIds} onBack={closeRecording} onTick={onTick} onOpenMove={setEditing} onAsk={openThread} />
@@ -954,7 +982,7 @@ function Flow() {
           </View>
         )}
       </View>
-      {screen !== "thread" && screen !== "tomorrow" && <TabBar active={screen === "recording" ? "recordings" : screen === "intake" ? "today" : screen} onSelect={selectTab} />}
+      {screen !== "thread" && screen !== "tomorrow" && <TabBar active={screen === "recording" ? "threads" : screen === "intake" ? "today" : screen} onSelect={selectTab} />}
       <MoveSheet task={editing} projects={realThreads.filter((t) => t.state !== "parked")} onSave={(patch) => editing && onSaveMove(editing, patch)} onDelete={() => editing && onDeleteMove(editing)} onClose={() => setEditing(null)} onOpenSource={editing?.noteId ? () => { const id = editing.noteId!; setEditing(null); openRecording(id); } : undefined} />
       {captureSheet}
     </SafeAreaView>

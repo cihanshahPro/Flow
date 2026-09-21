@@ -58,6 +58,8 @@ export function tomorrowOf(now = new Date()): string {
 
 export type Proposal = {
   date: string;
+  /** Moves already on the list that the person just mentioned for tomorrow (the smart connector). */
+  suggested?: Task[];
   events: CalEvent[];
   watch: WatchOut[];
   /** Routines that fall on that weekday and are switched on. */
@@ -80,6 +82,7 @@ export function proposeTomorrow(events: CalEvent[], tasks: Task[], routines: Rou
   const dayStart = new Date(`${date}T00:00:00`);
   return {
     date,
+    suggested: [],
     events: eventsOn(events, date).filter((e) => !e.mine),
     watch: watchOuts(events, now, 2).filter((w) => w.date === date),
     routines: routinesOn(routines, date),
@@ -107,4 +110,34 @@ export function morningLine(events: CalEvent[], tasks: Task[], date: string): st
   const first = day[0];
   const head = `${on.length} event${on.length === 1 ? "" : "s"} · ${day.length} move${day.length === 1 ? "" : "s"}`;
   return first ? `${head} · first: ${first.title}${first.plannedTime ? " at " + first.plannedTime : ""}` : head;
+}
+
+/** What the person said about tomorrow, connected to what is already on the list: known moves to pull in, and new lines. */
+export type Suggestion = { existing: Task[]; lines: string[] };
+
+const STOP = new Set(["the", "a", "an", "to", "of", "and", "my", "for", "with", "about", "on", "in", "at", "up", "it", "that", "this", "i", "need", "have", "want", "should", "tomorrow", "then", "also", "just", "get", "do", "go"]);
+export function wordsOf(text: string): Set<string> {
+  return new Set(text.toLowerCase().replace(/[^a-z0-9\s']/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
+}
+
+/** Pure: match spoken items to open moves (same words → same move); what does not match is a new line. */
+export function connectToList(items: { title: string; evidence?: string }[], tasks: Task[], date: string): Suggestion {
+  const open = tasks.filter((t) => !t.done && !t.later && t.kind !== "waiting" && !t.routineId);
+  const existing: Task[] = [];
+  const lines: string[] = [];
+  for (const it of items) {
+    const w = wordsOf(`${it.title} ${it.evidence ?? ""}`);
+    let best: { t: Task; score: number } | null = null;
+    for (const t of open) {
+      const tw = wordsOf(`${t.title} ${t.notes ?? ""}`);
+      if (!tw.size) continue;
+      const shared = [...wordsOf(it.title)].filter((x) => tw.has(x)).length;
+      const score = shared / Math.max(1, Math.min(wordsOf(it.title).size, wordsOf(t.title).size));
+      if (shared >= 1 && score >= 0.5 && (!best || score > best.score)) best = { t, score };
+    }
+    void w;
+    if (best && !existing.some((e) => e.id === best!.t.id)) existing.push(best.t);
+    else if (!best && it.title.trim()) lines.push(it.title.trim());
+  }
+  return { existing: existing.filter((t) => t.plannedDate !== date), lines };
 }
