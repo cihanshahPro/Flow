@@ -34,8 +34,8 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
   const dayValue = date === "" ? "Someday" : days.includes(date) ? dayLabel(date, days.indexOf(date)) : new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" });
   const times = ["9:00", "12:00", "14:00", "17:00", "19:00"];
   const timeValue = time ? (time.startsWith("0") ? time.slice(1) : time) : "";
-  const dueChips = ["None", ...days.slice(0, 5).map(dayLabel)];
-  const dueValue = due === "" ? "None" : days.includes(due) ? dayLabel(due, days.indexOf(due)) : due;
+  const dueChips = ["None", ...days.slice(0, 5).map((d, i) => `by ${dayLabel(d, i)}`)];
+  const dueValue = due === "" ? "None" : days.includes(due) ? `by ${dayLabel(due, days.indexOf(due))}` : `by ${due}`;
   const isWaiting = task.kind === "waiting";
   // Live projects only: not resolved, not named after an area; the current one always listed.
   const open = projects.filter((p) => p.id === projectId || (!p.resolvedAt && !isGenericTitle(p.title))).slice(0, 12);
@@ -51,7 +51,7 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
           <Text style={s.label}>DUE</Text>
           <Chips items={dueChips} value={dueValue} onChange={(v) => setDue(v === "None" ? "" : days[dueChips.indexOf(v) - 1])} />
           <Text style={s.label}>TAKES</Text>
-          <Chips items={["10 min", "20 min", "30 min", "1 hour"]} value={minutes >= 60 ? "1 hour" : `${minutes} min`} onChange={(v) => setMinutes(v === "1 hour" ? 60 : Number(v))} />
+          <Chips items={["10 min", "20 min", "30 min", "1 hour"]} value={minutes >= 60 ? "1 hour" : `${minutes} min`} onChange={(v) => setMinutes(v === "1 hour" ? 60 : parseInt(v, 10) || 20)} />
         </>
       )}
       {isWaiting && <Field label="Waiting on" value={task.waitingOn || "someone"} />}

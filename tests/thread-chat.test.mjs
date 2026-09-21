@@ -11,7 +11,6 @@ const { default: RecordingPage } = await import("../src/components/RecordingPage
 const { default: Upcoming } = await import("../src/components/Upcoming.tsx");
 const { default: WeekPlan } = await import("../src/components/WeekPlan.tsx");
 const { default: TabBar } = await import("../src/components/TabBar.tsx");
-const { default: Intake } = await import("../src/components/Intake.tsx");
 const { respondToRecording, answerChip, pendingMessage } = await import("../src/thread.ts");
 const { suggestDraft } = await import("../src/drafts.ts");
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -246,29 +245,6 @@ test("Upcoming lists days with the phone's events and Flow's items; Your week is
   await act(async () => week.unmount());
 });
 
-test("the intake screen shows every starter with its date, one Record button and a quiet way out", async () => {
-  const mk = (id, title, evidence, hints = []) => respondToRecording({ ...suggestDraft(id, evidence, now), title, dueHints: hints }, "dump", evidence, { now, quiet: true });
-  const drafts = [
-    mk("d0", "Demo for Friday", "My manager wants a demo Friday.", [{ date: "2026-09-25", phrase: "friday" }]),
-    mk("d1", "An answer on the lease", "The landlord wants an answer on the lease by the end of the month.", [{ date: "2026-09-30", phrase: "end of the month" }]),
-    mk("d2", "Renew my passport", "I need to renew my passport before Lisbon in November."),
-  ];
-  const opened = [], acts = [];
-  const view = await render(React.createElement(Intake, { drafts, now, onOpen: (id) => opened.push(id), onMore: () => acts.push("more"), onDone: () => acts.push("done") }));
-  const text = textOf(view);
-  assert.match(text, /I heard ","3"," things"," and started a thread for each"/);
-  assert.match(text, /And what else\?/);
-  assert.match(text, /"Friday"/);
-  assert.match(text, /End of the month/);
-  assert.match(text, /2 have a date/);
-  const found = labels(view);
-  assert.deepEqual(found.filter((l) => !l.startsWith("Open thread")), ["Record more", "That's all for now"]);
-  await act(async () => view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Open thread Renew my passport").props.onPress());
-  assert.deepEqual(opened, ["d2"]);
-  assert.equal(drafts[2].messages.some((m) => m.kind === "question"), false, "starters are quiet until opened");
-  await act(async () => view.unmount());
-});
-
 test("a recording in a thread shows its breakdown, the summary sits on top, the transcript is one tap away", async () => {
   const dump = "I need to call the DUI lawyer tomorrow and send him the court letter. He is going to follow up with me.";
   let thread = respondToRecording(suggestDraft("dui", dump, now), "r1", dump, { now, quiet: true });
@@ -287,5 +263,33 @@ test("a recording in a thread shows its breakdown, the summary sits on top, the 
   assert.ok(labels(view).includes("Show transcript"));
   await act(async () => view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Show transcript").props.onPress());
   assert.match(textOf(view), /I need to call the DUI lawyer tomorrow/);
+  await act(async () => view.unmount());
+});
+
+test("the move sheet: day, time, due and takes as chips, project as a field, save carries the patch, delete is there", async () => {
+  const { default: MoveSheet } = await import("../src/components/MoveSheet.tsx");
+  const task = { id: "t", title: "Call the DUI lawyer", topic: "Life", minutes: 20, done: false, plannedDate: "2026-09-19", plannedTime: "10:00", deadline: "", waitingOn: "", chaseDate: "", notes: "I have to reach out to the lawyer", createdAt: "", projectId: "p" };
+  const projects = [{ ...suggestDraft("p", "DUI case", now), title: "DUI case" }, { ...suggestDraft("o", "x", now), title: "Other" }];
+  const saved = [], deleted = [], opened = [];
+  const view = await render(React.createElement(MoveSheet, { task, projects, now, onSave: (p) => saved.push(p), onDelete: () => deleted.push(1), onClose() {}, onOpenSource: () => opened.push(1) }));
+  const text = textOf(view);
+  for (const label of ["DAY", "TIME", "DUE", "TAKES"]) assert.match(text, new RegExp(`"${label}"`));
+  assert.match(text, /Project: DUI case/);
+  assert.match(text, /I have to reach out to the lawyer/);
+  const tap = async (label) => act(async () => view.root.findAll((n) => n.props.accessibilityLabel === label)[0].props.onPress());
+  await tap("Tomorrow");
+  await tap("14:00");
+  await tap("by Wed");
+  await tap("30 min");
+  await tap("Project: DUI case");
+  assert.ok(labels(view).includes("None"), "the project field opens the live projects");
+  assert.ok(!labels(view).includes("Other"), "area-named threads are not projects");
+  await tap("Save");
+  assert.equal(saved.length, 1);
+  assert.deepEqual(saved[0], { title: "Call the DUI lawyer", plannedDate: "2026-09-20", plannedTime: "14:00", deadline: "2026-09-23", minutes: 30, projectId: "p" });
+  await tap("Delete");
+  assert.equal(deleted.length, 1);
+  await act(async () => view.root.findAll((n) => n.props.accessibilityLabel === "From: “I have to reach out to the lawyer” ↗")[0].props.onPress());
+  assert.equal(opened.length, 1);
   await act(async () => view.unmount());
 });
