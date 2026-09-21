@@ -195,9 +195,14 @@ export function isDeadline(words: string | undefined): boolean {
   return /^\s*(?:by|before|until|no later than)\b/i.test(words ?? "");
 }
 
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
 export function dateFromWords(words: string | undefined, now = new Date()): { date: string; time?: string } | undefined {
   if (!words?.trim()) return undefined;
   const clock = clockIn(words);
+  // "Monday", said on a Monday morning, is today — not next week.
+  const bare = words.trim().toLowerCase().replace(/^(?:on|this)\s+/, "").replace(/\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?$/, "");
+  if (WEEKDAYS.indexOf(bare) === now.getDay() && now.getHours() < 18) return { date: localDate(now), ...(clock ? { time: clock } : {}) };
   const w = whenFromAnswer(words, now);
   if (w) return { date: w.date, time: clock ?? w.time };
   const hint = extractDueHints(words, now)[0];
