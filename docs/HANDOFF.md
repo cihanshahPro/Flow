@@ -1,5 +1,48 @@
 # Flow mobile — developer handoff
 
+## Build 9 handoff — 21 Sep 2026 (read this first)
+
+**Branch:** `kodavena/v1.0.0`, head `cff1364` (PR #14 → `testing` stays open). **You do not need the Mac mini for anything below** — it is Cihan's dev runtime only.
+
+### What changed since build 8 (the whole app, on purpose)
+Tabs **Today · Threads · Calendar · Me**, one Record button, rows not cards. Calendar read first → one model call turns the words into moves / waiting-fors / later / projects → placed around the week (the clock the person said is kept when free, "by Friday" is a due date, evening stays evening, trips and full days are skipped) → written to Apple Calendar with alerts and to a "Flow" list in Apple Reminders, two-way (ticks and deletes on the phone come back) → **Your week**. Every recording is an Otter-style page (Summary | Transcript, ↗ to the sentence behind each move). Threads are projects; inside a thread Flow is an **assistant** with the project in front of it (moves, calendar, other projects) and answers, asks one thing, or puts one move on the table; "do it" accepts; a side subject can go to a **New thread · → Existing… · Keep here**. **Plan tomorrow** (evening ritual: calendar, routines, leftovers, "Tell Flow about tomorrow"). Two pushes: "Your day" and "Day closed". Screen contract: [SKELETON.html](SKELETON.html) (ten screens). The step tree per project: `ensureSteps()` in `src/services/processing.ts`.
+
+### Verify on your machine
+```bash
+git fetch && git checkout kodavena/v1.0.0 && npm ci
+npx tsc --noEmit -p .
+node --experimental-strip-types --test tests/*.test.mjs      # 302 pass
+cd server/shape-worker && npm ci && npx vitest run            # 9 pass
+```
+
+### Build 9 — your command (EAS project 6cd13cbe-…, autoIncrement on)
+```bash
+eas build --platform ios --profile production --auto-submit
+```
+Cihan is not on the EAS project; add him as a member or run this yourself. Permission strings (mic, speech, calendar, reminders, notifications) are in `app.config.ts`.
+
+### The brain — Cihan's decision: no API credits for now
+- An iPhone app **cannot** use its users' Claude subscriptions: Anthropic's OAuth is granted to Claude Code / the Agent SDK only, not to third-party apps. So for end users the options are (a) **on-device Apple Intelligence** on iOS 26 (already wired: `modules/flow-intelligence`, functions `shapeThought`, `planThought`, `chatThread`), (b) **the Cloudflare worker** with an Anthropic API key (already wired, quotas built in), (c) later our own subscription that pays for (b).
+- **Release build 9 therefore runs on-device only** unless you deploy the worker. To deploy: `cd server/shape-worker && npx wrangler secret put ANTHROPIC_API_KEY && npx wrangler deploy` (routes `/v1/shape`, `/v1/plan`, `/v1/chat`; `MODEL` in `wrangler.toml`). If the worker is not deployed, leave `EXPO_PUBLIC_SHAPE_URL` as is — the app falls back cleanly and the "Shape notes on a secure server" switch in Me stays off.
+- For your own dev runs on your Mac, `scripts/voice-server.mjs` can use your Claude subscription through Claude Code headless: `FLOW_CLAUDE_CODE=1` and a one-time `claude` → `/login` on that Mac (needs `claude` installed, `whisper-cli` + `ffmpeg` from Homebrew and a Whisper model for transcription; see `.env.processor.example`). Not required for the native build.
+- One prompt contract lives in four places and a test keeps them equal: `src/ai-policy.ts`, `server/shape-worker/src/{prompt,schema}.ts`, `modules/flow-intelligence/ios/FlowIntelligenceModule.swift`, `scripts/shape-thought.swift` (`tests/plan-contract.test.mjs`; regenerate `scripts/plan-contract.mjs` from `src/ai-policy.ts`).
+
+### The three native pieces (rows read SOON in Me until done)
+| Piece | Already there | Left to do (native) |
+|---|---|---|
+| Siri "Tell Flow…" | scheme `flowthread://`; intake accepts text; a short line becomes a move, a long one goes through Your week | App Intent "Tell Flow" with a text parameter → open `flowthread://record?text=…`; handle the URL in `App.tsx` (prefill `startCapture("text", null, "thought")` and submit); expose as a Shortcut (Action button) |
+| Share sheet | same intake path | share extension handing text/URLs to `flowthread://record?text=…` |
+| Lock-screen widget | `morningLine()` in `src/tomorrow.ts` builds "2 events · 3 moves · first: …"; tasks in SQLite | WidgetKit extension reading a JSON the app writes to the App Group container on refresh (add `writeWidgetSnapshot()` next to `mirrorToDev()` in `App.tsx`) |
+
+When they land, flip the rows in `src/components/Me.tsx` from SOON to ON and update screen 7 in SKELETON.html.
+
+### Known gaps
+- The three native pieces above.
+- Every screen is only as good as the brain: with the Apple fallback the titles and answers are weak; with Claude they are right. Judge screens with the real brain.
+- Threads still show the "Getting to know this · %" meter and the "What Flow got" cards from the earlier vision; Cihan may drop them now that the thread is an assistant chat.
+
+---
+
 ## Start here (current testing build)
 
 Repository: https://github.com/cihanshahPro/Flow
