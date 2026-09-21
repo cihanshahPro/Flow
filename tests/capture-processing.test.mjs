@@ -297,3 +297,38 @@ test("earlier recordings that never went through the intake are replayed once, n
   assert.ok(harness.tasks.length >= 2);
   assert.equal(await replayOldRecordings(), 0, "once");
 });
+
+test("inside a thread Flow is an assistant: it answers from the project, asks one thing or puts one move on the table; 'do it' accepts", async () => {
+  harness.reset();
+  const { respondToRecording, pendingMessage } = await import("../src/thread.ts");
+  const { suggestDraft } = await import("../src/drafts.ts");
+  const dui = respondToRecording({ ...suggestDraft("dui", "The first one is regarding my DUI case, so I have to reach out to the lawyer."), title: "DUI case", area: "Legal & admin", people: ["the lawyer"] }, "d0", "The first one is regarding my DUI case, so I have to reach out to the lawyer.", { quiet: true });
+  harness.drafts = [dui];
+  harness.tasks = [{ id: "flow:dui:call", projectId: "dui", title: "Call the DUI lawyer", done: false, plannedDate: "2026-09-22", plannedTime: "10:00", minutes: 20, createdAt: "", topic: "Life", deadline: "", waitingOn: "", chaseDate: "", notes: "" }];
+  harness.chat = { reply: "The call with the lawyer is on Tuesday at 10. Nothing else is pending on this.", question: "", move: { title: "Send the lawyer the court letter", when: "this evening" } };
+  const msg = recording({ captureKind: "thought", text: "what's the next thing on the DUI case?", audioUri: undefined, id: "m1", planId: "dui" });
+  harness.notes = [structuredClone(msg)];
+  const result = await processCapturedNote(msg);
+  assert.equal(result.kind, "draft");
+  const chatCall = harness.requests.find((r) => r.url.endsWith("/chat"));
+  assert.ok(chatCall, "the assistant was asked");
+  const sent = JSON.parse(chatCall.body);
+  assert.match(sent.context, /PROJECT: DUI case/);
+  assert.match(sent.context, /Call the DUI lawyer · Tue 22 10:00/);
+  assert.match(sent.context, /CONVERSATION:/);
+  const msgs = result.draft.messages;
+  assert.equal(msgs.at(-2).text, "The call with the lawyer is on Tuesday at 10. Nothing else is pending on this.");
+  assert.equal(msgs.at(-1).kind, "offer");
+  assert.match(msgs.at(-1).text, /This evening: Send the lawyer the court letter/);
+  assert.doesNotMatch(msgs.map((m) => m.text).join(" "), /And what else\?/, "no script question in the assistant's turn");
+  // "do it" accepts the move without asking the assistant again.
+  harness.drafts = [result.draft];
+  harness.requests = [];
+  const yes = recording({ captureKind: "thought", text: "do it", audioUri: undefined, id: "m2", planId: "dui" });
+  harness.notes = [structuredClone(yes)];
+  const after = await processCapturedNote(yes);
+  assert.ok(!harness.requests.some((r) => r.url.endsWith("/chat")));
+  assert.ok(after.draft.steps.find((s) => s.id === "chat:m1").accepted);
+  assert.match(after.draft.messages.at(-1).text, /on your Today/);
+  assert.ok(!pendingMessage(after.draft), "nothing left open");
+});

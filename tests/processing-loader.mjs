@@ -21,9 +21,9 @@ export async function resolve(specifier, context, next) {
     if (["../task-flow", "../model", "../calendar", "../thread", "../tomorrow", "../intake"].includes(specifier)) return next(specifier + ".ts", context);
   }
   if (parent.endsWith("/services/processing.ts") || parent.endsWith("/services/processors.ts")) {
-    if (MOCKED.includes(specifier)) return { url: mocks, shortCircuit: true };
+    if (MOCKED.includes(specifier) || specifier === "./calendar-read") return { url: mocks, shortCircuit: true };
     if (["./processors", "./intake"].includes(specifier)) return next(specifier + ".ts", context);
-    if (["../drafts", "../flow-voice", "../thread", "../ai-policy", "../ai-quality", "../formula", "../intake"].includes(specifier))
+    if (["../drafts", "../flow-voice", "../thread", "../ai-policy", "../ai-quality", "../formula", "../intake", "../map", "../calendar", "../model"].includes(specifier))
       return next(specifier + ".ts", context);
   }
   return next(specifier, context);

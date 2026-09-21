@@ -7,11 +7,16 @@ import {
   appendPlanUpdate,
   type ThoughtDraft,
 } from "../drafts";
-import type { DirectionContext, Note } from "../model";
+import type { DirectionContext, Note, Task } from "../model";
 import { loadProfile } from "./profile";
 import { modeFor, DEFAULT_MODE } from "../flow-voice";
 import { formulaPrompt } from "../formula";
-import { extractDueHints, respondToRecording, routeRecording, threadContextFor } from "../thread";
+import { extractDueHints, readAcceptance, respondToRecording, routeRecording, threadContextFor, threadTasks } from "../thread";
+import { chatContextText } from "../ai-policy";
+import { chatText } from "./processors";
+import { readWeek } from "./calendar-read";
+import { matchEvents } from "../map";
+import { timeLabel, type CalEvent } from "../calendar";
 import { subjectsOf } from "../intake";
 import { runIntake, type WeekPlan } from "./intake";
 import { profileContext } from "../ai-policy";
@@ -102,6 +107,25 @@ async function processThoughtNote(
   if (!note.planId && allowIntake) return runIntake(transcribed, text, options);
   const targetId = note.planId ?? routeRecording(text, threads, workspace.tasks);
   const plan = targetId ? threads.find((d) => d.id === targetId) : undefined;
+  // Inside a thread, Flow is the person's assistant: it answers from the project, asks one thing, or puts one move on the table.
+  if (plan && note.planId && !audioShape) {
+    const openOffer = [...(plan.messages ?? [])].reverse().find((m) => m.from === "flow" && m.kind === "offer" && !m.answered);
+    if (!(openOffer && readAcceptance(text))) {
+      const context = chatContextText(chatBrief(plan, threads, workspace.tasks, await readWeek().catch(() => [])));
+      const turn = await chatText(text, context, options);
+      if (turn.chat) {
+        const answered = respondToRecording(appendPlanUpdate(plan, suggestDraft(note.id, text)), note.id, text, {
+          mode,
+          formula,
+          reply: turn.chat.reply,
+          plate: profile?.plate,
+          assistant: { question: turn.chat.question, move: turn.chat.move },
+        });
+        await saveDraft(answered);
+        return answered;
+      }
+    }
+  }
   let draft = suggestDraft(note.id, text);
   let shape = audioShape;
   let organizer: ThoughtDraft["organizer"] = "apple-local";
@@ -203,4 +227,27 @@ export async function replayOldRecordings(limit = 6, options: ShapeOptions = {})
     }
   }
   return n;
+}
+
+/** The project as the assistant sees it. */
+export function chatBrief(thread: ThoughtDraft, threads: ThoughtDraft[], tasks: Task[], events: CalEvent[]) {
+  const mine = threadTasks(thread, tasks);
+  const day = (d: string) => {
+    const x = new Date(`${d}T12:00:00`);
+    return `${x.toLocaleDateString("en-US", { weekday: "short" })} ${x.getDate()}`;
+  };
+  const linked = matchEvents(events.filter((e) => !e.mine), [{ id: thread.id, title: thread.title, area: thread.area, people: thread.people, words: [thread.source, ...thread.updates].join(" ") }]).get(thread.id) ?? [];
+  const recent = (thread.messages ?? []).filter((m) => ["transcript", "ack", "question", "reply", "offer"].includes(m.kind)).slice(-10).map((m) => ({ from: m.from, text: m.text }));
+  const openOffer = [...(thread.messages ?? [])].reverse().find((m) => m.from === "flow" && m.kind === "offer" && !m.answered);
+  return {
+    title: thread.title,
+    area: thread.area,
+    said: [thread.source, ...thread.updates].join(" "),
+    moves: mine.filter((t) => t.kind !== "waiting").map((t) => ({ title: t.title, when: t.plannedDate ? `${day(t.plannedDate)}${t.plannedTime ? " " + t.plannedTime : ""}` : "", done: t.done })),
+    waiting: mine.filter((t) => t.kind === "waiting" && !t.done).map((t) => ({ title: t.title, who: t.waitingOn, chase: t.chaseDate ? day(t.chaseDate) : "" })),
+    events: linked.slice(0, 6).map((e) => `${e.title} · ${new Date(e.start).toLocaleDateString("en-US", { weekday: "short" })} ${new Date(e.start).getDate()}${e.allDay ? "" : " " + timeLabel(e.start)}`),
+    others: threads.filter((t) => t.id !== thread.id && !t.example && t.state !== "parked" && !t.resolvedAt).slice(0, 6).map((t) => t.title),
+    recent,
+    ...(openOffer ? { openMove: openOffer.text } : {}),
+  };
 }

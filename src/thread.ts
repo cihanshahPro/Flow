@@ -806,6 +806,8 @@ export function respondToRecording(
     quiet?: boolean;
     /** The person's other open threads, so a side subject can be tied to one of them instead of starting new. */
     others?: { id: string; title: string; words?: string; people?: string[] }[];
+    /** The assistant's turn: the reply is used as given, then its own question and move, no script question. */
+    assistant?: { question?: string; move?: { title: string; when: string } | null };
   } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
@@ -872,12 +874,23 @@ export function respondToRecording(
   }
   // A model reply that only repeats the person, or promises to do the work itself, is no reflection; the template says what was settled instead.
   const speaksForFlow = new RegExp("\\bI(?:'ll| will| am going to) " + MOVE_VERBS.source.replace(/^\^/, ""), "i").test(options.reply ?? "");
-  const reply = options.reply?.trim() && !echoesPerson(options.reply, text) && !speaksForFlow ? options.reply.trim() : "";
+  const reply = options.assistant ? (options.reply?.trim() ?? "") : options.reply?.trim() && !echoesPerson(options.reply, text) && !speaksForFlow ? options.reply.trim() : "";
   push({
     from: "flow",
     kind: "ack",
     text: reply || templateReply(text, thread.threadPoints, points, isFirst, mode, noteId),
   });
+  if (options.assistant) {
+    // The assistant asks its own one question, or puts one move on the table; the script stays out of the way.
+    const q = options.assistant.question?.trim();
+    const mv = options.assistant.move;
+    if (mv?.title?.trim()) {
+      const step: DraftStep = { id: `chat:${noteId}`, title: mv.title.trim(), minutes: 20, ...(mv.when?.trim() ? { label: mv.when.trim() } : {}) };
+      next = { ...next, steps: [...next.steps.filter((st) => st.id !== step.id), step] };
+      push({ from: "flow", kind: "offer", stepId: step.id, stage: "trade", text: `${mv.when?.trim() ? capitalise(mv.when.trim()) + ": " : ""}${capitalise(step.title)}. Say “do it” and it goes on your Today.` });
+    } else if (q) push({ from: "flow", kind: "question", text: q });
+    return { ...withMessages(next, added), hypeGiven: [...hyped] };
+  }
   if (options.quiet) return { ...withMessages(next, added), hypeGiven: [...hyped] };
   // Several subjects in one breath: offer to give the others their own thread, once.
   const heard = [...(options.branches ?? []), ...detectBranches(text, next)];

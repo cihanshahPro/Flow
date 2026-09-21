@@ -9,6 +9,7 @@ type FlowIntelligenceNative = {
   shapeThought(text: string, context: string | null): Promise<string>;
   /** The intake: returns the plan JSON string ({ items }). */
   planThought?(text: string, context: string | null): Promise<string>;
+  chatThread?(text: string, context: string | null): Promise<string>;
 };
 
 /** null in Expo Go, web, Android and tests: callers fall back safely. */

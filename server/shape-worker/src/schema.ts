@@ -159,3 +159,30 @@ export const PLAN_TOOL = {
     },
   },
 };
+
+// ---------------------------------------------------------------- chat (inside a thread)
+export const chatRequestSchema = z.object({
+  version: z.literal(1),
+  text: z.string(),
+  locale: z.string().max(35).default("en-US"),
+  context: z.string().max(8000).default(""),
+});
+export const chatSchema = z.object({
+  reply: z.string().trim().min(1).max(900),
+  question: z.string().max(300).default(""),
+  move: z.object({ title: z.string().trim().min(1).max(120), when: z.string().max(80).default("") }).nullable().default(null),
+});
+export type Chat = z.infer<typeof chatSchema>;
+export const CHAT_TOOL = {
+  name: "flow_chat",
+  description: "Flow's next turn in the conversation.",
+  input_schema: {
+    type: "object",
+    properties: {
+      reply: { type: "string" },
+      question: { type: "string" },
+      move: { type: ["object", "null"], properties: { title: { type: "string" }, when: { type: "string" } }, required: ["title", "when"] },
+    },
+    required: ["reply", "question", "move"],
+  },
+} as const;

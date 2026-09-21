@@ -22,6 +22,8 @@ import {
   type Shape,
   type ShaperKind,
   type PlanShape,
+  parseChat,
+  type ChatShape,
 } from "../ai-policy";
 import { SHAPE_TIMEOUT_MS, ShapeCancelled, ShapeTimeout, raceShape } from "../ai-quality";
 import { installId, loadAiState, setCloudConsent, setQuota } from "./ai-state";
@@ -35,6 +37,8 @@ export interface Processor {
   shape(input: ShapeInput): Promise<Shape | null>;
   /** The intake: the dump as plan items. null means "use the local pass". */
   plan(input: { text: string; locale: string; context: string }): Promise<PlanShape | null>;
+  /** The chat inside a thread. null means "no assistant": the script answers. */
+  chat(input: { text: string; locale: string; context: string }): Promise<ChatShape | null>;
 }
 
 /** Development-only LAN processor (the old Mac processor). Stripped from release bundles. */
@@ -127,6 +131,10 @@ export const OnDeviceProcessor: Processor = {
     if (!FlowIntelligence?.planThought) throw new Error("no native plan");
     return parsePlan(await FlowIntelligence.planThought(text, context), text);
   },
+  async chat({ text, context }) {
+    if (!FlowIntelligence?.chatThread) throw new Error("no native chat");
+    return parseChat(await FlowIntelligence.chatThread(text, context));
+  },
 };
 
 async function cloudPost(path: string, body: unknown): Promise<{ status: number; json: unknown }> {
@@ -187,6 +195,12 @@ export const CloudProcessor: Processor = {
     if (status < 200 || status >= 300) throw new CloudError(status === 429 ? "rate_limited" : "unavailable", `cloud status ${status}`);
     return parsePlan(b.plan, text);
   },
+  async chat({ text, locale, context }) {
+    const { status, json } = await cloudPost("/v1/chat", { version: 1, text, locale, context });
+    const b = (json ?? {}) as Record<string, unknown>;
+    if (status < 200 || status >= 300) throw new CloudError(status === 429 ? "rate_limited" : "unavailable", `cloud status ${status}`);
+    return parseChat(b.chat);
+  },
 };
 
 export const DevLanProcessor: Processor = {
@@ -229,9 +243,28 @@ export const DevLanProcessor: Processor = {
       clearTimeout(timer);
     }
   },
+  async chat({ text, context }) {
+    const lan = devLanConfig();
+    if (!lan) throw new Error("dev lan not configured");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 180000);
+    try {
+      const response = await fetch(lan.url + "/chat", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + lan.token, "Content-Type": "application/json" },
+        body: JSON.stringify({ text, context }),
+        signal: controller.signal,
+      });
+      const result = (await response.json()) as { chat?: unknown; error?: string };
+      if (!response.ok || !result.chat) throw new Error(result.error || "no chat");
+      return parseChat(result.chat);
+    } finally {
+      clearTimeout(timer);
+    }
+  },
 };
 
-export const TemplateProcessor: Processor = { kind: "template", shape: async () => null, plan: async () => null };
+export const TemplateProcessor: Processor = { kind: "template", shape: async () => null, plan: async () => null, chat: async () => null };
 
 const PROCESSORS: Record<ShaperKind, Processor> = {
   "on-device": OnDeviceProcessor,
@@ -332,5 +365,31 @@ export async function planText(text: string, context: string, options: ShapeOpti
     const detail = error instanceof ShapeTimeout ? "timeout" : error instanceof ShapeCancelled ? "cancelled" : error instanceof CloudError ? error.code : (error as Error)?.message;
     record({ ...selection, outcome: "fallback", detail });
     return { plan: null, kind: "template", reason: `${selection.reason} → local (${detail})` };
+  }
+}
+
+/** The assistant's turn inside a thread. Falls back to null (the script's own reply) the same way planText falls back. */
+export async function chatText(text: string, context: string, options: ShapeOptions = {}): Promise<{ chat: ChatShape | null; kind: ShaperKind; reason: string }> {
+  const now = options.now ?? new Date();
+  const limit = parseQuotaLimit(process.env.EXPO_PUBLIC_FREE_SHAPE_QUOTA);
+  const [caps, state] = await Promise.all([capabilities(), loadAiState().catch(() => ({}) as never)]);
+  let selection = selectShaper({ caps, consent: state?.consent, quotaRemaining: quotaRemaining(state?.quota, now, limit), cloudConfigured: !!process.env.EXPO_PUBLIC_SHAPE_URL, devLan: !!devLanConfig() });
+  if (selection.askConsent) {
+    if (!options.askCloudConsent) selection = { kind: "template", reason: "cloud-consent-needed-no-ui" };
+    else {
+      const allowed = await options.askCloudConsent().catch(() => false);
+      await setCloudConsent(allowed ? "allowed" : "declined");
+      selection = allowed ? { kind: "cloud", reason: "cloud-consent-just-given" } : { kind: "template", reason: "cloud-consent-declined" };
+    }
+  }
+  try {
+    const chat = await raceShape(PROCESSORS[selection.kind].chat({ text, locale: deviceLocale(), context }), options.timeoutMs ?? SHAPE_TIMEOUT_MS, options.signal);
+    if (selection.kind === "cloud") await setQuota(consumeQuota(state?.quota, now));
+    record({ ...selection, outcome: "ok" });
+    return { chat, kind: chat ? selection.kind : "template", reason: selection.reason };
+  } catch (error) {
+    const detail = error instanceof ShapeTimeout ? "timeout" : error instanceof ShapeCancelled ? "cancelled" : error instanceof CloudError ? error.code : (error as Error)?.message;
+    record({ ...selection, outcome: "fallback", detail });
+    return { chat: null, kind: "template", reason: `${selection.reason} → script (${detail})` };
   }
 }

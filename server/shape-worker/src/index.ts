@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
-import { INSTRUCTIONS, PLAN_INSTRUCTIONS, buildPlanPrompt, buildUserPrompt } from "./prompt";
-import { PLAN_TOOL, SHAPE_TOOL, planRequestSchema, planSchema, requestSchema, shapeSchema, type Plan, type Shape } from "./schema";
+import { CHAT_INSTRUCTIONS, INSTRUCTIONS, PLAN_INSTRUCTIONS, buildChatPrompt, buildPlanPrompt, buildUserPrompt } from "./prompt";
+import { CHAT_TOOL, PLAN_TOOL, SHAPE_TOOL, chatRequestSchema, chatSchema, planRequestSchema, planSchema, requestSchema, shapeSchema, type Chat, type Plan, type Shape } from "./schema";
 import { installUsed, nextMonthStart, recordInstallUse, takeGlobal, type KV } from "./limits";
 
 export interface Env {
@@ -56,6 +56,30 @@ async function callAnthropicPlan(env: Env, text: string, context: string): Promi
   return extractPlan(await res.json());
 }
 
+async function callAnthropicChat(env: Env, text: string, context: string): Promise<Chat> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: env.MODEL || "claude-haiku-4-5",
+      max_tokens: 600,
+      temperature: 0.2,
+      system: CHAT_INSTRUCTIONS,
+      tools: [CHAT_TOOL],
+      tool_choice: { type: "tool", name: CHAT_TOOL.name },
+      messages: [{ role: "user", content: buildChatPrompt(text, context) }],
+    }),
+  });
+  if (!res.ok) {
+    console.error("anthropic status", res.status);
+    throw new Error("upstream " + res.status);
+  }
+  const data = (await res.json()) as { content?: { type: string; name?: string; input?: unknown }[] };
+  const call = (data.content ?? []).find((c) => c.type === "tool_use" && c.name === CHAT_TOOL.name);
+  if (!call) throw new Error("no tool call");
+  return chatSchema.parse(call.input);
+}
+
 async function callAnthropic(env: Env, text: string, context: string, thread = ""): Promise<Shape> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -108,7 +132,8 @@ function contextText(p: NonNullable<ReturnType<typeof requestSchema.parse>["prof
 export async function handle(request: Request, env: Env, now = new Date()): Promise<Response> {
   const url = new URL(request.url);
   const isPlan = url.pathname === "/v1/plan";
-  if (url.pathname !== "/v1/shape" && !isPlan) return json({ error: { code: "invalid_input", message: "Not found" } }, 404);
+  const isChat = url.pathname === "/v1/chat";
+  if (url.pathname !== "/v1/shape" && !isPlan && !isChat) return json({ error: { code: "invalid_input", message: "Not found" } }, 404);
   if (request.method !== "POST") return fail("invalid_input", "POST only");
 
   const install = request.headers.get("X-Flow-Install") ?? "";
@@ -123,7 +148,7 @@ export async function handle(request: Request, env: Env, now = new Date()): Prom
   if (raw.length > maxText * 2 + 5000) return fail("too_long", "This note is too long");
   let body;
   try {
-    body = isPlan ? planRequestSchema.parse(JSON.parse(raw)) : requestSchema.parse(JSON.parse(raw));
+    body = isPlan ? planRequestSchema.parse(JSON.parse(raw)) : isChat ? chatRequestSchema.parse(JSON.parse(raw)) : requestSchema.parse(JSON.parse(raw));
   } catch (e) {
     return fail("invalid_input", e instanceof ZodError ? "Invalid request" : "Invalid JSON");
   }
@@ -139,6 +164,16 @@ export async function handle(request: Request, env: Env, now = new Date()): Prom
   // The global cap protects the bill: once hit, every client falls back to the template.
   if (!(await takeGlobal(env.QUOTA, now, num(env.GLOBAL_DAILY_CAP, 400)))) return fail("unavailable", "Busy, try later");
 
+  if (isChat) {
+    let chat: Chat;
+    try {
+      chat = await callAnthropicChat(env, text, (body as { context?: string }).context ?? "");
+    } catch {
+      return fail("unavailable", "Could not answer this message");
+    }
+    await recordInstallUse(env.QUOTA, install, now, used);
+    return json({ version: 1, chat, quota: { limit, used: used + 1, resetsAt } });
+  }
   if (isPlan) {
     let plan: Plan;
     try {

@@ -29,6 +29,8 @@ export const harness = {
     this.fetches = 0;
     this.requests = [];
     this.shape = undefined;
+    this.plan = undefined;
+    this.chat = undefined;
     this.failDraft = false;
     this.offline = false;
     this.writes = [];
@@ -45,6 +47,9 @@ export async function fetch(url, options) {
   harness.requests.push({ ...options, url });
   harness.fetches++;
   if (harness.offline) throw Error("network failed");
+  if (url.endsWith("/chat")) {
+    return { ok: !!harness.chat, status: harness.chat ? 200 : 503, json: async () => (harness.chat ? { chat: harness.chat } : { error: "no chat" }) };
+  }
   if (url.endsWith("/plan")) {
     return { ok: !!harness.plan, status: harness.plan ? 200 : 503, json: async () => (harness.plan ? { plan: harness.plan } : { error: "no plan" }) };
   }

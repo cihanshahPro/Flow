@@ -8,6 +8,28 @@ import { pathToFileURL } from "node:url";
 const execute = promisify(execFile);
 
 /** The intake, planned by Claude when FLOW_ANTHROPIC_KEY is set (the on-device shaper is the fallback). Same tool contract as the worker. */
+/** The chat inside a thread, by Claude. Same tool contract as the worker's /v1/chat. */
+export async function chatWithClaude(text, context, { key, model = "claude-sonnet-5", fetchImpl = fetch, instructions, tool }) {
+  const res = await fetchImpl("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model,
+      max_tokens: 600,
+      temperature: 0.2,
+      system: instructions,
+      tools: [tool],
+      tool_choice: { type: "tool", name: tool.name },
+      messages: [{ role: "user", content: (context ? context.slice(0, 6000) + "\n\n" : "") + "PERSON'S NEW MESSAGE:\n" + text }],
+    }),
+  });
+  if (!res.ok) throw new Error("anthropic " + res.status);
+  const data = await res.json();
+  const call = (data.content ?? []).find((c) => c.type === "tool_use" && c.name === tool.name);
+  if (!call) throw new Error("no tool call");
+  return call.input;
+}
+
 export async function planWithClaude(text, context, { key, model = "claude-sonnet-5", fetchImpl = fetch, instructions, tool }) {
   const res = await fetchImpl("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -138,6 +160,7 @@ export function createVoiceServer({
   transcribe,
   shape,
   plan,
+  chat,
   webOrigin,
   fixturesDir,
   config = { temp: "/tmp" },
@@ -180,7 +203,7 @@ export function createVoiceServer({
       req.resume();
       return;
     }
-    if (req.method !== "POST" || (req.url !== "/process" && req.url !== "/plan" && req.url !== "/mirror")) {
+    if (req.method !== "POST" || (req.url !== "/process" && req.url !== "/plan" && req.url !== "/chat" && req.url !== "/mirror")) {
       reply(404, { error: "Not found" });
       req.resume();
       return;
@@ -213,6 +236,7 @@ export function createVoiceServer({
       return;
     }
     const wantPlan = req.url === "/plan";
+    const wantChat = req.url === "/chat";
     if (busy) {
       reply(503, {
         error:
@@ -268,6 +292,32 @@ export function createVoiceServer({
         text = input.text.trim();
         // The thread so far, when the text continues a thread; never logged.
         if (typeof input.context === "string" && input.context.length <= 8000) context = input.context;
+        if (wantChat) {
+          let chatOut = null, via = "apple-local";
+          if (chat) {
+            try {
+              chatOut = await chat(text, context);
+              via = "claude";
+            } catch (e) {
+              log(JSON.stringify({ id, stage: "claude-chat-unavailable", detail: String(e?.message ?? e) }));
+            }
+          }
+          if (!chatOut && shape) {
+            try {
+              chatOut = await shape(text, context, "chat");
+            } catch {
+              log(JSON.stringify({ id, stage: "chat-unavailable" }));
+            }
+          }
+          if (!chatOut) {
+            reply(503, { error: "The assistant is unavailable." });
+            return;
+          }
+          await keepFixture(fixturesDir, "chat", { at: new Date().toISOString(), text, context, via, chat: chatOut });
+          reply(200, { chat: chatOut, via });
+          log(JSON.stringify({ id, stage: "complete", elapsedMs: Date.now() - started, via }));
+          return;
+        }
       } else {
         log(JSON.stringify({ id, stage: "transcribing", bytes }));
         text = (await transcribe(Buffer.concat(chunks)))
@@ -376,6 +426,7 @@ if (
       ? (text, context, mode) => shapeText(text, process.env.FLOW_SHAPER_BIN, context, mode)
       : undefined,
     plan: key && contract ? (text, context) => planWithClaude(text, context, { key, model: process.env.FLOW_PLAN_MODEL, instructions: contract.PLAN_INSTRUCTIONS, tool: contract.PLAN_TOOL }) : undefined,
+    chat: key && contract ? (text, context) => chatWithClaude(text, context, { key, model: process.env.FLOW_PLAN_MODEL, instructions: contract.CHAT_INSTRUCTIONS, tool: contract.CHAT_TOOL }) : undefined,
   });
   if (key) console.log("Flow planner: Claude " + (process.env.FLOW_PLAN_MODEL || "claude-sonnet-5"));
   if (process.env.FLOW_FIXTURES_DIR) console.log("Flow fixtures: " + process.env.FLOW_FIXTURES_DIR);
