@@ -4,6 +4,7 @@ import type { Task } from "../model.ts";
 import { localDate } from "../model.ts";
 import type { ThoughtDraft } from "../drafts.ts";
 import { Button, Chips, Field, Sheet } from "./ui.tsx";
+import { isGenericTitle } from "./Recordings.tsx";
 import { C } from "./theme.ts";
 
 /** Things' Jump Start: day chips, time, due, project, minutes, and the sentence it came from. Save rewrites everything. */
@@ -14,6 +15,7 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
   const [due, setDue] = useState("");
   const [minutes, setMinutes] = useState(20);
   const [projectId, setProjectId] = useState<string | undefined>(undefined);
+  const [pickProject, setPickProject] = useState(false);
   useEffect(() => {
     if (!task) return;
     setTitle(task.title);
@@ -22,6 +24,7 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
     setDue(task.deadline ?? "");
     setMinutes(task.minutes || 20);
     setProjectId(task.projectId);
+    setPickProject(false);
   }, [task?.id]);
   if (!task) return null;
   const today = localDate(now);
@@ -34,6 +37,8 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
   const dueChips = ["None", ...days.slice(0, 5).map(dayLabel)];
   const dueValue = due === "" ? "None" : days.includes(due) ? dayLabel(due, days.indexOf(due)) : due;
   const isWaiting = task.kind === "waiting";
+  // Live projects only: not resolved, not named after an area; the current one always listed.
+  const open = projects.filter((p) => p.id === projectId || (!p.resolvedAt && !isGenericTitle(p.title))).slice(0, 12);
   return (
     <Sheet visible={!!task} onClose={onClose}>
       <TextInput value={title} onChangeText={setTitle} accessibilityLabel="Move title" style={s.title} multiline />
@@ -51,11 +56,16 @@ export default function MoveSheet({ task, projects, now = new Date(), onSave, on
       )}
       {isWaiting && <Field label="Waiting on" value={task.waitingOn || "someone"} />}
       {isWaiting && <Field label="Chase" value={task.chaseDate ? new Date(`${task.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", day: "numeric" }) : "—"} />}
-      {projects.length > 0 && (
-        <>
-          <Text style={s.label}>PROJECT</Text>
-          <Chips items={["None", ...projects.map((p) => p.title.slice(0, 22))]} value={projectId ? (projects.find((p) => p.id === projectId)?.title.slice(0, 22) ?? "None") : "None"} onChange={(v) => setProjectId(v === "None" ? undefined : projects.find((p) => p.title.slice(0, 22) === v)?.id)} />
-        </>
+      {open.length > 0 && <Field label="Project" value={projectId ? (projects.find((p) => p.id === projectId)?.title ?? "None") : "None"} onPress={() => setPickProject((v) => !v)} />}
+      {pickProject && (
+        <Chips
+          items={["None", ...open.map((p) => p.title.slice(0, 22))]}
+          value={projectId ? (open.find((p) => p.id === projectId)?.title.slice(0, 22) ?? "None") : "None"}
+          onChange={(v) => {
+            setProjectId(v === "None" ? undefined : open.find((p) => p.title.slice(0, 22) === v)?.id);
+            setPickProject(false);
+          }}
+        />
       )}
       {!!task.notes && <Field label="From" value={`“${task.notes.slice(0, 60)}${task.notes.length > 60 ? "…" : ""}” ↗`} onPress={onOpenSource} />}
       <View style={{ height: 6 }} />

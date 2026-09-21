@@ -204,7 +204,9 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
       <View style={s.sheet}>
         <View style={s.grip} />
         {!!title && <Text style={s.sheetTitle}>{title}</Text>}
-        {children}
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {children}
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -297,7 +299,7 @@ const s = StyleSheet.create({
   segText: { fontSize: 12, fontWeight: "600", color: C.ink2 },
   segTextOn: { color: C.ink },
   dim: { flex: 1, backgroundColor: "rgba(17,24,39,0.25)" },
-  sheet: { backgroundColor: C.white, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20, paddingBottom: 34, paddingTop: 10 },
+  sheet: { backgroundColor: C.white, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20, paddingBottom: 34, paddingTop: 10, maxHeight: "82%" },
   grip: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#D9DDE5", alignSelf: "center", marginBottom: 12 },
   sheetTitle: { fontSize: 18, fontWeight: "700", color: C.ink, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.hair },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingVertical: 8 },
