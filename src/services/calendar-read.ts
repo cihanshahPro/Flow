@@ -304,3 +304,39 @@ export async function readBack(tasks: { id: string; eventId?: string; reminderId
   }
   return { completed: [...new Set(completed)], removed };
 }
+
+/** Everything Flow ever put on the phone: its events (a year around today) and its reminders. Used by "Delete everything". */
+export async function removeAllFlowItems(now = new Date()): Promise<{ events: number; reminders: number }> {
+  let events = 0, reminders = 0;
+  if (await calendarConnected()) {
+    try {
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      const from = new Date(now.getTime() - 60 * 864e5), to = new Date(now.getTime() + 400 * 864e5);
+      const all = calendars.length ? await Calendar.getEventsAsync(calendars.map((c) => c.id), from, to) : [];
+      for (const e of all) {
+        if (!refOf(e.notes)) continue;
+        await Calendar.deleteEventAsync(e.id).catch(() => {});
+        events++;
+      }
+    } catch {
+      /* best effort */
+    }
+  }
+  if (await remindersConnected()) {
+    try {
+      const lists = (await Calendar.getCalendarsAsync(Calendar.EntityTypes.REMINDER)).filter((l) => l.title === "Flow");
+      if (lists.length) {
+        const all = await Calendar.getRemindersAsync(lists.map((l) => l.id), null, new Date(now.getTime() - 400 * 864e5), new Date(now.getTime() + 400 * 864e5));
+        for (const r of all) {
+          if (r.id && refOf(r.notes)) {
+            await Calendar.deleteReminderAsync(r.id).catch(() => {});
+            reminders++;
+          }
+        }
+      }
+    } catch {
+      /* best effort */
+    }
+  }
+  return { events, reminders };
+}

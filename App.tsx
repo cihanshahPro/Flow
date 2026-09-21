@@ -31,7 +31,7 @@ import TabBar, { type Tab } from "./src/components/TabBar";
 import ThreadChat from "./src/components/ThreadChat";
 import WeekPlan from "./src/components/WeekPlan";
 import type { WeekPlan as Plan } from "./src/services/intake";
-import { calendarConnected, connectCalendar, connectReminders, listCalendars, readWeek, remindersConnected, seedDemoCalendar, setCalendarOn, type PhoneCalendar } from "./src/services/calendar-read";
+import { calendarConnected, connectCalendar, connectReminders, listCalendars, readWeek, remindersConnected, removeAllFlowItems, seedDemoCalendar, setCalendarOn, type PhoneCalendar } from "./src/services/calendar-read";
 import { deleteMove, editMove, moveToEvening, moveToTomorrow, replanConflicts, syncFromPhone, tickMove, untickMove } from "./src/services/moves";
 import { watchOuts, type CalEvent } from "./src/calendar";
 import Thinking from "./src/components/Thinking";
@@ -898,7 +898,12 @@ function Flow() {
                   style: "destructive",
                   onPress: () =>
                     void run(async () => {
+                      // Flow's blocks and chases leave the phone with the data.
+                      await removeAllFlowItems().catch(() => ({ events: 0, reminders: 0 }));
                       await deleteAllData();
+                      setPlan(null);
+                      setTomorrowSet(null);
+                      setEvents([]);
                       setProfile(newProfile());
                       setOpenId(null);
                       setFunnelStep("intro");
