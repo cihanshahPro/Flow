@@ -28,6 +28,8 @@ export type ThreadPoint = {
 };
 export type ThoughtDraft = {
   sourceNoteIds?: string[];
+  /** When the brain last broke this project into steps (see processing.ensureSteps). */
+  stepsPlannedAt?: string;
   id: string;
   title: string;
   topic: Topic;

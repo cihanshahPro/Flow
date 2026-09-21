@@ -13,7 +13,7 @@ import { modeFor, DEFAULT_MODE } from "../flow-voice";
 import { formulaPrompt } from "../formula";
 import { extractDueHints, readAcceptance, respondToRecording, routeRecording, threadContextFor, threadTasks } from "../thread";
 import { chatContextText } from "../ai-policy";
-import { chatText } from "./processors";
+import { chatText, planText } from "./processors";
 import { readWeek } from "./calendar-read";
 import { matchEvents } from "../map";
 import { timeLabel, type CalEvent } from "../calendar";
@@ -250,4 +250,28 @@ export function chatBrief(thread: ThoughtDraft, threads: ThoughtDraft[], tasks: 
     recent,
     ...(openOffer ? { openMove: openOffer.text } : {}),
   };
+}
+
+/**
+ * The step tree for a project: when a thread has fewer than two open moves,
+ * the brain breaks it into 3–6 ordered concrete steps (the plan contract,
+ * every item an action on this project). Steps become the thread's offerable
+ * moves; nothing goes on the calendar until the person says "do it".
+ */
+export async function ensureSteps(threadId: string, options: ShapeOptions = {}): Promise<number> {
+  const [threads, workspace] = await Promise.all([loadDrafts(), loadWorkspace()]);
+  const thread = threads.find((t) => t.id === threadId);
+  if (!thread || thread.example || thread.resolvedAt) return 0;
+  const open = threadTasks(thread, workspace.tasks).filter((t) => !t.done && t.kind !== "waiting");
+  const pending = thread.steps.filter((st) => !st.accepted && !(thread.declinedStepIds ?? []).includes(st.id));
+  if (open.length + pending.length >= 2 || thread.stepsPlannedAt) return 0;
+  const said = [thread.source, ...thread.updates].join(" ").slice(0, 4000);
+  const context = `PROJECT: ${thread.title}${thread.area ? ` (${thread.area})` : ""}. Break this one project into 3 to 6 ordered concrete steps the person will do, first step first; every item is kind action with project "${thread.title}"; skip anything already done: ${open.map((t) => t.title).join("; ") || "nothing yet"}.`;
+  const outcome = await planText(said, context, options);
+  const items = (outcome.plan?.items ?? []).filter((i) => i.kind === "action").slice(0, 6);
+  const existing = new Set([...thread.steps.map((st) => st.title.toLowerCase()), ...open.map((t) => t.title.toLowerCase())]);
+  const fresh = items.filter((i) => !existing.has(i.title.toLowerCase()));
+  const steps = fresh.map((i, k) => ({ id: `plan:${threadId}:${k}:${Date.now().toString(36)}`, title: i.title, minutes: i.minutes ?? 20, evidence: i.evidence }));
+  await saveDraft({ ...thread, steps: [...thread.steps, ...steps], stepsPlannedAt: new Date().toISOString() });
+  return steps.length;
 }

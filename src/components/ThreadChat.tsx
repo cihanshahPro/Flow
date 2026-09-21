@@ -132,7 +132,7 @@ export default function ThreadChat({
         </Pressable>
       </View>
       <ScrollView ref={scroll} contentContainerStyle={s.list} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-        {(moves.length > 0 || linked.length > 0) && (
+        {(moves.length > 0 || linked.length > 0 || thread.steps.some((st) => !st.accepted)) && (
           <View style={s.summary}>
             <Text style={s.meterLabel}>SUMMARY</Text>
             {linked.slice(0, 3).map((e) => (
@@ -151,6 +151,12 @@ export default function ThreadChat({
               <View key={t.id} style={s.sumRow}>
                 <Text style={[s.sumWhen, s.sumWait]}>{t.chaseDate ? `chase ${new Date(`${t.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : "waiting"}</Text>
                 <Text style={[s.sumText, s.sumWait]} numberOfLines={2}>{t.waitingOn}: {t.title}</Text>
+              </View>
+            ))}
+            {thread.steps.filter((st) => !st.accepted && !(thread.declinedStepIds ?? []).includes(st.id) && !moves.some((t) => t.title.toLowerCase() === st.title.toLowerCase())).slice(0, 6).map((st, i) => (
+              <View key={st.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, { color: C.ink3 }]}>step {i + 1}</Text>
+                <Text style={[s.sumText, { color: C.ink2, fontWeight: "500" }]} numberOfLines={2}>{st.title}</Text>
               </View>
             ))}
             {moves.filter((t) => t.later && !t.done).map((t) => (

@@ -41,7 +41,7 @@ import { loadWorkspace, loadRecord, saveNote, registerVoiceNote, saveTask } from
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
-import { processCapturedNote, replayOldRecordings } from "./src/services/processing";
+import { ensureSteps, processCapturedNote, replayOldRecordings } from "./src/services/processing";
 import { buildStamp, mirrorToDev } from "./src/services/mirror";
 import { capabilities } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
@@ -401,8 +401,13 @@ function Flow() {
     setNotice("");
     setError("");
     setProcessingError("");
-    // Nothing is asked on opening: the thread is there when the person wants to talk, and Flow answers as an assistant.
-    void evaluateAll().catch(() => {});
+    // Nothing is asked on opening. A thin project gets its step tree from the brain, quietly.
+    void ensureSteps(id, { askCloudConsent })
+      .then(async (n) => {
+        if (n) await refresh();
+        await evaluateAll();
+      })
+      .catch(() => {});
   }
   function closeThread() {
     setScreen(openNoteId ? "recording" : lastTab);
