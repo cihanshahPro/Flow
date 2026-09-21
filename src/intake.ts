@@ -1,5 +1,7 @@
 import { shortTitle } from "./drafts.ts";
 import { areaFor, type PlanItem } from "./map.ts";
+import { contentWords, sentences } from "./words.ts";
+export { contentWords, sentences };
 import { cleanMove, extractDueHints, secondPerson } from "./thread.ts";
 
 /**
@@ -14,38 +16,12 @@ export type Subject = { title: string; evidence: string };
 /** Signposts people use when they change subject mid-dump, spoken or written. */
 const OPENERS =
   /^(?:oh,? and|also|and also|plus|separately|another (?:thing|one)(?: is)?(?: that)?|on top of that|and then there'?s|and then the other (?:one|thing)(?: is)?|and i (?:also|still)|and i keep|i also|unrelated,?|different thing,?|then there'?s|next,?|other than that,?|apart from that,?|besides that,?|the (?:other|next|second|third|fourth|last) (?:thing|one)(?: is)?(?: that)?|one more thing|the first (?:thing|one)(?: is)?(?: that)?|first(?:ly)?,|second(?:ly)?,|third(?:ly)?,|lastly,?|finally,?|starting with)\b[,\s]*(?:regarding|about|to|that)?\s*/i;
-/** Mid-sentence signposts that start a new item; the dump is cut there before sentences are read. */
-const MID_SIGNPOSTS = /,?\s+(?:and\s+)?(?:then\s+)?(?=(?:the other (?:one|thing) is|another (?:one|thing) is|the (?:next|second|third|last) (?:one|thing) is|one more thing)\b)/gi;
 const FIRST_ITEM = /^the first (?:thing|one)\b/i;
 const LEAD =
   /^(?:(?:so|well|um|uh|like|basically|honestly|anyway|okay|ok|right|yeah|and|but|then)[,\s]+)*(?:(?:i|we) (?:really |also |still |just )?(?:need|have|want|got|ought|am supposed|are supposed) to |(?:i|we) (?:really |also |still )?(?:should|must|gotta|have got to) |(?:i|we) keep (?:meaning|forgetting|putting off|needing) to |(?:i'?m|i am|we'?re) (?:supposed|meant) to |(?:i'?m|i am|we'?re) (?:also |still )?(?:behind on|worried about|stuck on|late with|stressed about) |(?:i'?m |i am |i keep |i've been )?(?:thinking|worrying|wondering) about |(?:i'?m|i am|we'?re) (?:also |still |currently )?(?:doing|working on|trying to|dealing with) |(?:i|we) (?:am|are) (?:going to|gonna) |there'?s (?:also )?|(?:i|we) (?:still )?(?:haven'?t|have not|didn'?t|did not) )?/i;
 const CONTINUES = /^(?:first|then|after that|once|next|it|it'?s|its|he|she|they|that|this|which|but|so|and then|i'?ve|i already|i just|i also already|i get those|one of (?:the|those) things|so that'?s|basically)\b/i;
 const HANDS_OFF = /^(.{2,30}?)\s+(?:wants me to|needs me to|asked me to|is asking me to|keeps asking me to)\s+(.+)$/i;
 const ABOUT = /^(.{2,30}?)\s+(?:wants|needs|is asking (?:me )?(?:about|for)|keeps asking (?:me )?(?:about|for)|is chasing (?:me )?(?:about|for))\s+(.+)$/i;
-const STOP = new Set(
-  "i me my mine we our us you your it its this that these those the a an and or but so because to of in on at for with from by as is are was were be been being have has had do does did not no yes if then than about into over just also very really can could would should will shall may might must there here what which who whom when where why how all any some more most other such only own same too s t don ve ll re d m still keep keeps meaning need needs want wants got get many things thing going lot lots stuff bit much right now mind kind sort example basically like".split(" "),
-);
-
-export function contentWords(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s']/g, " ")
-      .split(/\s+/)
-      .map((w) => w.replace(/'s$/, ""))
-      .filter((w) => w.length > 2 && !STOP.has(w)),
-  );
-}
-
-export function sentences(text: string): string[] {
-  return text
-    .replace(/\s+/g, " ")
-    .replace(MID_SIGNPOSTS, ". ")
-    .split(/(?<=[.!?])(?:\s+|(?=[A-Z]))|\n+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 function overlap(a: Set<string>, b: Set<string>): number {
   let shared = 0;
   for (const w of a) if (b.has(w)) shared++;

@@ -47,6 +47,10 @@ export const Pressable = "Pressable",
 export const SafeAreaView = "SafeAreaView",
   KeyboardAvoidingView = "KeyboardAvoidingView",
   Modal = "Modal";
+export const Keyboard = { addListener: () => ({ remove() {} }), dismiss() {} };
+export function useSafeAreaInsets() {
+  return { top: 0, bottom: 34, left: 0, right: 0 };
+}
 export const RecordingPresets = { HIGH_QUALITY: {} };
 export async function requestRecordingPermissionsAsync() {
   if (harness.permissionDialog) {

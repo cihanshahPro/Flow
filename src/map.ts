@@ -1,7 +1,7 @@
 import { awayDays, nextOpenDay, placeInGap, type CalEvent, type FreeSlot } from "./calendar.ts";
 import { localDate } from "./model.ts";
 import { whenFromAnswer } from "./when.ts";
-import { contentWords } from "./intake.ts";
+import { contentWords } from "./words.ts";
 import { extractDueHints } from "./thread.ts";
 
 /**

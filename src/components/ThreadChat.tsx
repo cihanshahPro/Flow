@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ThoughtDraft, ThreadMessage } from "../drafts.ts";
 import type { Note, Task } from "../model.ts";
 import { celebrationEmoji, type Mode } from "../flow-voice.ts";
@@ -12,6 +13,20 @@ import EmojiRain from "./EmojiRain.tsx";
 import { C } from "./theme.ts";
 
 const rained = new Set<string>();
+
+/** The keyboard's height on screen, from the OS itself — the composer is padded by exactly this, so it always sits on top of the keys. */
+function useKeyboardHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", (e) => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+}
 const THINKING = ["Flow is reading that…", "Connecting it to what you said before…", "Working out the next question…", "Almost there…"];
 
 /**
@@ -62,6 +77,8 @@ export default function ThreadChat({
   const [rain, setRain] = useState<string | null>(null);
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const scroll = useRef<ScrollView>(null);
+  const keyboard = useKeyboardHeight();
+  const insets = useSafeAreaInsets();
   const lastHype = [...messages].reverse().find((m) => m.kind === "hype");
   useEffect(() => {
     if (!lastHype || rained.has(lastHype.id)) return;
@@ -72,7 +89,7 @@ export default function ThreadChat({
   useEffect(() => {
     const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
     return () => clearTimeout(t);
-  }, [messages.length, processing]);
+  }, [messages.length, processing, keyboard]);
   useEffect(() => {
     if (!processing) {
       setThinkingIndex(0);
@@ -95,7 +112,7 @@ export default function ThreadChat({
   };
   const placeholder = stage === "done" ? "Anything new on this?" : "Message Flow";
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={0}>
+    <View style={s.root}>
       <View style={s.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close thread" onPress={onClose} disabled={busy} hitSlop={12} style={s.back}>
           <Text style={s.link}>‹ Back</Text>
@@ -198,7 +215,7 @@ export default function ThreadChat({
           </Text>
         )}
       </ScrollView>
-      <View style={s.composer}>
+      <View style={[s.composer, keyboard > 0 && { paddingBottom: Math.max(10, keyboard - insets.bottom + 10) }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Record"
@@ -232,7 +249,7 @@ export default function ThreadChat({
         </Pressable>
       </View>
       <EmojiRain emoji={celebrationEmoji(mode)} trigger={rain} onDone={() => setRain(null)} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
