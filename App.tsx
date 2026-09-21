@@ -54,7 +54,7 @@ import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
 import { modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, moveHeadline, plannedDateFor, moveWhen, suggestPrompt } from "./src/thread";
+import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, moveHeadline, plannedDateFor, moveWhen, retireScriptQuestions, suggestPrompt } from "./src/thread";
 import { appendPlanUpdate, suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
@@ -206,8 +206,8 @@ function Flow() {
           changed = true;
         }
       }
-      // Threads from older builds get their conversation first, then the usual check-ins.
-      const next = evaluateThread(backfillConversation(thread, { mode, plate: profile.plate }), data.tasks, { mode });
+      // Threads from older builds get their conversation first, their open script questions retired, then the usual check-ins.
+      const next = evaluateThread(retireScriptQuestions(backfillConversation(thread, { mode, plate: profile.plate })), data.tasks, { mode });
       if (next !== thread) {
         await saveDraft(next);
         changed = true;

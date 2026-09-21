@@ -1288,3 +1288,14 @@ export function repeatedPattern(threads: ThoughtDraft[]): { title: string; count
   }
   return [...counts.values()].filter((x) => x.count > 1).sort((a, b) => b.count - a.count)[0] ?? null;
 }
+
+/**
+ * Older builds left the script's questions ("And what else?") open at the end
+ * of threads. The thread is an assistant chat now: those questions retire so
+ * nothing waits on the person and nothing nags.
+ */
+export function retireScriptQuestions(thread: ThoughtDraft): ThoughtDraft {
+  const messages = thread.messages ?? [];
+  if (!messages.some((m) => m.from === "flow" && m.kind === "question" && !m.answered && m.stage)) return thread;
+  return { ...thread, messages: messages.map((m) => (m.from === "flow" && m.kind === "question" && !m.answered && m.stage ? { ...m, answered: "retired" } : m)) };
+}
