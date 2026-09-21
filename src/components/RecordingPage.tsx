@@ -18,6 +18,7 @@ export default function RecordingPage({
   threads,
   tasks,
   paragraph,
+  alsoTaskIds = [],
   now = new Date(),
   onBack,
   onTick,
@@ -29,6 +30,8 @@ export default function RecordingPage({
   tasks: Task[];
   /** The model's sentences saying back the recording (from the intake record). */
   paragraph?: string;
+  /** Moves this recording mentioned that already existed (from the intake record). */
+  alsoTaskIds?: string[];
   now?: Date;
   onBack: () => void;
   onTick: (task: Task) => void;
@@ -39,7 +42,8 @@ export default function RecordingPage({
   const [tab, setTab] = useState("Summary");
   const [highlight, setHighlight] = useState<string | null>(null);
   const scroll = useRef<ScrollView>(null);
-  const mine = recordingTasks(note, threads, tasks);
+  const own = recordingTasks(note, threads, tasks);
+  const mine = [...own, ...tasks.filter((t) => alsoTaskIds.includes(t.id) && !own.some((o) => o.id === t.id))];
   const moves = mine.filter((t) => t.kind !== "waiting" && !t.later);
   const waiting = mine.filter((t) => t.kind === "waiting");
   const later = mine.filter((t) => t.later);

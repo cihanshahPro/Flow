@@ -93,6 +93,7 @@ function Flow() {
   /** The recording page that is open, and the model's paragraph for it. */
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const [paragraph, setParagraph] = useState("");
+  const [alsoTaskIds, setAlsoTaskIds] = useState<string[]>([]);
   /** The move sheet: the task being edited. */
   const [editing, setEditing] = useState<Task | null>(null);
   /** The evening ritual: what Flow proposes for tomorrow, and whether tomorrow is already set. */
@@ -336,9 +337,13 @@ function Flow() {
   function openRecording(id: string) {
     setOpenNoteId(id);
     setParagraph("");
+    setAlsoTaskIds([]);
     setScreen("recording");
-    void loadRecord<{ summary?: string }>("intake", `intake:${id}`)
-      .then((r) => setParagraph(r?.summary ?? ""))
+    void loadRecord<{ summary?: string; knownTaskIds?: string[] }>("intake", `intake:${id}`)
+      .then((r) => {
+        setParagraph(r?.summary ?? "");
+        setAlsoTaskIds(r?.knownTaskIds ?? []);
+      })
       .catch(() => {});
   }
   function closeRecording() {
@@ -821,7 +826,7 @@ function Flow() {
           <Recordings notes={notes} threads={threads} tasks={tasks} busy={busy} onOpenRecording={(n) => openRecording(n.id)} onOpenProject={openThread} onRecord={record} onWrite={write} />
         )}
         {screen === "recording" && openNote && (
-          <RecordingPage note={openNote} threads={threads} tasks={tasks} paragraph={paragraph} onBack={closeRecording} onTick={onTick} onOpenMove={setEditing} onAsk={openThread} />
+          <RecordingPage note={openNote} threads={threads} tasks={tasks} paragraph={paragraph} alsoTaskIds={alsoTaskIds} onBack={closeRecording} onTick={onTick} onOpenMove={setEditing} onAsk={openThread} />
         )}
         {screen === "recording" && !openNote && (
           <View style={s.loading}>

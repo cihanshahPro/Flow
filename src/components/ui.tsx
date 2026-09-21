@@ -80,6 +80,8 @@ export function Row({
   const x = useRef(new Animated.Value(0)).current;
   const width = (actions?.length ?? 0) * 64;
   const open = useRef(false);
+  // Hidden actions stay out of VoiceOver's way until the row is swiped.
+  const [revealed, setRevealed] = useState(false);
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => !!actions?.length && Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
@@ -91,12 +93,14 @@ export function Row({
         const base = open.current ? -width : 0;
         const to = base + g.dx < -width / 2 ? -width : 0;
         open.current = to !== 0;
+        setRevealed(to !== 0);
         Animated.spring(x, { toValue: to, useNativeDriver: true, bounciness: 0 }).start();
       },
     }),
   ).current;
   const close = () => {
     open.current = false;
+    setRevealed(false);
     Animated.spring(x, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start();
   };
   const content = (
@@ -120,7 +124,7 @@ export function Row({
   return (
     <View style={s.rowWrap}>
       {!!actions?.length && (
-        <View style={s.actions}>
+        <View style={s.actions} accessibilityElementsHidden={!revealed} importantForAccessibility={revealed ? "auto" : "no-hide-descendants"}>
           {actions.map((a) => (
             <Pressable
               key={a.label}

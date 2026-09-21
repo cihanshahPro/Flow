@@ -139,6 +139,8 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   /** Placements that became a move now; the rest were already on the week. */
   const fresh: Placement[] = [];
   let already = 0;
+  /** Moves this recording mentioned that were already on the week, so its page can still show them. */
+  const knownIds: string[] = [];
   for (const [i, pl] of placements.entries()) {
     const it = pl.item;
     const key = it.projectId ?? (it.project.trim() ? `new:${slug(it.project)}` : "");
@@ -146,12 +148,15 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     const id = project ? `flow:${project.id}:${slug(it.title)}-${i}` : `flow:area:${slug(it.area)}:${slug(it.title)}-${i}`;
     if (workspace.tasks.some((t) => t.id === id)) {
       already++;
+      knownIds.push(id);
       continue;
     }
     // The same move said again (in other words) is one move: an open task in the project with the same words stays.
     const mine = [...workspace.tasks, ...tasks].filter((t) => !t.done && (project ? t.projectId === project.id : t.area === it.area && !t.projectId));
-    if (mine.some((t) => similar(t.title, it.title))) {
+    const same = mine.find((t) => similar(t.title, it.title));
+    if (same) {
       already++;
+      knownIds.push(same.id);
       continue;
     }
     fresh.push(pl);
@@ -214,6 +219,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     source: modelItems.length ? "model" : "local",
     modelItems: outcome.plan?.items ?? [],
     summary: outcome.plan?.summary ?? "",
+    knownTaskIds: knownIds,
     items,
     placements: placements.map((p) => ({ title: p.item.title, kind: p.item.kind, project: p.item.project, projectId: p.item.projectId, area: p.item.area, date: p.date, start: p.slot?.start, chaseDate: p.chaseDate, note: p.note })),
   }).catch(() => {});
