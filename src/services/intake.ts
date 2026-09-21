@@ -95,7 +95,8 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     return w.size > 0 && known.some((k) => k.size > 0 && [...w].filter((x) => k.has(x)).length / Math.min(w.size, k.size) >= 0.6);
   };
   const modelItems = (outcome.plan?.items ?? []).filter((i) => !restates(i));
-  const items: PlanItem[] = modelItems.length ? modelItems.map(fromShape) : localPlan(text, now);
+  // A quick line never starts a project: it attaches by its words or sits on its area.
+  const items: PlanItem[] = modelItems.length ? modelItems.map(fromShape) : localPlan(text, now).map((i) => (quick ? { ...i, project: "" } : i));
   // 2. Attach each item to the map.
   const live = live0;
   const refs: ProjectRef[] = live.map((t) => ({ id: t.id, title: t.title, area: t.area, people: t.people, words: [t.source, ...t.updates].join(" ") }));

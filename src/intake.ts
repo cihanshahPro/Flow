@@ -144,10 +144,10 @@ const LATER = /\b(?:someday|one day|at some point|eventually|maybe later|down th
 /** One short line ("call the dentist tomorrow") is a move, not a dump: no model, no week screen. */
 export function isQuickLine(text: string): boolean {
   const t = text.trim();
-  if (t.length > 90 || t.length < 3) return false;
+  if (t.length > 70 || t.length < 3) return false;
   const words = t.split(/\s+/);
-  if (words.length > 14) return false;
-  if (/[.!?;]\s+\S/.test(t)) return false;
+  if (words.length > 10) return false;
+  if (/[.!?;,]\s+\S/.test(t)) return false;
   return !/\b(and then|also|another thing|the other one)\b/i.test(t);
 }
 

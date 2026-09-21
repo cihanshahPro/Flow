@@ -513,7 +513,7 @@ function Flow() {
         if (result.plan.quick && first) {
           // One line, one move: say where it landed and stay put.
           const when = first.slot ? `${new Date(first.slot.start).toLocaleDateString("en-US", { weekday: "short" })} ${new Date(first.slot.start).toTimeString().slice(0, 5)}` : first.chaseDate ? `chase ${new Date(`${first.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : first.date ? new Date(`${first.date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }) : "later";
-          setNotice(`Added: ${first.item.title} · ${when}`);
+          setNotice(`Added: ${first.item.title} · ${when}${first.note ? ` — ${first.note}` : ""}`);
           await evaluateAll(data);
           await refreshTomorrow();
           return;
