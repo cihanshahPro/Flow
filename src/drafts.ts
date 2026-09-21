@@ -69,6 +69,11 @@ export type ThoughtDraft = {
 export type ThreadStage = "dumped" | "understood" | "moving" | "done" | "parked";
 export type DueHint = { date: string; phrase: string };
 export type ThreadChip = { id: string; label: string };
+/** Otter-style breakdown of one recording: a line of summary and the items Flow took from it, each with where it landed. */
+export type Breakdown = {
+  summary: string;
+  items: { title: string; kind: "action" | "waiting" | "appointment" | "later"; when?: string; person?: string }[];
+};
 export type ThreadMessage = {
   id: string;
   from: "flow" | "you";
@@ -86,6 +91,8 @@ export type ThreadMessage = {
   createdAt: string;
   /** For a branch offer: the other subjects Flow heard, with the person's words for each. */
   branches?: { title: string; evidence: string }[];
+  /** For a recording: what Flow made of it, shown instead of the raw words (the transcript stays one tap away). */
+  breakdown?: Breakdown;
   noteId?: string;
   pointId?: string;
   /** Which of the script's seven questions this message is (see formula.ts). */

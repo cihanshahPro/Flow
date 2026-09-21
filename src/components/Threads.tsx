@@ -49,7 +49,7 @@ export default function Threads({
           const last = t.messages?.at(-1);
           const dim = quiet(t);
           const unread = !!pending && !dim;
-          const preview = last ? (last.from === "you" ? `You: ${last.text}` : last.text) : t.source;
+          const preview = last ? (last.breakdown ? `You: ${last.breakdown.items.map((i) => i.title).join(" · ")}` : last.from === "you" ? `You: ${last.text}` : last.text) : t.source;
           return (
             <Pressable
               key={t.id}

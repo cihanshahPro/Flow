@@ -208,3 +208,24 @@ test("the intake screen shows every starter with its date, one Record button and
   assert.equal(drafts[2].messages.some((m) => m.kind === "question"), false, "starters are quiet until opened");
   await act(async () => view.unmount());
 });
+
+test("a recording in a thread shows its breakdown, the summary sits on top, the transcript is one tap away", async () => {
+  const dump = "I need to call the DUI lawyer tomorrow and send him the court letter. He is going to follow up with me.";
+  let thread = respondToRecording(suggestDraft("dui", dump, now), "r1", dump, { now, quiet: true });
+  thread = { ...thread, title: "DUI case", messages: thread.messages.map((m) => (m.kind === "transcript" ? { ...m, breakdown: { summary: "1 move · waiting on 1", items: [{ title: "Call the DUI lawyer", kind: "action", when: "Mon 10am" }, { title: "Lawyer's follow-up", kind: "waiting", person: "the lawyer", when: "chase Fri" }] } } : m)) };
+  const tasks = [
+    { id: "flow:dui:call", title: "Call the DUI lawyer", kind: "action", projectId: "dui", done: false, plannedDate: "2026-09-21", plannedTime: "10:00", createdAt: "" },
+    { id: "flow:dui:wait", title: "Lawyer's follow-up", kind: "waiting", waitingOn: "the lawyer", chaseDate: "2026-09-25", projectId: "dui", done: false, plannedDate: "", createdAt: "" },
+  ];
+  const view = await render(React.createElement(ThreadChat, { thread, tasks, notes: [], mode: "builder", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }));
+  const text = textOf(view);
+  assert.match(text, /SUMMARY/);
+  assert.match(text, /WHAT FLOW GOT · ","1 MOVE · WAITING ON 1/);
+  assert.match(text, /Mon 10am/);
+  assert.match(text, /chase Fri/);
+  assert.doesNotMatch(text, /I need to call the DUI lawyer tomorrow and send him/, "the raw words are not shown by default");
+  assert.ok(labels(view).includes("Show transcript"));
+  await act(async () => view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Show transcript").props.onPress());
+  assert.match(textOf(view), /I need to call the DUI lawyer tomorrow/);
+  await act(async () => view.unmount());
+});

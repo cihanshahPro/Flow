@@ -235,6 +235,9 @@ test("the owner's dump through the model plan: kinds, people, dates and projects
   assert.equal(chases.length, 2, "two chases in Reminders");
   assert.equal(harness.tasks.filter((t) => t.kind === "waiting").every((t) => t.reminderId), true);
   const dui = harness.drafts.find((d) => d.title === "DUI case");
+  const transcript = dui.messages.find((m) => m.kind === "transcript");
+  assert.equal(transcript.breakdown.summary, "2 moves · waiting on 1", "the recording shows as what Flow made of it");
+  assert.deepEqual(transcript.breakdown.items.map((i) => [i.kind, !!i.when]), [["action", true], ["action", true], ["waiting", true]]);
   assert.deepEqual(dui.people, ["the lawyer"]);
   assert.equal(dui.area, "Legal & admin");
   assert.ok(harness.tasks.some((t) => t.projectId === dui.id));

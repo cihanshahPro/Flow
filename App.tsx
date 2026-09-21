@@ -834,6 +834,7 @@ function Flow() {
             notes={notes}
             mode={mode}
             formula={formula}
+            events={events}
             busy={busy}
             processing={processing && !capture}
             error={error || processingError}

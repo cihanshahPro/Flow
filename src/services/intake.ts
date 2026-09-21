@@ -1,7 +1,7 @@
 import { loadWorkspace, saveRecord, saveTask } from "./storage";
 import { loadDrafts, saveDraft } from "./drafts";
 import { loadProfile } from "./profile";
-import { appendPlanUpdate, suggestDraft, type ThoughtDraft } from "../drafts";
+import { appendPlanUpdate, suggestDraft, type Breakdown, type ThoughtDraft } from "../drafts";
 import type { Note, Task, Topic } from "../model";
 import { localDate } from "../model";
 import { calendarContextText, type PlanShapeItem } from "../ai-policy";
@@ -177,6 +177,15 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     await saveTask(task);
     tasks.push(task);
   }
+  // What Flow made of the recording, on each project's transcript message, so the thread shows the breakdown and not the raw words.
+  for (const p of projects.values()) {
+    const thread = savedThreads.find((t) => t.id === p.id);
+    if (!thread) continue;
+    const mine = placements.filter((pl) => (pl.item.projectId ?? (pl.item.project.trim() ? `new:${slug(pl.item.project)}` : "")) === [...projects.entries()].find(([, v]) => v.id === p.id)?.[0]);
+    const breakdown = breakdownOf(mine);
+    const messages = (thread.messages ?? []).map((m) => (m.kind === "transcript" && (m.noteId === note.id || m.noteId === `${note.id}:${slug(p.title)}`) ? { ...m, breakdown } : m));
+    await saveDraft({ ...thread, messages });
+  }
   const week = [...events.filter((e) => !written.some((w) => w.id === e.id)), ...written].sort((a, b) => a.start.localeCompare(b.start));
   const watch = watchOuts(events, now);
   // Kept for replay: what was said, what the week held, what the model read, where it landed. Exported with everything else.
@@ -205,6 +214,23 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
 
 function fromShape(i: PlanShapeItem): PlanItem {
   return { title: i.title, kind: i.kind, project: i.project, ...(i.area ? { area: i.area } : {}), ...(i.person ? { person: i.person } : {}), ...(i.when ? { when: i.when } : {}), ...(i.minutes ? { minutes: i.minutes } : {}), evidence: i.evidence };
+}
+
+const DAY = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" });
+
+/** The breakdown of one recording's items for one project: what, and where each landed. */
+export function breakdownOf(placements: Placement[]): Breakdown {
+  const items = placements.map((pl) => ({
+    title: pl.item.title,
+    kind: pl.item.kind,
+    ...(pl.item.person ? { person: pl.item.person } : {}),
+    ...(pl.slot ? { when: `${DAY(pl.slot.date)} ${timeLabel(pl.slot.start)}` } : pl.chaseDate ? { when: `chase ${DAY(pl.chaseDate)}` } : pl.date ? { when: DAY(pl.date) } : {}),
+  }));
+  const moves = items.filter((i) => i.kind === "action" || i.kind === "appointment").length;
+  const waiting = items.filter((i) => i.kind === "waiting").length;
+  const later = items.filter((i) => i.kind === "later").length;
+  const bits = [moves ? `${moves} move${moves === 1 ? "" : "s"}` : "", waiting ? `waiting on ${waiting}` : "", later ? `${later} for later` : ""].filter(Boolean);
+  return { summary: bits.length ? bits.join(" · ") : "noted", items };
 }
 
 function similar(a: string, b: string): boolean {

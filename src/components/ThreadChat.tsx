@@ -5,6 +5,8 @@ import type { Note, Task } from "../model.ts";
 import { celebrationEmoji, type Mode } from "../flow-voice.ts";
 import { pendingMessage, stageFor, threadTasks, understoodPercent } from "../thread.ts";
 import type { Formula } from "../formula.ts";
+import { eventsOn, timeLabel, weekDays, type CalEvent } from "../calendar.ts";
+import { matchEvents } from "../map.ts";
 import { AudioPlayback } from "./VoiceCapture.tsx";
 import EmojiRain from "./EmojiRain.tsx";
 import { C } from "./theme.ts";
@@ -23,6 +25,7 @@ export default function ThreadChat({
   notes,
   mode,
   formula,
+  events = [],
   busy = false,
   processing = false,
   onSend,
@@ -37,6 +40,8 @@ export default function ThreadChat({
   mode: Mode;
   /** The person's roof and rhythm; sets how fast the meter fills. */
   formula?: Formula | null;
+  /** The phone's calendar, so the summary can show the events that belong to this thread. */
+  events?: CalEvent[];
   busy?: boolean;
   processing?: boolean;
   /** Typed message: saved and answered without leaving the chat. */
@@ -77,6 +82,10 @@ export default function ThreadChat({
     return () => clearInterval(t);
   }, [processing]);
   const moves = threadTasks(thread, tasks);
+  const [showTranscripts, setShowTranscripts] = useState(false);
+  const linked = matchEvents(events.filter((e) => !e.mine), [{ id: thread.id, title: thread.title, area: thread.area, people: thread.people, words: [thread.source, ...thread.updates].join(" ") }]).get(thread.id) ?? [];
+  const today = weekDays()[0];
+  const dayLabel = (t: Task) => (t.plannedDate ? `${t.plannedDate === today ? "Today" : new Date(`${t.plannedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}${t.plannedTime ? " " + t.plannedTime : ""}` : "");
   const canSend = draft.trim().length > 0 && !busy && !processing;
   const send = () => {
     const text = draft.trim();
@@ -128,6 +137,40 @@ export default function ThreadChat({
         </View>
       )}
       <ScrollView ref={scroll} contentContainerStyle={s.list} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+        {(moves.length > 0 || linked.length > 0) && (
+          <View style={s.summary}>
+            <Text style={s.meterLabel}>SUMMARY</Text>
+            {linked.slice(0, 3).map((e) => (
+              <View key={e.id} style={s.sumRow}>
+                <Text style={s.sumWhen}>{e.allDay ? "all day" : timeLabel(e.start)}</Text>
+                <Text style={s.sumText} numberOfLines={1}>{e.title} · {new Date(e.start).toLocaleDateString("en-US", { weekday: "short" })}</Text>
+              </View>
+            ))}
+            {moves.filter((t) => t.kind !== "waiting" && !t.later).map((t) => (
+              <View key={t.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, t.done && s.sumDone]}>{t.done ? "done" : dayLabel(t) || "move"}</Text>
+                <Text style={[s.sumText, t.done && s.sumDone]} numberOfLines={2}>{t.title}</Text>
+              </View>
+            ))}
+            {moves.filter((t) => t.kind === "waiting" && !t.done).map((t) => (
+              <View key={t.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, s.sumWait]}>{t.chaseDate ? `chase ${new Date(`${t.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : "waiting"}</Text>
+                <Text style={[s.sumText, s.sumWait]} numberOfLines={2}>{t.waitingOn}: {t.title}</Text>
+              </View>
+            ))}
+            {moves.filter((t) => t.later && !t.done).map((t) => (
+              <View key={t.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, s.sumDone]}>later</Text>
+                <Text style={[s.sumText, s.sumDone]} numberOfLines={2}>{t.title}</Text>
+              </View>
+            ))}
+            {messages.some((m) => m.kind === "transcript" && (m.breakdown || m.text.length > 200)) && (
+              <Pressable accessibilityRole="button" accessibilityLabel={showTranscripts ? "Hide transcripts" : "Show transcripts"} onPress={() => setShowTranscripts((v) => !v)} hitSlop={8}>
+                <Text style={s.more}>{showTranscripts ? "Hide transcripts" : "Transcripts ▸"}</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
         {messages.map((m) => (
           <Bubble
             key={m.id}
@@ -136,20 +179,10 @@ export default function ThreadChat({
             task={m.taskId ? tasks.find((t) => t.id === m.taskId) : undefined}
             active={pending?.id === m.id}
             busy={busy}
+            showTranscript={showTranscripts}
             onChip={(chip) => onChip(m.id, chip)}
           />
         ))}
-        {moves.length > 0 && (
-          <View style={s.moves}>
-            <Text style={s.meterLabel}>YOUR MOVES ON THIS</Text>
-            {moves.map((t) => (
-              <Text key={t.id} style={[s.move, t.done && s.moveDone]}>
-                {t.done ? "✓ " : "· "}
-                {t.title}
-              </Text>
-            ))}
-          </View>
-        )}
         {processing && (
           <View style={s.row}>
             <Text style={s.avatar}>f.</Text>
@@ -209,6 +242,7 @@ function Bubble({
   task,
   active,
   busy,
+  showTranscript = false,
   onChip,
 }: {
   message: ThreadMessage;
@@ -216,14 +250,42 @@ function Bubble({
   task?: Task;
   active: boolean;
   busy: boolean;
+  /** Recordings show their breakdown; the raw words only when asked for. */
+  showTranscript?: boolean;
   onChip: (chip: string) => void;
 }) {
   const you = message.from === "you";
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const long = message.text.length > (message.kind === "transcript" ? 260 : 700);
+  // A recording with a breakdown is shown as what Flow made of it, not as the words.
+  if (message.kind === "transcript" && message.breakdown && !showTranscript && !open) {
+    const b = message.breakdown;
+    return (
+      <View style={[s.row, s.rowYou]}>
+        <View style={[s.bubble, s.you, s.card]}>
+          <Text style={s.cardKicker}>WHAT FLOW GOT · {b.summary.toUpperCase()}</Text>
+          {b.items.map((i, k) => (
+            <View key={k} style={s.cardRow}>
+              <Text style={s.cardBullet}>{i.kind === "waiting" ? "⏳" : i.kind === "later" ? "·" : "→"}</Text>
+              <Text style={s.cardText}>
+                {i.kind === "waiting" && i.person ? `${i.person}: ` : ""}
+                {i.title}
+                {i.when ? <Text style={s.cardWhen}> · {i.when}</Text> : null}
+              </Text>
+            </View>
+          ))}
+          <Pressable accessibilityRole="button" accessibilityLabel="Show transcript" onPress={() => setOpen(true)} hitSlop={8}>
+            <Text style={[s.more, { color: C.white }]}>Transcript ▸</Text>
+          </Pressable>
+          {!!note?.audioUri && <AudioPlayback uri={note.audioUri} />}
+        </View>
+      </View>
+    );
+  }
   const isHype = message.kind === "hype";
   const isOffer = message.kind === "offer";
   const isBranch = message.kind === "branch";
-  const [expanded, setExpanded] = useState(false);
-  const long = message.text.length > 700;
   return (
     <View style={[s.row, you && s.rowYou]}>
       {!you && <Text style={s.avatar}>f.</Text>}
@@ -232,7 +294,7 @@ function Bubble({
         {isBranch && <Text style={s.offerKicker}>MORE THAN ONE THING</Text>}
         <Text
           style={[you ? s.youText : s.flowText, isHype && s.hypeText, isOffer && s.offerText]}
-          numberOfLines={long && !expanded ? 12 : undefined}
+          numberOfLines={long && !expanded ? (message.kind === "transcript" ? 3 : 12) : undefined}
         >
           {message.text}
         </Text>
@@ -305,9 +367,18 @@ const s = StyleSheet.create({
   chipText: { fontSize: 14, fontWeight: "700", color: C.ink },
   chipPrimaryText: { color: C.white },
   small: { fontSize: 12, color: C.muted },
-  moves: { padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 6, marginTop: 6 },
-  move: { fontSize: 14, color: C.ink },
-  moveDone: { color: C.muted, textDecorationLine: "line-through" },
+  summary: { padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 6, marginBottom: 4 },
+  sumRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  sumWhen: { width: 74, fontSize: 12, fontWeight: "700", color: C.blue, paddingTop: 2 },
+  sumText: { flex: 1, fontSize: 15, lineHeight: 20, fontWeight: "600", color: C.ink },
+  sumWait: { color: "#8A5A12" },
+  sumDone: { color: C.faint, textDecorationLine: "line-through" },
+  card: { gap: 6 },
+  cardKicker: { fontSize: 10, letterSpacing: 1.3, fontWeight: "800", color: "#DCE3FF" },
+  cardRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  cardBullet: { color: C.white, fontSize: 14, width: 16, paddingTop: 2 },
+  cardText: { flex: 1, fontSize: 15, lineHeight: 21, color: C.white, fontWeight: "600" },
+  cardWhen: { color: "#DCE3FF", fontWeight: "700" },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.paper },
   mic: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.card, borderWidth: 1, borderColor: C.line, alignItems: "center", justifyContent: "center" },
   micIcon: { color: C.record, fontSize: 16 },
