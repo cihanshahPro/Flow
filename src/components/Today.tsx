@@ -28,6 +28,7 @@ export default function Today({
   onWrite,
   onDismissNotice,
   calendar,
+  tomorrowPlan,
 }: {
   events: CalEvent[];
   tasks: Task[];
@@ -47,6 +48,8 @@ export default function Today({
   onWrite: () => void;
   onDismissNotice: () => void;
   calendar?: { connected: boolean; onConnect: () => void };
+  /** The evening ritual: plan tomorrow tonight. */
+  tomorrowPlan?: { locked: boolean; sub: string; onOpen: () => void };
 }) {
   const today = localDate(now);
   const isEvening = (t: Task) => (t.plannedTime ? Number(t.plannedTime.slice(0, 2)) >= 17 : false);
@@ -55,7 +58,7 @@ export default function Today({
   const evening = mine.filter(isEvening).sort((a, b) => Number(a.done) - Number(b.done));
   const waiting = tasks.filter((t) => t.kind === "waiting" && !t.done && (!t.chaseDate || t.chaseDate <= localDate(new Date(now.getTime() + 6 * 864e5))));
   const onCalendar = events.filter((e) => !e.mine && localDate(new Date(e.start)) <= today && localDate(new Date(new Date(e.end).getTime() - 1)) >= today);
-  const dayName = now.toLocaleDateString("en-US", { weekday: "long", day: "numeric" });
+  const dayName = `${now.toLocaleDateString("en-US", { weekday: "long" })} ${now.getDate()}`;
   const label = (t: Task) => (t.done ? "done" : t.plannedTime ? t.plannedTime : "");
   const acts = (t: Task) => (t.done ? undefined : [
     { label: "Tomorrow", color: C.ink2, onPress: () => onTomorrow(t) },
@@ -67,7 +70,7 @@ export default function Today({
       key={t.id}
       first={i === 0}
       title={t.title}
-      sub={[t.projectId ? undefined : t.area, t.minutes ? `${t.minutes} min` : undefined, t.deadline && !t.done ? undefined : undefined].filter(Boolean).join(" · ") || undefined}
+      sub={[t.routineId ? "routine" : t.projectId ? undefined : t.area, t.minutes ? `${t.minutes} min` : undefined].filter(Boolean).join(" · ") || undefined}
       when={label(t)}
       done={t.done}
       lead={<Check on={t.done} onPress={() => onTick(t)} label={t.done ? `Reopen ${t.title}` : `Done: ${t.title}`} />}
@@ -121,6 +124,11 @@ export default function Today({
               accessibilityLabel={`Open waiting ${t.title}`}
             />
           ))}
+        </Section>
+      )}
+      {tomorrowPlan && (
+        <Section label="Tonight">
+          <Row first title={tomorrowPlan.locked ? "Tomorrow is set" : "Plan tomorrow"} sub={tomorrowPlan.sub} when="›" lead={tomorrowPlan.locked ? <Check on label="Tomorrow is set" /> : <Dot color={C.accent} />} onPress={tomorrowPlan.onOpen} accessibilityLabel={tomorrowPlan.locked ? "Tomorrow is set" : "Plan tomorrow"} />
         </Section>
       )}
       <View style={{ height: 40 }} />

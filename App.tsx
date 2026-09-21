@@ -23,6 +23,10 @@ import RecordingPage from "./src/components/RecordingPage";
 import Upcoming from "./src/components/Upcoming";
 import Me from "./src/components/Me";
 import MoveSheet from "./src/components/MoveSheet";
+import PlanTomorrow from "./src/components/PlanTomorrow";
+import { dayPlanFor, loadRoutines, lockTomorrow, proposal as loadProposal, startDay } from "./src/services/tomorrow";
+import { morningLine, tomorrowOf, type Decision, type Proposal, type Routine } from "./src/tomorrow";
+import * as Notifications from "expo-notifications";
 import TabBar, { type Tab } from "./src/components/TabBar";
 import ThreadChat from "./src/components/ThreadChat";
 import WeekPlan from "./src/components/WeekPlan";
@@ -42,7 +46,7 @@ import { buildStamp, mirrorToDev } from "./src/services/mirror";
 import { capabilities } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
 import type { Consent } from "./src/ai-policy";
-import { sendTestReminder, syncReminders } from "./src/services/reminders";
+import { EVENING_ID, sendTestReminder, syncReminders } from "./src/services/reminders";
 import { exportAllData, deleteAllData } from "./src/services/data";
 import Constants from "expo-constants";
 import { newProfile, needsFunnel, type Profile as ProfileModel } from "./src/personality";
@@ -54,7 +58,7 @@ import { answerChip, backfillConversation, respondToRecording, evaluateThread, n
 import { appendPlanUpdate, suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
-type Screen = Tab | "thread" | "intake" | "recording";
+type Screen = Tab | "thread" | "intake" | "recording" | "tomorrow";
 type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback"; prompt?: string };
 const EVALUATE_EVERY_MS = 15 * 60 * 1000;
 
@@ -91,6 +95,10 @@ function Flow() {
   const [paragraph, setParagraph] = useState("");
   /** The move sheet: the task being edited. */
   const [editing, setEditing] = useState<Task | null>(null);
+  /** The evening ritual: what Flow proposes for tomorrow, and whether tomorrow is already set. */
+  const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [tomorrowSet, setTomorrowSet] = useState<{ date: string; closure: string } | null>(null);
   const [lastTab, setLastTab] = useState<Tab>("today");
   const [openId, setOpenId] = useState<string | null>(null);
   const [funnel, setFunnel] = useState(false);
@@ -126,12 +134,42 @@ function Flow() {
 
   /** Thread reminders plus the morning "today's one move" nudge, from the freshly saved data. */
   function syncAll(data: { tasks: Task[]; threads: ThoughtDraft[] }, p: ProfileModel, ask = false) {
-    const next = pickNextTask(data.tasks, p.activeTaskId);
-    return syncReminders(data.threads, data.tasks, new Date(), {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const done = data.tasks.filter((t) => t.done && t.completedAt?.slice(0, 10) === today).length;
+    // The morning line is tomorrow's day when it is sent after midnight, so it reads the next day.
+    const headline = morningLine(events, data.tasks, tomorrowOf(now));
+    return syncReminders(data.threads, data.tasks, now, {
       ask,
       enabled: !p.notificationsOff,
-      morning: { headline: next ? moveHeadline(next, p.plate?.timeWindow) : undefined, time: p.morningTime, off: p.morningOff },
+      morning: { headline, time: p.morningTime, off: p.morningOff },
+      evening: { done, time: p.eveningTime, off: p.notificationsOff },
     }).catch(() => 0);
+  }
+
+  /** The evening ritual: load what Flow proposes and open the screen. */
+  async function openTomorrow() {
+    const [p, r] = await Promise.all([loadProposal(), loadRoutines()]);
+    setProposal(p);
+    setRoutines(r);
+    setScreen("tomorrow");
+  }
+  async function refreshTomorrow() {
+    const date = tomorrowOf(new Date());
+    const plan = await dayPlanFor(date).catch(() => null);
+    setTomorrowSet(plan ? { date, closure: plan.closure } : null);
+  }
+  function lockDay(decision: Decision) {
+    void run(async () => {
+      const closure = await lockTomorrow(decision);
+      const data = await refresh();
+      await refreshCalendar();
+      await refreshTomorrow();
+      void syncAll(data, profile);
+      setScreen("today");
+      setLastTab("today");
+      setNotice(closure);
+    });
   }
 
   async function refresh() {
@@ -175,6 +213,13 @@ function Flow() {
   }
 
   useEffect(() => {
+    // The evening close, tapped, opens the ritual.
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => {
+      if (r.notification.request.identifier === EVENING_ID) void openTomorrow().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
     void capabilities().then((c) => setOnDeviceAi(c.llm));
     void loadAiState()
       .then((a) => setCloudConsentState(a.consent))
@@ -189,7 +234,10 @@ function Flow() {
         setFunnelStep("intro");
         await evaluateAll(data);
         setReady(true);
+        // A day nobody planned still gets its routine blocks.
+        await startDay().then(async (n) => { if (n) await refresh(); }).catch(() => {});
         await refreshCalendar();
+        await refreshTomorrow();
         // Earlier recordings that never went through the intake are planned now, from their transcripts.
         void replayOldRecordings().then(async (n) => {
           if (!n) return;
@@ -209,7 +257,9 @@ function Flow() {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         void evaluateAll().catch(() => {});
+        void startDay().then(async (n) => { if (n) await refresh(); }).catch(() => {});
         void refreshCalendar().catch(() => {});
+        void refreshTomorrow().catch(() => {});
       }
     });
     const timer = setInterval(() => void evaluateAll().catch(() => {}), EVALUATE_EVERY_MS);
@@ -752,7 +802,15 @@ function Flow() {
               setProcessingError("");
             }}
             calendar={{ connected: calendarOn, onConnect: () => void connectCalendarNow() }}
+            tomorrowPlan={{
+              locked: !!tomorrowSet,
+              sub: tomorrowSet ? tomorrowSet.closure.replace(/^Tomorrow is set · /, "").replace(/\. Nothing to hold tonight\.$/, "") : "the calendar, your routines, what to carry — set it tonight",
+              onOpen: () => void openTomorrow().catch(() => {}),
+            }}
           />
+        )}
+        {screen === "tomorrow" && proposal && (
+          <PlanTomorrow proposal={proposal} routines={routines} busy={busy} onLock={lockDay} onOpenMove={setEditing} onBack={() => setScreen("today")} />
         )}
         {screen === "upcoming" && (
           <Upcoming events={events} tasks={tasks} connected={calendarOn} busy={busy} onConnect={() => void connectCalendarNow()} onOpenMove={setEditing} onRecord={record} onWrite={write} onSeed={devSeed} />
@@ -870,7 +928,7 @@ function Flow() {
           </View>
         )}
       </View>
-      {screen !== "thread" && screen !== "intake" && <TabBar active={screen === "recording" ? "recordings" : screen} onSelect={selectTab} />}
+      {screen !== "thread" && screen !== "intake" && screen !== "tomorrow" && <TabBar active={screen === "recording" ? "recordings" : screen} onSelect={selectTab} />}
       <MoveSheet task={editing} projects={realThreads.filter((t) => t.state !== "parked")} onSave={(patch) => editing && onSaveMove(editing, patch)} onDelete={() => editing && onDeleteMove(editing)} onClose={() => setEditing(null)} onOpenSource={editing?.noteId ? () => { const id = editing.noteId!; setEditing(null); openRecording(id); } : undefined} />
       {captureSheet}
     </SafeAreaView>

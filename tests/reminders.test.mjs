@@ -43,9 +43,20 @@ test("morning reminder defaults to 08:30, uses the next occurrence and names the
   const late = new Date(2026, 8, 19, 9, 0);
   const a = planMorning("This evening: Draft page 1", undefined, early);
   assert.equal(new Date(a.at).getTime(), new Date(2026, 8, 19, 8, 30).getTime());
-  assert.equal(a.body, "Today's one move is ready: This evening: Draft page 1");
+  assert.equal(a.title, "Your day");
+  assert.equal(a.body, "This evening: Draft page 1");
   assert.equal(new Date(planMorning("x", "07:15", late).at).getTime(), new Date(2026, 8, 20, 7, 15).getTime());
   assert.deepEqual(parseMorning("garbage"), { hour: 8, minute: 30 });
+});
+
+test("the evening close comes at 19:00 by default, next occurrence, and invites planning tomorrow", async () => {
+  const { planEvening } = await import("../src/services/reminders.ts");
+  const afternoon = new Date(2026, 8, 19, 15, 0);
+  const e = planEvening(3, undefined, afternoon);
+  assert.equal(new Date(e.at).getTime(), new Date(2026, 8, 19, 19, 0).getTime());
+  assert.equal(e.title, "Day closed");
+  assert.match(e.body, /3 done today\. Plan tomorrow/);
+  assert.equal(new Date(planEvening(0, "21:00", new Date(2026, 8, 19, 22, 0)).at).getTime(), new Date(2026, 8, 20, 21, 0).getTime());
 });
 
 test("no open move means no morning reminder", async () => {

@@ -35,6 +35,8 @@ export type Task = {
   projectId?: string;
   /** The recording this move came from. */
   noteId?: string;
+  /** The routine (see src/tomorrow.ts) this day's block was made from. */
+  routineId?: string;
   later?: boolean;
   eventId?: string;
   reminderId?: string;

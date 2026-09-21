@@ -78,7 +78,18 @@ export function planMorning(headline: string | undefined, time: string | undefin
   const { hour, minute } = parseMorning(time);
   let at = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
   if (at.getTime() <= now.getTime()) at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hour, minute, 0);
-  return { id: MORNING_ID, title: "Flowthread", body: `Today's one move is ready: ${headline}`, at: at.toISOString() };
+  return { id: MORNING_ID, title: "Your day", body: headline, at: at.toISOString() };
+}
+
+export const EVENING_ID = `${PREFIX}evening`;
+export const DEFAULT_EVENING = "19:00";
+
+/** Pure: the evening close — how the day went, and the invitation to plan tomorrow. */
+export function planEvening(done: number, time: string | undefined, now = new Date()): PlannedReminder {
+  const { hour, minute } = parseMorning(time ?? DEFAULT_EVENING);
+  let at = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+  if (at.getTime() <= now.getTime()) at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hour, minute, 0);
+  return { id: EVENING_ID, title: "Day closed", body: `${done} done today. Plan tomorrow, then let it go.`, at: at.toISOString() };
 }
 
 let configured = false;
@@ -104,7 +115,7 @@ export async function syncReminders(
   tasks: Task[],
   now = new Date(),
   /** `ask`: the person just confirmed a move or date, so this is the moment to request permission. `enabled`: the Settings switch. */
-  options: { ask?: boolean; enabled?: boolean; morning?: { headline?: string; time?: string; off?: boolean } } = {},
+  options: { ask?: boolean; enabled?: boolean; morning?: { headline?: string; time?: string; off?: boolean }; evening?: { done: number; time?: string; off?: boolean } } = {},
 ): Promise<number> {
   if (Platform.OS === "web") return 0;
   const planned = planReminders(threads, tasks, now);
@@ -112,6 +123,7 @@ export async function syncReminders(
     const m = planMorning(options.morning.headline, options.morning.time, now);
     if (m) planned.push(m);
   }
+  if (options.evening && !options.evening.off) planned.push(planEvening(options.evening.done, options.evening.time, now));
   try {
     configure();
     const existing = await Notifications.getAllScheduledNotificationsAsync();
