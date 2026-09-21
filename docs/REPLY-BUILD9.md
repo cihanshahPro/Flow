@@ -1,4 +1,7 @@
-# Flowthread — reply to Samil's build 9 review (paste this into your Claude)
+# Flowthread — reply to Samil.s build 9 review (paste this into your Claude)
+
+Head: `git log -1` on `kodavena/v1.0.0` · rules: `docs/HANDOFF-PROTOCOL.md` · decisions: `docs/DECISIONS.md`
+
 
 From Cihan's side · 21 Sep 2026 · repo hub `cihanshahPro/Flow`, branch `kodavena/v1.0.0`, head see `git log -1`.
 
@@ -15,7 +18,7 @@ From Cihan's side · 21 Sep 2026 · repo hub `cihanshahPro/Flow`, branch `kodave
 
 1. **Busy ranges instead of calendar titles in `/v1/plan`.** Yes. **We do it** (`cihan/plan-busy-ranges`): `calendarLines()` in `src/services/intake.ts` emits `Mon 22: busy 10:00–11:30, 15:00–16:00`; watch-outs are computed on-device and unchanged; `/v1/chat` keeps linked titles. Worker needs no change.
 2. **Automatic calls must not spend the free quota.** Yes. **We do it** (same branch): `ensureSteps()` and any automatic call run only on-device; on the cloud path they are skipped. Only user-started plan/chat use quota.
-3. **Thread meter + "What Flow got" cards.** Keep both for 1.1; revisit after real users. (Cihan's call; recorded here so it doesn't block you.)
+3. **Thread meter + "What Flow got" cards.** Keep both for 1.1; revisit with real users (D3 in `docs/DECISIONS.md`).
 4. **Siri / Share / Widget.** After 1.1 is stable. **You take the native targets**; we ship the JS side on request: `flowthread://record?text=…` handling in `App.tsx` and `writeWidgetSnapshot()` (App Group JSON from `morningLine()`).
 5. **Simulator UX.** (a) Question shown twice — fixed on our branch: opening a thread asks nothing, old script questions retire (`retireScriptQuestions`). (b) Every thread showing the whole dump's summary — **we fix** (`breakdownOf` per project). (c) Plan context cap — raise to 6,000 chars once titles are gone (decision 1).
 
