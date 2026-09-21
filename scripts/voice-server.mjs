@@ -6,6 +6,40 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 const execute = promisify(execFile);
+
+/** The intake, planned by Claude when FLOW_ANTHROPIC_KEY is set (the on-device shaper is the fallback). Same tool contract as the worker. */
+export async function planWithClaude(text, context, { key, model = "claude-sonnet-5", fetchImpl = fetch, instructions, tool }) {
+  const res = await fetchImpl("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1600,
+      temperature: 0,
+      system: instructions,
+      tools: [tool],
+      tool_choice: { type: "tool", name: tool.name },
+      messages: [{ role: "user", content: (context ? context.slice(0, 4000) + "\n\n" : "") + "PERSON'S WORDS:\n" + text }],
+    }),
+  });
+  if (!res.ok) throw new Error("anthropic " + res.status);
+  const data = await res.json();
+  const call = (data.content ?? []).find((c) => c.type === "tool_use" && c.name === tool.name);
+  if (!call) throw new Error("no tool call");
+  return call.input;
+}
+
+/** Dev only: keep every intake as a fixture so real dumps become replayable tests. */
+export async function keepFixture(dir, kind, payload) {
+  if (!dir) return;
+  try {
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    await writeFile(join(dir, `${stamp}-${kind}.json`), JSON.stringify(payload, null, 2));
+  } catch {
+    /* fixtures are best effort */
+  }
+}
 const MAX_BYTES = 32 * 1024 * 1024;
 export async function transcribeAudio(bytes, config) {
   await mkdir(config.temp, { recursive: true, mode: 0o700 });
@@ -103,7 +137,9 @@ export function createVoiceServer({
   token,
   transcribe,
   shape,
+  plan,
   webOrigin,
+  fixturesDir,
   log = console.log,
 }) {
   if (!token || token.length < 32)
@@ -225,7 +261,17 @@ export function createVoiceServer({
         return;
       }
       let organization;
-      if (shape) {
+      let planner = "apple-local";
+      if (wantPlan && plan) {
+        try {
+          log(JSON.stringify({ id, stage: "planning", via: "claude" }));
+          organization = await plan(text, context);
+          planner = "claude";
+        } catch (e) {
+          log(JSON.stringify({ id, stage: "claude-unavailable", detail: String(e?.message ?? e) }));
+        }
+      }
+      if (!organization && shape) {
         try {
           log(JSON.stringify({ id, stage: wantPlan ? "planning" : "organizing" }));
           organization = await shape(text, context, wantPlan ? "plan" : "");
@@ -238,10 +284,12 @@ export function createVoiceServer({
           reply(503, { error: "The planner is unavailable." });
           return;
         }
-        reply(200, { plan: organization });
-        log(JSON.stringify({ id, stage: "complete", elapsedMs: Date.now() - started }));
+        await keepFixture(fixturesDir, "plan", { at: new Date().toISOString(), text, context, planner, plan: organization });
+        reply(200, { plan: organization, planner });
+        log(JSON.stringify({ id, stage: "complete", elapsedMs: Date.now() - started, planner }));
         return;
       }
+      await keepFixture(fixturesDir, "shape", { at: new Date().toISOString(), text, context, shape: organization });
       reply(200, {
         text,
         shape: organization,
@@ -288,14 +336,20 @@ if (
   };
   if (!config.model || !config.temp)
     throw Error("Set FLOW_WHISPER_MODEL and FLOW_PROCESSING_TMP.");
+  const key = process.env.FLOW_ANTHROPIC_KEY;
+  const contract = key ? await import("./plan-contract.mjs") : null;
   const server = createVoiceServer({
     token: process.env.FLOW_PROCESSOR_TOKEN,
     webOrigin: process.env.FLOW_PROCESSOR_WEB_ORIGIN,
+    fixturesDir: process.env.FLOW_FIXTURES_DIR,
     transcribe: (bytes) => transcribeAudio(bytes, config),
     shape: process.env.FLOW_SHAPER_BIN
       ? (text, context, mode) => shapeText(text, process.env.FLOW_SHAPER_BIN, context, mode)
       : undefined,
+    plan: key && contract ? (text, context) => planWithClaude(text, context, { key, model: process.env.FLOW_PLAN_MODEL, instructions: contract.PLAN_INSTRUCTIONS, tool: contract.PLAN_TOOL }) : undefined,
   });
+  if (key) console.log("Flow planner: Claude " + (process.env.FLOW_PLAN_MODEL || "claude-sonnet-5"));
+  if (process.env.FLOW_FIXTURES_DIR) console.log("Flow fixtures: " + process.env.FLOW_FIXTURES_DIR);
   server.listen(
     Number(process.env.FLOW_PROCESSOR_PORT || 8084),
     process.env.FLOW_PROCESSOR_HOST || "127.0.0.1",

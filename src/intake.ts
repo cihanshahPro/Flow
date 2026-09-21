@@ -1,4 +1,6 @@
 import { shortTitle } from "./drafts.ts";
+import { areaFor, type PlanItem } from "./map.ts";
+import { cleanMove, extractDueHints, secondPerson } from "./thread.ts";
 
 /**
  * The intake: one long dump, many subjects. Flow's first job is not to ask —
@@ -158,3 +160,21 @@ export function subjectsOf(text: string, listed: Subject[] = []): Subject[] {
 function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+const PERSON = /\b(?:my|the|our) (?:(?:new|old|other) )?((?:\w+ )?(?:lawyer|attorney|landlord|manager|boss|sister|brother|mum|mom|dad|wife|husband|partner|friend|guy|designer|accountant|doctor|dentist|client|agent|contractor|plumber|teacher|coach))\b/i;
+const WAITING = /\b(?:supposed to (?:give|send|get back|call)|waiting (?:on|for)|will (?:get back|follow up|call me|send)|owes? me|hasn'?t (?:sent|replied|got back|called)|he'?s going to (?:follow up|send|call)|she'?s going to (?:follow up|send|call)|they'?re going to (?:follow up|send|call))\b/i;
+const LATER = /\b(?:someday|one day|at some point|eventually|maybe later|down the line|no rush|when i get (?:a chance|time)|would be nice)\b/i;
+
+/** The floor when no model is available: subjects from the local pass, one item each. */
+export function localPlan(text: string, now = new Date()): PlanItem[] {
+  return segmentDump(text).map((s) => {
+    const kind = WAITING.test(s.evidence) ? "waiting" : LATER.test(s.evidence) ? "later" : "action";
+    const person = s.evidence.match(PERSON)?.[1];
+    const when = extractDueHints(s.evidence, now)[0]?.phrase;
+    // A verb phrase becomes a move in the second person; a noun phrase ("My DEY case") stays the thing's name.
+    const move = cleanMove(s.title, 50);
+    const title = kind === "action" && !/^(?:my|our|the|a|an|this|that)\b/i.test(move) ? secondPerson(move) : s.title;
+    return { title, kind, project: s.title, area: areaFor(s.evidence), ...(person ? { person } : {}), ...(when ? { when } : {}), evidence: s.evidence };
+  });
+}
+

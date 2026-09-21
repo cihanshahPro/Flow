@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -558,7 +557,8 @@ function Flow() {
         onDismiss={finishSheetTransition}
       >
         <SafeAreaView style={s.sheet}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          {/* A page sheet sits below the screen top, so padding-style avoidance misjudges the keyboard; iOS insets the scroll view itself. */}
+          <View style={{ flex: 1 }}>
             <View style={s.sheetHead}>
               <Text style={s.kicker} numberOfLines={1}>
                 {capture?.kind === "feedback" ? "FEEDBACK" : capture?.threadId ? "THIS THREAD" : "NEW"}
@@ -567,7 +567,13 @@ function Flow() {
                 <Text style={s.link}>Close</Text>
               </Pressable>
             </View>
-            <ScrollView contentContainerStyle={s.sheetBody} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerStyle={s.sheetBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              contentInsetAdjustmentBehavior="automatic"
+            >
               <Text style={s.sheetTitle}>{captureTitle}</Text>
               <Text style={s.body}>{captureHint}</Text>
               {consentAsk && (
@@ -642,7 +648,7 @@ function Flow() {
               )}
               {!!error && <Text style={s.error}>{error}</Text>}
             </ScrollView>
-          </KeyboardAvoidingView>
+          </View>
         </SafeAreaView>
       </Modal>
   );

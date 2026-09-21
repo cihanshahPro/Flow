@@ -67,6 +67,9 @@ export async function fetch(url, options) {
 export async function loadWorkspace() {
   return { notes: harness.notes, tasks: harness.tasks };
 }
+export async function saveRecord(kind, id, payload) {
+  harness.records = [...(harness.records ?? []).filter((r) => r.id !== id), { kind, id, payload: structuredClone(payload) }];
+}
 export async function saveTask(task) {
   harness.tasks = [...harness.tasks.filter((t) => t.id !== task.id), structuredClone(task)];
 }

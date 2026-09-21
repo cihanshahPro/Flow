@@ -1,4 +1,4 @@
-import { loadWorkspace, saveTask } from "./storage";
+import { loadWorkspace, saveRecord, saveTask } from "./storage";
 import { loadDrafts, saveDraft } from "./drafts";
 import { loadProfile } from "./profile";
 import { appendPlanUpdate, suggestDraft, type ThoughtDraft } from "../drafts";
@@ -8,9 +8,9 @@ import { calendarContextText, type PlanShapeItem } from "../ai-policy";
 import { planText, type ShapeOptions } from "./processors";
 import { readWeek, writePlanEvent, writeReminder } from "./calendar-read";
 import { eventsOn, timeLabel, watchOuts, weekDays, type CalEvent, type WatchOut } from "../calendar";
-import { attachItems, areaFor, placePlan, type Area, type Placement, type PlanItem, type ProjectRef } from "../map";
-import { contentWords as contentWordsOf, segmentDump } from "../intake";
-import { cleanMove, extractDueHints, respondToRecording, secondPerson } from "../thread";
+import { attachItems, placePlan, type Area, type Placement, type PlanItem, type ProjectRef } from "../map";
+import { contentWords as contentWordsOf, localPlan } from "../intake";
+import { extractDueHints, respondToRecording } from "../thread";
 
 /**
  * The intake. The person talks; Flow reads the calendar, reads their words
@@ -30,21 +30,6 @@ export type WeekPlan = {
   closure: string;
   source: "model" | "local";
 };
-
-const PERSON = /\b(?:my|the|our) (?:(?:new|old|other) )?((?:\w+ )?(?:lawyer|attorney|landlord|manager|boss|sister|brother|mum|mom|dad|wife|husband|partner|friend|guy|designer|accountant|doctor|dentist|client|agent|contractor|plumber|teacher|coach))\b/i;
-const WAITING = /\b(?:supposed to (?:give|send|get back|call)|waiting (?:on|for)|will (?:get back|follow up|call me|send)|owes? me|hasn'?t (?:sent|replied|got back|called)|he'?s going to (?:follow up|send|call)|she'?s going to (?:follow up|send|call)|they'?re going to (?:follow up|send|call))\b/i;
-const LATER = /\b(?:someday|one day|at some point|eventually|maybe later|down the line|no rush|when i get (?:a chance|time)|would be nice)\b/i;
-
-/** The floor when no model is available: subjects from the local pass, one item each. */
-export function localPlan(text: string, now = new Date()): PlanItem[] {
-  return segmentDump(text).map((s) => {
-    const kind = WAITING.test(s.evidence) ? "waiting" : LATER.test(s.evidence) ? "later" : "action";
-    const person = s.evidence.match(PERSON)?.[1];
-    const when = extractDueHints(s.evidence, now)[0]?.phrase;
-    const title = kind === "action" ? secondPerson(cleanMove(s.title, 50)) : s.title;
-    return { title, kind, project: s.title, area: areaFor(s.evidence), ...(person ? { person } : {}), ...(when ? { when } : {}), evidence: s.evidence };
-  });
-}
 
 function topicFor(area: Area): Topic {
   return area === "Work" || area === "Money" || area === "Legal & admin" ? "Work" : area === "Learning" ? "Ideas" : "Life";
@@ -66,6 +51,12 @@ export function calendarLines(events: CalEvent[], now = new Date()): string[] {
   return lines;
 }
 
+/** The map as the model may know it, so a new recording lands on the projects it names. */
+export function projectsContextText(threads: { title: string; people?: string[] }[]): string {
+  if (!threads.length) return "";
+  return "KNOWN PROJECTS (use the same project string when something belongs to one):\n" + threads.slice(0, 20).map((t) => `${t.title}${t.people?.length ? ` (${t.people.join(", ")})` : ""}`).join("\n");
+}
+
 export function closureLine(placements: Placement[], watch: WatchOut[]): string {
   const dated = placements.filter((p) => p.slot || p.chaseDate).length;
   if (!placements.length) return "Nothing to plan from that — but it's saved.";
@@ -85,7 +76,9 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
     readWeek(now).catch(() => [] as CalEvent[]),
   ]);
   // 1. Read the words into items: the model when it answers, the local pass otherwise.
-  const outcome = await planText(text, calendarContextText(calendarLines(events, now)), options);
+  const live0 = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt);
+  const context = [calendarContextText(calendarLines(events, now)), projectsContextText(live0)].filter(Boolean).join("\n\n");
+  const outcome = await planText(text, context, options);
   // Items that merely restate a calendar event are the model reading the context back; they are not new.
   const known = events.filter((e) => !e.mine).map((e) => contentWordsOf(e.title));
   const restates = (i: PlanShapeItem) => {
@@ -95,7 +88,7 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   const modelItems = (outcome.plan?.items ?? []).filter((i) => !restates(i));
   const items: PlanItem[] = modelItems.length ? modelItems.map(fromShape) : localPlan(text, now);
   // 2. Attach each item to the map.
-  const live = threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt);
+  const live = live0;
   const refs: ProjectRef[] = live.map((t) => ({ id: t.id, title: t.title, area: t.area, people: t.people, words: [t.source, ...t.updates].join(" ") }));
   const attached = attachItems(items, refs);
   // 3. Place around the week.
@@ -175,6 +168,18 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   }
   const week = [...events.filter((e) => !written.some((w) => w.id === e.id)), ...written].sort((a, b) => a.start.localeCompare(b.start));
   const watch = watchOuts(events, now);
+  // Kept for replay: what was said, what the week held, what the model read, where it landed. Exported with everything else.
+  await saveRecord("intake", `intake:${note.id}`, {
+    noteId: note.id,
+    at: now.toISOString(),
+    text,
+    calendar: events.filter((e) => !e.mine).map(({ id, title, start, end, allDay }) => ({ id, title, start, end, allDay })),
+    projects: live0.map((t) => ({ id: t.id, title: t.title, area: t.area, people: t.people })),
+    source: modelItems.length ? "model" : "local",
+    modelItems: outcome.plan?.items ?? [],
+    items,
+    placements: placements.map((p) => ({ title: p.item.title, kind: p.item.kind, project: p.item.project, projectId: p.item.projectId, area: p.item.area, date: p.date, start: p.slot?.start, chaseDate: p.chaseDate, note: p.note })),
+  }).catch(() => {});
   return {
     noteId: note.id,
     placements,

@@ -79,3 +79,15 @@ export async function removeTask(id: string) {
     await database()
   ).runAsync("DELETE FROM records WHERE id=? AND kind=?", id, "task");
 }
+
+/** Anything else worth keeping as one JSON row (intake records for replay, etc.). */
+export async function saveRecord(kind: string, id: string, payload: unknown) {
+  await (
+    await database()
+  ).runAsync(
+    "INSERT INTO records (id,kind,payload) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+    id,
+    kind,
+    JSON.stringify(payload),
+  );
+}
