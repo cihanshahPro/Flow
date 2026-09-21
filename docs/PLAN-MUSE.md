@@ -128,18 +128,17 @@ Nothing is built until D10 and D11 are answered. D12–D14 can be answered befor
 
 ## 10 · Name (D15)
 
-"Flow" is out: 28 App Store apps named Flow, the top one with 404K ratings. "Muse" is theirs (53 apps, Meta's at 27K). Checked 70 four-letter words against the App Store search API (exact first-word matches, ratings of the biggest) and RDAP/whois for domains, 21 Sep 2026.
+"Flow" is out: 28 App Store apps named Flow, the top one with 404K ratings. "Muse" is theirs (53 apps, Meta's at 27K). Muse works because it names a *being* that does something for you. Checked ~120 four-letter words against the App Store search API (exact first-word matches, ratings of the biggest) and whois/DNS, 21 Sep 2026. Plain words that only describe (dote, heed, deft, tend) were rejected by the owner: they wake nothing up.
 
-| Name | Why it fits | App Store today | Domains |
+| Name | What it wakes up | App Store today | Note |
 |---|---|---|---|
-| **Dote** | "to dote on" = to look after with attention. "Dote on your day." One syllable, works as a verb ("Dote handled it") | **0** apps named Dote | dote.app / .com / .ai / .day taken; dote.so registered but unused; `dotehq.com`, `getdote.app` style needed |
-| Heed | pays attention, takes notice. "Heed keeps track" | 4 apps, none above 1 rating (a blocker, an attention trainer, HR) | heed.app/.com/.ai/.so/.co taken |
-| Deft | skilful and quick | 1 app (flashcards, 15 ratings) | deft.app/.com/.ai/.so/.co taken; deft.ai registered May 2026 — someone may be building "Deft AI" |
-| Tend | tends to your day — the best meaning | **67** apps incl. Tend Dental (3.9K) | — |
-| Duly | done duly, on time | Duly Health and Care (2.9K, US) | — |
-| Keel | steady | "Keel: Daily AI Planner" already exists | — |
+| **Seer** | the one who sees ahead — "Seer sees your day before you do"; same mythic register as Muse; fits the briefing and Ideas | 17 apps, biggest 114 ratings, none in productivity | seer.app/.ai/.so/.day taken (true of every real 4-letter word); site = `getseer.app`-style |
+| **Spur** | spurs you on — goals, momentum, the funnel | 13 apps, biggest 130 ratings | spur.app/.ai/.so taken; `spur.day` free |
+| Omen | a sign of what's coming | 6 apps, biggest 7 ratings | **out**: omen.app is HP's OMEN gaming brand, trademark risk |
+| Bard | the storyteller | 2 apps | **out**: Google's former chatbot name |
+| Vega · Elio · Nyla · Zade | empty, but say nothing | 0–8 tiny apps | names, not meanings |
 
-Recommendation: **Dote**. Empty on the App Store, says what the product does, one syllable next to Muse. App Store name "Dote — your day, handled"; bundle id and scheme `dote://` change in build 10 (Samil: new App Store Connect record, since the bundle id cannot be renamed). Trademark search (USPTO TESS, class 9/42) is Samil's check before build 12.
+Recommendation: **Seer**. Listing name "Seer — your day, seen ahead". Bundle id and `seer://` scheme change in build 10 (Samil: new App Store Connect record; bundle ids cannot be renamed). USPTO class 9/42 search is Samil's check before build 12.
 
 ## 11 · Goals as the funnel
 
