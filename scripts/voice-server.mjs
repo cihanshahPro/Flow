@@ -8,6 +8,40 @@ import { pathToFileURL } from "node:url";
 const execute = promisify(execFile);
 
 /** The intake, planned by Claude when FLOW_ANTHROPIC_KEY is set (the on-device shaper is the fallback). Same tool contract as the worker. */
+/**
+ * The brain through a Claude subscription, no API credits: Claude Code's headless mode
+ * (`claude -p`) on this machine, logged in once with `claude` → /login. The instructions
+ * are the same contract; the answer is asked for as one JSON object shaped like the tool.
+ */
+export async function askClaudeCode(text, context, { model = "claude-sonnet-4-5", instructions, tool, bin = "claude", timeoutMs = 120000 }) {
+  const { spawn } = await import("node:child_process");
+  const schema = JSON.stringify(tool.input_schema);
+  const system = instructions + "\n\nAnswer with ONE JSON object only, no prose, no code fence, matching this JSON schema exactly:\n" + schema;
+  const prompt = (context ? context.slice(0, 6000) + "\n\n" : "") + (tool.name === "flow_chat" ? "PERSON'S NEW MESSAGE:\n" : "PERSON'S WORDS:\n") + text;
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, ["-p", "--output-format", "json", "--model", model, "--system-prompt", system, "--tools", "", "--no-session-persistence"], { stdio: ["pipe", "pipe", "pipe"] });
+    let out = "", err = "";
+    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error("claude code timed out")); }, timeoutMs);
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.on("error", (e) => { clearTimeout(timer); reject(e); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      try {
+        const res = JSON.parse(out);
+        if (res.is_error) return reject(new Error(String(res.result || "claude code error")));
+        const body = String(res.result ?? "");
+        const m = body.match(/\{[\s\S]*\}/);
+        if (!m) return reject(new Error("no json in answer"));
+        resolve(JSON.parse(m[0]));
+      } catch (e) {
+        reject(new Error(`claude code (${code}): ${(err || out).slice(0, 200)}`));
+      }
+    });
+    child.stdin.end(prompt);
+  });
+}
+
 /** The chat inside a thread, by Claude. Same tool contract as the worker's /v1/chat. */
 export async function chatWithClaude(text, context, { key, model = "claude-sonnet-5", fetchImpl = fetch, instructions, tool }) {
   const res = await fetchImpl("https://api.anthropic.com/v1/messages", {
@@ -415,7 +449,10 @@ if (
   if (!config.model || !config.temp)
     throw Error("Set FLOW_WHISPER_MODEL and FLOW_PROCESSING_TMP.");
   const key = process.env.FLOW_ANTHROPIC_KEY;
-  const contract = key ? await import("./plan-contract.mjs") : null;
+  // FLOW_CLAUDE_CODE=1: the brain through the Claude subscription on this Mac (claude -p), no API key.
+  const viaCode = process.env.FLOW_CLAUDE_CODE === "1";
+  const contract = key || viaCode ? await import("./plan-contract.mjs") : null;
+  const codeModel = process.env.FLOW_PLAN_MODEL || "claude-sonnet-4-5";
   const server = createVoiceServer({
     token: process.env.FLOW_PROCESSOR_TOKEN,
     webOrigin: process.env.FLOW_PROCESSOR_WEB_ORIGIN,
@@ -425,10 +462,15 @@ if (
     shape: process.env.FLOW_SHAPER_BIN
       ? (text, context, mode) => shapeText(text, process.env.FLOW_SHAPER_BIN, context, mode)
       : undefined,
-    plan: key && contract ? (text, context) => planWithClaude(text, context, { key, model: process.env.FLOW_PLAN_MODEL, instructions: contract.PLAN_INSTRUCTIONS, tool: contract.PLAN_TOOL }) : undefined,
-    chat: key && contract ? (text, context) => chatWithClaude(text, context, { key, model: process.env.FLOW_PLAN_MODEL, instructions: contract.CHAT_INSTRUCTIONS, tool: contract.CHAT_TOOL }) : undefined,
+    plan: key && contract ? (text, context) => planWithClaude(text, context, { key, model: process.env.FLOW_PLAN_MODEL, instructions: contract.PLAN_INSTRUCTIONS, tool: contract.PLAN_TOOL })
+      : viaCode && contract ? (text, context) => askClaudeCode(text, context, { model: codeModel, instructions: contract.PLAN_INSTRUCTIONS, tool: contract.PLAN_TOOL, bin: process.env.FLOW_CLAUDE_BIN || "claude" })
+      : undefined,
+    chat: key && contract ? (text, context) => chatWithClaude(text, context, { key, model: process.env.FLOW_PLAN_MODEL, instructions: contract.CHAT_INSTRUCTIONS, tool: contract.CHAT_TOOL })
+      : viaCode && contract ? (text, context) => askClaudeCode(text, context, { model: codeModel, instructions: contract.CHAT_INSTRUCTIONS, tool: contract.CHAT_TOOL, bin: process.env.FLOW_CLAUDE_BIN || "claude" })
+      : undefined,
   });
   if (key) console.log("Flow planner: Claude " + (process.env.FLOW_PLAN_MODEL || "claude-sonnet-5"));
+  else if (viaCode) console.log("Flow planner: Claude Code (subscription) " + codeModel);
   if (process.env.FLOW_FIXTURES_DIR) console.log("Flow fixtures: " + process.env.FLOW_FIXTURES_DIR);
   server.listen(
     Number(process.env.FLOW_PROCESSOR_PORT || 8084),

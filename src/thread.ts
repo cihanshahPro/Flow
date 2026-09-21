@@ -914,15 +914,15 @@ export function respondToRecording(
       kind: "branch",
       text:
         branches.length === 1
-          ? ties.length
-            ? `“${branches[0].title}” — its own thread, or part of one you have?`
-            : `“${branches[0].title}” sounds like its own thing — its own thread?`
+          ? `“${branches[0].title}” — its own thread, or part of one you have?`
           : `I heard ${branches.length + 1} separate things. Keep this one on “${next.title}” and give ${branches.map((b) => `“${b.title}”`).join(" and ")} their own threads?`,
       branches,
+      // Always three ways: a new thread, one of the threads you already have, or keep it here.
       chips: [
-        { id: "split", label: ties.length ? "New thread" : "Yes" },
+        { id: "split", label: "New thread" },
         ...ties.map((t) => ({ id: `to:${t.id}`, label: `→ ${t.title.length > 26 ? t.title.slice(0, 25).trimEnd() + "…" : t.title}` })),
-        { id: "keep", label: ties.length ? "Keep here" : "No" },
+        ...((options.others ?? []).some((o) => o.id !== thread.id && !ties.some((t) => t.id === o.id)) ? [{ id: "pick", label: "→ Existing…" }] : []),
+        { id: "keep", label: "Keep here" },
       ],
     });
     // One decision at a time: while the split question is open, the next question waits a turn.
@@ -977,16 +977,18 @@ export function answerChip(
   thread: ThoughtDraft,
   messageId: string,
   chipId: string,
-  options: { mode?: Mode; formula?: Formula | null; now?: Date; plate?: Plate } = {},
+  options: { mode?: Mode; formula?: Formula | null; now?: Date; plate?: Plate; others?: { id: string; title: string }[] } = {},
 ): { thread: ThoughtDraft; effects: ChipEffect[] } {
   const mode = options.mode ?? DEFAULT_MODE;
   const formula = options.formula ?? DEFAULT_FORMULA;
   const at = (options.now ?? new Date()).toISOString();
   const plate = options.plate;
   const target = (thread.messages ?? []).find((m) => m.id === messageId);
-  if (!target || target.answered || !target.chips?.some((c) => c.id === chipId))
+  const picked = chipId.startsWith("to:") && target?.chips?.some((c) => c.id === "pick");
+  if (!target || target.answered || (!target.chips?.some((c) => c.id === chipId) && !picked))
     return { thread, effects: [] };
-  const label = target.chips.find((c) => c.id === chipId)!.label;
+  // "to:<id>" may name any open thread (picked from → Existing…), not only the chips shown.
+  const label = target.chips?.find((c) => c.id === chipId)?.label ?? (chipId.startsWith("to:") ? `→ ${options.others?.find((o) => o.id === chipId.slice(3))?.title ?? "that thread"}` : chipId);
   let next: ThoughtDraft = {
     ...thread,
     messages: (thread.messages ?? []).map((m) => (m.id === messageId ? { ...m, answered: chipId } : m)),

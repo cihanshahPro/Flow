@@ -591,7 +591,7 @@ function Flow() {
     if (!current) return;
     void run(async () => {
       const before = level.level?.number ?? 0;
-      const { thread, effects } = answerChip(current, messageId, chipId, { mode, formula, plate: profile.plate });
+      const { thread, effects } = answerChip(current, messageId, chipId, { mode, formula, plate: profile.plate, others: threads.map((t) => ({ id: t.id, title: t.title })) });
       await saveDraft(thread);
       for (const effect of effects) {
         if (effect.type === "accept") {
@@ -966,6 +966,7 @@ function Flow() {
             onSend={(text) => sendMessage(current.id, text)}
             onChip={chip}
             onClose={closeThread}
+            others={realThreads.filter((t) => t.id !== current.id && t.state !== "parked" && !t.resolvedAt).map((t) => ({ id: t.id, title: t.title }))}
           />
         )}
         {screen === "thread" && !current && (

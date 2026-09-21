@@ -390,7 +390,7 @@ test("a first dump with several subjects gets the split offer, and no second mov
   const branch = t.messages.find((m) => m.kind === "branch");
   assert.ok(branch, "the opening sentence is the subject; the rest are branches");
   assert.equal(branch.branches.length, 2);
-  assert.deepEqual(branch.chips.map((c) => c.label), ["Yes", "No"], "the only buttons in a thread");
+  assert.deepEqual(branch.chips.map((c) => c.label), ["New thread", "Keep here"], "the only buttons in a thread; no other threads yet, so nothing to tie to");
   assert.equal(pendingMessage(t).id, branch.id, "the split question waits alone; And what else? comes after it");
   const kept = answerChip(t, branch.id, "keep", { now }).thread;
   assert.equal(pendingMessage(kept).stage, "else");
@@ -462,13 +462,15 @@ test("a side subject can be tied to an existing thread it names: New thread / �
   const branch = pendingMessage(t);
   assert.equal(branch.kind, "branch");
   assert.match(branch.text, /its own thread, or part of one you have\?/);
-  assert.deepEqual(branch.chips.map((c) => c.label), ["New thread", "→ DUI case", "Keep here"], "one row: new, the thread it names, keep");
+  assert.deepEqual(branch.chips.map((c) => c.label), ["New thread", "→ DUI case", "→ Existing…", "Keep here"], "one row: new, the thread it names, any other thread, keep");
   assert.match(branch.branches[0].title, /^The lawyer/);
   const tied = answerChip(t, branch.id, "to:dui", { now });
   assert.deepEqual(tied.effects, [{ type: "tie", threadId: "dui", branches: branch.branches }]);
   assert.match(tied.thread.messages.at(-2).text, /added to “DUI case”/);
   assert.equal(pendingMessage(tied.thread)?.kind, "question", "and the conversation here carries on");
-  // No thread named: the plain Yes / No.
+  // No thread named: still New thread / → Existing… / Keep here, never a bare yes/no.
   const plain = respondToRecording(thread("Work project is behind because the designer keeps missing deadlines.", "demo2"), "n1", "The designer sent the screens. Also the bathroom fan is rattling again.", { now, others });
-  assert.deepEqual(pendingMessage(plain).chips.map((c) => c.label), ["Yes", "No"]);
+  assert.deepEqual(pendingMessage(plain).chips.map((c) => c.label), ["New thread", "→ Existing…", "Keep here"]);
+  const tiedAnyway = answerChip(plain, pendingMessage(plain).id, "to:gym", { now });
+  assert.equal(tiedAnyway.effects[0].threadId, "gym", "any existing thread can be picked");
 });

@@ -79,8 +79,8 @@ test("the split question is the only place with buttons, and answered ones disap
     React.createElement(ThreadChat, { thread, tasks: [], notes: [], mode: "analyst", onRecord() {}, onSend() {}, onClose() {}, onChip: (id, chip) => taps.push([id, chip]) }),
   );
   const found = labels(view);
-  assert.ok(found.includes("Yes") && found.includes("No"));
-  const yes = view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Yes");
+  assert.ok(found.includes("New thread") && found.includes("Keep here"));
+  const yes = view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "New thread");
   await act(async () => yes.props.onPress());
   assert.deepEqual(taps, [[branch.id, "split"]]);
   await act(async () => view.unmount());
@@ -88,8 +88,8 @@ test("the split question is the only place with buttons, and answered ones disap
   const view2 = await render(
     React.createElement(ThreadChat, { thread: after, tasks: [], notes: [], mode: "analyst", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }),
   );
-  assert.ok(!labels(view2).includes("Yes"), "answered buttons are gone");
-  assert.match(textOf(view2), /"No"/, "the reply shows as the person's bubble");
+  assert.ok(!labels(view2).includes("New thread"), "answered buttons are gone");
+  assert.match(textOf(view2), /"Keep here"/, "the reply shows as the person's bubble");
   await act(async () => view2.unmount());
 });
 
@@ -251,25 +251,37 @@ test("Calendar lists watch-outs, then days with the phone's events and Flow's it
   await act(async () => week.unmount());
 });
 
-test("a recording in a thread shows its breakdown, the summary sits on top, the transcript is one tap away", async () => {
+test("a recording in a thread shows what Flow got — never the audio, never the raw words; → Existing… lists the other threads", async () => {
   const dump = "I need to call the DUI lawyer tomorrow and send him the court letter. He is going to follow up with me.";
   let thread = respondToRecording(suggestDraft("dui", dump, now), "r1", dump, { now, quiet: true });
-  thread = { ...thread, title: "DUI case", messages: thread.messages.map((m) => (m.kind === "transcript" ? { ...m, breakdown: { summary: "1 move · waiting on 1", items: [{ title: "Call the DUI lawyer", kind: "action", when: "Mon 10am" }, { title: "Lawyer's follow-up", kind: "waiting", person: "the lawyer", when: "chase Fri" }] } } : m)) };
+  thread = { ...thread, title: "DUI case", messages: thread.messages.map((m) => (m.kind === "transcript" ? { ...m, breakdown: { summary: "1 move · waiting on 1", paragraph: "Call the DUI lawyer tomorrow with the court letter; he follows up.", items: [{ title: "Call the DUI lawyer", kind: "action", when: "Mon 10am" }, { title: "Lawyer's follow-up", kind: "waiting", person: "the lawyer", when: "chase Fri" }] } } : m)) };
   const tasks = [
     { id: "flow:dui:call", title: "Call the DUI lawyer", kind: "action", projectId: "dui", done: false, plannedDate: "2026-09-21", plannedTime: "10:00", createdAt: "" },
     { id: "flow:dui:wait", title: "Lawyer's follow-up", kind: "waiting", waitingOn: "the lawyer", chaseDate: "2026-09-25", projectId: "dui", done: false, plannedDate: "", createdAt: "" },
   ];
-  const view = await render(React.createElement(ThreadChat, { thread, tasks, notes: [], mode: "builder", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }));
+  const notes = [{ id: "r1", title: "x", text: dump, audioUri: "file:///r1.m4a", createdAt: now.toISOString() }];
+  const view = await render(React.createElement(ThreadChat, { thread, tasks, notes, mode: "builder", onRecord() {}, onSend() {}, onChip() {}, onClose() {} }));
   const text = textOf(view);
   assert.match(text, /SUMMARY/);
+  assert.match(text, /Call the DUI lawyer tomorrow with the court letter; he follows up\./, "the paragraph: what the person said, said back");
   assert.match(text, /WHAT FLOW GOT · ","1 MOVE · WAITING ON 1/);
   assert.match(text, /Mon 10am/);
   assert.match(text, /chase Fri/);
-  assert.doesNotMatch(text, /I need to call the DUI lawyer tomorrow and send him/, "the raw words are not shown by default");
-  assert.ok(labels(view).includes("Show transcript"));
-  await act(async () => view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Show transcript").props.onPress());
-  assert.match(textOf(view), /I need to call the DUI lawyer tomorrow/);
+  assert.doesNotMatch(text, /I need to call the DUI lawyer tomorrow and send him/, "the raw words are not in the thread");
+  assert.ok(!labels(view).some((l) => /transcript|Play recording/i.test(l)), "no transcript toggle, no audio in the thread");
   await act(async () => view.unmount());
+  // The split offer with → Existing…: tapping it lists the other threads.
+  const multi = "Work project is behind because the designer keeps missing deadlines and my manager wants a demo Friday. Also my landlord is asking about the lease renewal by end of month.";
+  const others = [{ id: "home", title: "Home admin" }, { id: "gym", title: "Gym membership" }];
+  const split = respondToRecording(suggestDraft("t9", multi, now), "n1", multi, { now, others: others.map((o) => ({ ...o, words: o.title })) });
+  const taps = [];
+  const v2 = await render(React.createElement(ThreadChat, { thread: split, tasks: [], notes: [], mode: "builder", onRecord() {}, onSend() {}, onChip: (id, c) => taps.push(c), onClose() {}, others }));
+  assert.ok(labels(v2).includes("→ Existing…"));
+  await act(async () => v2.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "→ Existing…").props.onPress());
+  assert.ok(labels(v2).includes("Add to Home admin"));
+  await act(async () => v2.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === "Add to Gym membership").props.onPress());
+  assert.deepEqual(taps, ["to:gym"]);
+  await act(async () => v2.unmount());
 });
 
 test("the move sheet: day, time, due and takes as chips, project as a field, save carries the patch, delete is there", async () => {

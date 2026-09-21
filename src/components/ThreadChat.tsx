@@ -47,6 +47,7 @@ export default function ThreadChat({
   onRecord,
   onChip,
   onClose,
+  others = [],
   error = "",
 }: {
   thread: ThoughtDraft;
@@ -64,6 +65,8 @@ export default function ThreadChat({
   /** Opens the recorder for this thread. */
   onRecord: () => void;
   onChip: (messageId: string, chipId: string) => void;
+  /** The person's other open threads, for tying a side subject into one of them. */
+  others?: { id: string; title: string }[];
   onClose: () => void;
   error?: string;
 }) {
@@ -98,7 +101,6 @@ export default function ThreadChat({
   }, [processing]);
   const moves = threadTasks(thread, tasks);
   const percent = understoodPercent(thread, formula ?? undefined);
-  const [showTranscripts, setShowTranscripts] = useState(false);
   const linked = matchEvents(events.filter((e) => !e.mine), [{ id: thread.id, title: thread.title, area: thread.area, people: thread.people, words: [thread.source, ...thread.updates].join(" ") }]).get(thread.id) ?? [];
   const today = weekDays()[0];
   const dayLabel = (t: Task) => (t.plannedDate ? `${t.plannedDate === today ? "Today" : new Date(`${t.plannedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}${t.plannedTime ? " " + t.plannedTime : ""}` : "");
@@ -157,11 +159,6 @@ export default function ThreadChat({
                 <Text style={[s.sumText, s.sumDone]} numberOfLines={2}>{t.title}</Text>
               </View>
             ))}
-            {messages.some((m) => m.kind === "transcript" && (m.breakdown || m.text.length > 200)) && (
-              <Pressable accessibilityRole="button" accessibilityLabel={showTranscripts ? "Hide transcripts" : "Show transcripts"} onPress={() => setShowTranscripts((v) => !v)} hitSlop={8}>
-                <Text style={s.more}>{showTranscripts ? "Hide transcripts" : "Transcripts ▸"}</Text>
-              </Pressable>
-            )}
           </View>
         )}
         {messages.map((m) => (
@@ -172,8 +169,8 @@ export default function ThreadChat({
             task={m.taskId ? tasks.find((t) => t.id === m.taskId) : undefined}
             active={pending?.id === m.id}
             busy={busy}
-            showTranscript={showTranscripts}
             onChip={(chip) => onChip(m.id, chip)}
+            others={others}
           />
         ))}
         {processing && (
@@ -235,28 +232,29 @@ function Bubble({
   task,
   active,
   busy,
-  showTranscript = false,
   onChip,
+  others = [],
 }: {
   message: ThreadMessage;
   note?: Note;
   task?: Task;
   active: boolean;
   busy: boolean;
-  /** Recordings show their breakdown; the raw words only when asked for. */
-  showTranscript?: boolean;
   onChip: (chip: string) => void;
+  /** The person's other open threads, for "→ Existing…". */
+  others?: { id: string; title: string }[];
 }) {
+  const [picking, setPicking] = useState(false);
   const you = message.from === "you";
-  const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const long = message.text.length > (message.kind === "transcript" ? 260 : 700);
   // A recording with a breakdown is shown as what Flow made of it, not as the words.
-  if (message.kind === "transcript" && message.breakdown && !showTranscript && !open) {
+  if (message.kind === "transcript" && message.breakdown) {
     const b = message.breakdown;
     return (
       <View style={[s.row, s.rowYou]}>
         <View style={[s.bubble, s.you, s.card]}>
+          {!!b.paragraph && <Text style={s.cardPara}>{b.paragraph}</Text>}
           <Text style={s.cardKicker}>WHAT FLOW GOT · {b.summary.toUpperCase()}</Text>
           {b.items.map((i, k) => (
             <View key={k} style={s.cardRow}>
@@ -268,10 +266,6 @@ function Bubble({
               </Text>
             </View>
           ))}
-          <Pressable accessibilityRole="button" accessibilityLabel="Show transcript" onPress={() => setOpen(true)} hitSlop={8}>
-            <Text style={[s.more, { color: C.white }]}>Transcript ▸</Text>
-          </Pressable>
-          {!!note?.audioUri && <AudioPlayback uri={note.audioUri} />}
         </View>
       </View>
     );
@@ -296,7 +290,6 @@ function Bubble({
             <Text style={[s.more, you && { color: C.white }]}>{expanded ? "Show less" : "Show more"}</Text>
           </Pressable>
         )}
-        {message.kind === "transcript" && !!note?.audioUri && <AudioPlayback uri={note.audioUri} />}
         {message.kind === "checkin" && task && !message.answered && <Text style={s.small}>Your move: {task.title}</Text>}
         {!!message.chips && !message.answered && message.kind !== "question" && (
           <View style={s.chips}>
@@ -305,11 +298,20 @@ function Bubble({
                 key={chip.id}
                 accessibilityRole="button"
                 accessibilityLabel={chip.label}
-                onPress={() => onChip(chip.id)}
+                onPress={() => (chip.id === "pick" ? setPicking((v) => !v) : onChip(chip.id))}
                 disabled={busy || !active}
                 style={({ pressed }) => [s.chip, i === 0 && s.chipPrimary, (pressed || busy) && { opacity: 0.6 }]}
               >
                 <Text style={[s.chipText, i === 0 && s.chipPrimaryText]}>{chip.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {picking && !message.answered && (
+          <View style={s.chips}>
+            {others.slice(0, 8).map((o) => (
+              <Pressable key={o.id} accessibilityRole="button" accessibilityLabel={`Add to ${o.title}`} onPress={() => onChip(`to:${o.id}`)} disabled={busy || !active} style={({ pressed }) => [s.chip, (pressed || busy) && { opacity: 0.6 }]}>
+                <Text style={s.chipText}>→ {o.title.length > 26 ? o.title.slice(0, 25).trimEnd() + "…" : o.title}</Text>
               </Pressable>
             ))}
           </View>
@@ -368,6 +370,7 @@ const s = StyleSheet.create({
   sumDone: { color: C.faint, textDecorationLine: "line-through" },
   card: { gap: 6 },
   cardKicker: { fontSize: 10, letterSpacing: 1.3, fontWeight: "800", color: "#DCE3FF" },
+  cardPara: { fontSize: 15, lineHeight: 21, color: C.white, marginBottom: 4 },
   cardRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   cardBullet: { color: C.white, fontSize: 14, width: 16, paddingTop: 2 },
   cardText: { flex: 1, fontSize: 15, lineHeight: 21, color: C.white, fontWeight: "600" },
