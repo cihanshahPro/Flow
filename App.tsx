@@ -50,7 +50,7 @@ import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
 import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks, wakeThread } from "./src/thread";
 import { whenFromAnswer, type When } from "./src/when";
-import { suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
+import { appendPlanUpdate, suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
 import type { Note, Task } from "./src/model";
 
 type Screen = Tab | "thread" | "intake";
@@ -463,6 +463,14 @@ function Flow() {
             const id = randomUUID();
             const seeded = { ...suggestDraft(id, branch.evidence), title: branch.title };
             await saveDraft(respondToRecording(seeded, id, branch.evidence, { mode, formula, plate: profile.plate }));
+          }
+        } else if (effect.type === "tie") {
+          // The side subject's words go to the thread the person picked, quietly; it is there when they open it.
+          const home = (await loadDrafts()).find((t) => t.id === effect.threadId);
+          if (home) {
+            const words = effect.branches.map((b) => b.evidence).join(" ");
+            const id = `${messageId}:tie`;
+            await saveDraft(respondToRecording(appendPlanUpdate(home, suggestDraft(id, words)), id, words, { mode, formula, plate: profile.plate, quiet: true }));
           }
         }
       }

@@ -450,3 +450,25 @@ test("strict routing needs the subject to name the thread, so a wide old thread 
   const insurance = { ...thread("The car insurance renewal is due at the end of the month and I have not compared quotes.", "ins"), title: "The car insurance renewal is due at the…" };
   assert.equal(routeRecording("My landlord is asking about the lease renewal by end of month and I have not decided if we stay.", [insurance], [], { strict: true }), null, "one shared word is not naming the thread");
 });
+
+test("a side subject can be tied to an existing thread it names: New thread / → that thread / Keep here", () => {
+  const others = [
+    { id: "dui", title: "DUI case", words: "talk to the lawyer about the DUI case and the ARD", people: ["the lawyer"] },
+    { id: "app", title: "App portfolio", words: "build apps for people, a free app for Ali first", people: ["Ali"] },
+    { id: "gym", title: "Gym membership", words: "the gym renews next week" },
+  ];
+  const text = "The designer sent the last two screens. Also the lawyer called back about the court letter, I need to send it before Tuesday.";
+  const t = respondToRecording(thread("Work project is behind because the designer keeps missing deadlines.", "demo"), "n1", text, { now, others });
+  const branch = pendingMessage(t);
+  assert.equal(branch.kind, "branch");
+  assert.match(branch.text, /its own thread, or part of one you have\?/);
+  assert.deepEqual(branch.chips.map((c) => c.label), ["New thread", "→ DUI case", "Keep here"], "one row: new, the thread it names, keep");
+  assert.match(branch.branches[0].title, /^The lawyer/);
+  const tied = answerChip(t, branch.id, "to:dui", { now });
+  assert.deepEqual(tied.effects, [{ type: "tie", threadId: "dui", branches: branch.branches }]);
+  assert.match(tied.thread.messages.at(-2).text, /added to “DUI case”/);
+  assert.equal(pendingMessage(tied.thread)?.kind, "question", "and the conversation here carries on");
+  // No thread named: the plain Yes / No.
+  const plain = respondToRecording(thread("Work project is behind because the designer keeps missing deadlines.", "demo2"), "n1", "The designer sent the screens. Also the bathroom fan is rattling again.", { now, others });
+  assert.deepEqual(pendingMessage(plain).chips.map((c) => c.label), ["Yes", "No"]);
+});

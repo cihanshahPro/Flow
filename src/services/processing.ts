@@ -138,6 +138,7 @@ async function processThoughtNote(
     evidence: flow.evidence,
     plate: profile?.plate,
     branches: flow.branches,
+    others: threads.filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt).map((t) => ({ id: t.id, title: t.title, words: [t.source, ...t.updates].join(" "), people: t.people })),
   });
   await saveDraft(draft);
   return draft;

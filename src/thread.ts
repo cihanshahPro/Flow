@@ -717,7 +717,7 @@ export function detectBranches(text: string, thread: Pick<ThoughtDraft, "title" 
       .replace(/^[,\s]+/, "")
       .replace(/^(?:i )?(?:keep meaning to|meaning to|keep forgetting to|still need to|need to|have to|want to|should|must) /i, "");
     // The subject is the noun phrase before the verb ("The car insurance renewal"), not a clipped sentence.
-    const head = body.split(/\s+(?:is|are|was|were|keeps?|needs?|wants?|has|have|by|at|because|so|but)\b/i)[0].trim();
+    const head = body.split(/,|\s+(?:is|are|was|were|keeps?|needs?|wants?|has|have|by|at|because|so|but|called|sent|said|asked|told|emailed|texted|wants me|which|that|who|where)\b/i)[0].trim();
     const raw = (head.split(/\s+/).length >= 3 && head.length <= 48 ? head : shortTitle(body, 40)).replace(/…$/, "").replace(/[.,;:]+$/, "");
     const title = raw.charAt(0).toUpperCase() + raw.slice(1);
     if (title.length >= 4 && !out.some((b) => b.title.toLowerCase() === title.toLowerCase())) out.push({ title, evidence: clip(sentence, 200) });
@@ -765,6 +765,28 @@ export function threadContextFor(thread: ThoughtDraft, others: ThoughtDraft[] = 
   };
 }
 
+/** Other threads a side subject names: shared title words or a person in common. Best two. */
+export function tieCandidates(
+  branches: { title: string; evidence: string }[],
+  others: { id: string; title: string; words?: string; people?: string[] }[],
+): { id: string; title: string }[] {
+  const said = contentWords(branches.map((b) => `${b.title} ${b.evidence}`).join(" "));
+  const scored = others
+    .map((o) => {
+      const title = contentWords(o.title);
+      let named = 0;
+      for (const w of title) if (said.has(w)) named++;
+      const people = (o.people ?? []).filter((p) => contentWords(p).size && [...contentWords(p)].every((w) => said.has(w))).length;
+      const corpus = contentWords(o.words ?? "");
+      let shared = 0;
+      for (const w of said) if (corpus.has(w)) shared++;
+      return { id: o.id, title: o.title, score: named * 2 + people * 3 + shared / Math.max(6, said.size) };
+    })
+    .filter((x) => x.score >= 1)
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, 2).map(({ id, title }) => ({ id, title }));
+}
+
 export function respondToRecording(
   thread: ThoughtDraft,
   noteId: string,
@@ -782,6 +804,8 @@ export function respondToRecording(
     branches?: { title: string; evidence: string }[];
     /** An intake turn: the transcript and Flow's reflection, no question until the person opens the thread. */
     quiet?: boolean;
+    /** The person's other open threads, so a side subject can be tied to one of them instead of starting new. */
+    others?: { id: string; title: string; words?: string; people?: string[] }[];
   } = {},
 ): ThoughtDraft {
   const mode = options.mode ?? DEFAULT_MODE;
@@ -870,17 +894,22 @@ export function respondToRecording(
     .filter((b) => !offeredBefore.some((o) => same(o.title, b.title) || same(o.evidence, b.evidence)))
     .slice(0, 3);
   if (branches.length) {
+    // Which of the person's other threads this could belong to: the ones it names (title words or people), at most two.
+    const ties = tieCandidates(branches, (options.others ?? []).filter((o) => o.id !== thread.id));
     push({
       from: "flow",
       kind: "branch",
       text:
         branches.length === 1
-          ? `“${branches[0].title}” sounds like its own thing — its own thread?`
+          ? ties.length
+            ? `“${branches[0].title}” — its own thread, or part of one you have?`
+            : `“${branches[0].title}” sounds like its own thing — its own thread?`
           : `I heard ${branches.length + 1} separate things. Keep this one on “${next.title}” and give ${branches.map((b) => `“${b.title}”`).join(" and ")} their own threads?`,
       branches,
       chips: [
-        { id: "split", label: "Yes" },
-        { id: "keep", label: "No" },
+        { id: "split", label: ties.length ? "New thread" : "Yes" },
+        ...ties.map((t) => ({ id: `to:${t.id}`, label: `→ ${t.title.length > 26 ? t.title.slice(0, 25).trimEnd() + "…" : t.title}` })),
+        { id: "keep", label: ties.length ? "Keep here" : "No" },
       ],
     });
     // One decision at a time: while the split question is open, the next question waits a turn.
@@ -926,7 +955,9 @@ export type ChipEffect =
   | { type: "complete"; taskId: string }
   | { type: "park" }
   | { type: "credit"; id: string }
-  | { type: "branch"; branches: { title: string; evidence: string }[] };
+  | { type: "branch"; branches: { title: string; evidence: string }[] }
+  /** The side subject belongs to another thread the person picked: its words go there. */
+  | { type: "tie"; threadId: string; branches: { title: string; evidence: string }[] };
 
 /** The user tapped one of two chips. Returns the updated thread and what the app must do. */
 export function answerChip(
@@ -971,7 +1002,11 @@ export function answerChip(
     push({ from: "flow", kind: "ack", text: voice.replyAck(mode, messageId) });
     carryOn();
   } else if (target.kind === "branch") {
-    if (chipId === "split" && target.branches?.length) {
+    if (chipId.startsWith("to:") && target.branches?.length) {
+      const threadId = chipId.slice(3);
+      effects.push({ type: "tie", threadId, branches: target.branches });
+      push({ from: "flow", kind: "ack", text: `Done — added to “${label.replace(/^→ /, "")}”. This one stays on “${next.title}”.` });
+    } else if (chipId === "split" && target.branches?.length) {
       effects.push({ type: "branch", branches: target.branches });
       // A title that named the split-off subject too ("Fan and passport renewal") is renamed after the opening sentence.
       const stems = (text: string) => new Set([...contentWords(text)].map((w) => w.slice(0, 5)));
