@@ -51,7 +51,11 @@ export async function importAllData(snapshot: { records?: { id: string; kind: st
   let n = 0;
   for (const r of snapshot.records ?? []) {
     if (!r?.id || !r?.kind) continue;
-    await db.runAsync("INSERT INTO records (id,kind,payload) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", r.id, r.kind, JSON.stringify(r.data));
+    // This device keeps its own identity and settings: the other phone's install id must never come along,
+    // or this device would mirror over the owner's snapshot. Tasks lose the other phone's calendar/reminder ids.
+    if (["ai", "profile", "progress"].includes(r.kind)) continue;
+    const data = r.kind === "task" && r.data && typeof r.data === "object" ? { ...(r.data as Record<string, unknown>), eventId: undefined, reminderId: undefined } : r.data;
+    await db.runAsync("INSERT INTO records (id,kind,payload) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", r.id, r.kind, JSON.stringify(data));
     n++;
   }
   await db.execAsync("CREATE TABLE IF NOT EXISTS flow_drafts (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL);");
