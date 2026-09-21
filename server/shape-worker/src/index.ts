@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
-import { INSTRUCTIONS, buildUserPrompt } from "./prompt";
-import { SHAPE_TOOL, requestSchema, shapeSchema, type Shape } from "./schema";
+import { INSTRUCTIONS, PLAN_INSTRUCTIONS, buildPlanPrompt, buildUserPrompt } from "./prompt";
+import { PLAN_TOOL, SHAPE_TOOL, planRequestSchema, planSchema, requestSchema, shapeSchema, type Plan, type Shape } from "./schema";
 import { installUsed, nextMonthStart, recordInstallUse, takeGlobal, type KV } from "./limits";
 
 export interface Env {
@@ -27,6 +27,33 @@ export function extractShape(data: unknown): Shape {
   const content = ((data ?? {}) as { content?: { type: string; name?: string; input?: unknown }[] }).content ?? [];
   const tool = content.find((c) => c.type === "tool_use" && c.name === SHAPE_TOOL.name);
   return shapeSchema.parse(tool?.input);
+}
+
+export function extractPlan(data: unknown): Plan {
+  const content = ((data ?? {}) as { content?: { type: string; name?: string; input?: unknown }[] }).content ?? [];
+  const tool = content.find((c) => c.type === "tool_use" && c.name === PLAN_TOOL.name);
+  return planSchema.parse(tool?.input);
+}
+
+async function callAnthropicPlan(env: Env, text: string, context: string): Promise<Plan> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: env.MODEL || "claude-haiku-4-5",
+      max_tokens: 1600,
+      temperature: 0,
+      system: PLAN_INSTRUCTIONS,
+      tools: [PLAN_TOOL],
+      tool_choice: { type: "tool", name: PLAN_TOOL.name },
+      messages: [{ role: "user", content: buildPlanPrompt(text, context) }],
+    }),
+  });
+  if (!res.ok) {
+    console.error("anthropic status", res.status);
+    throw new Error("upstream " + res.status);
+  }
+  return extractPlan(await res.json());
 }
 
 async function callAnthropic(env: Env, text: string, context: string, thread = ""): Promise<Shape> {
@@ -80,7 +107,8 @@ function contextText(p: NonNullable<ReturnType<typeof requestSchema.parse>["prof
 
 export async function handle(request: Request, env: Env, now = new Date()): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname !== "/v1/shape") return json({ error: { code: "invalid_input", message: "Not found" } }, 404);
+  const isPlan = url.pathname === "/v1/plan";
+  if (url.pathname !== "/v1/shape" && !isPlan) return json({ error: { code: "invalid_input", message: "Not found" } }, 404);
   if (request.method !== "POST") return fail("invalid_input", "POST only");
 
   const install = request.headers.get("X-Flow-Install") ?? "";
@@ -95,7 +123,7 @@ export async function handle(request: Request, env: Env, now = new Date()): Prom
   if (raw.length > maxText * 2 + 5000) return fail("too_long", "This note is too long");
   let body;
   try {
-    body = requestSchema.parse(JSON.parse(raw));
+    body = isPlan ? planRequestSchema.parse(JSON.parse(raw)) : requestSchema.parse(JSON.parse(raw));
   } catch (e) {
     return fail("invalid_input", e instanceof ZodError ? "Invalid request" : "Invalid JSON");
   }
@@ -111,9 +139,20 @@ export async function handle(request: Request, env: Env, now = new Date()): Prom
   // The global cap protects the bill: once hit, every client falls back to the template.
   if (!(await takeGlobal(env.QUOTA, now, num(env.GLOBAL_DAILY_CAP, 400)))) return fail("unavailable", "Busy, try later");
 
+  if (isPlan) {
+    let plan: Plan;
+    try {
+      plan = await callAnthropicPlan(env, text, (body as { context?: string }).context ?? "");
+    } catch {
+      return fail("unavailable", "Could not plan this note");
+    }
+    await recordInstallUse(env.QUOTA, install, now, used);
+    return json({ version: 1, plan, quota: { limit, used: used + 1, resetsAt } });
+  }
+  const shapeBody = body as ReturnType<typeof requestSchema.parse>;
   let shape: Shape;
   try {
-    shape = await callAnthropic(env, text, body.profile ? contextText(body.profile) : "", body.thread ? threadText(body.thread) : "");
+    shape = await callAnthropic(env, text, shapeBody.profile ? contextText(shapeBody.profile) : "", shapeBody.thread ? threadText(shapeBody.thread) : "");
   } catch {
     return fail("unavailable", "Could not shape this note"); // failures do not count against the quota
   }

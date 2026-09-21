@@ -62,6 +62,9 @@ export type ThoughtDraft = {
   resolvedAt?: string;
   /** Recordings that landed here as one lump before the intake existed and have since been re-sorted into threads. */
   resortedNoteIds?: string[];
+  /** The map: which area this project sits on and the people in it. */
+  area?: import("./map.ts").Area;
+  people?: string[];
 };
 export type ThreadStage = "dumped" | "understood" | "moving" | "done" | "parked";
 export type DueHint = { date: string; phrase: string };

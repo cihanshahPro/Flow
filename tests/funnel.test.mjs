@@ -28,11 +28,12 @@ async function render(element) {
   return view;
 }
 
-test("new people get value first: one welcome screen, then the first thought — no test in the way", async () => {
+test("new people get value first: welcome, connect the calendar, then the first recording — no test in the way", async () => {
   let profile = newProfile();
   let step = "intro";
   const finished = [];
   const recorded = [];
+  let connected = 0;
   const props = () => ({
     profile,
     step,
@@ -41,13 +42,20 @@ test("new people get value first: one welcome screen, then the first thought —
     onFinish: async (p) => finished.push(p),
     onRecordFirst: (prompt) => recorded.push(prompt),
     onWriteFirst: () => {},
+    onConnectCalendar: async () => (connected++, true),
   });
   const view = await render(React.createElement(Funnel, props()));
   const rerender = () => act(async () => view.update(React.createElement(Funnel, props())));
-  assert.match(textOf(view), /Record it once\./);
+  assert.match(textOf(view), /Say it once\./);
   assert.deepEqual(labels(view), ["Get started"], "one action, no skip, no test");
   await press(view, "Get started");
   await rerender();
+  assert.equal(step, "calendar");
+  assert.match(textOf(view), /Let Flow see your week/);
+  assert.deepEqual(labels(view), ["Connect calendar", "Not now"]);
+  await press(view, "Connect calendar");
+  await rerender();
+  assert.equal(connected, 1);
   assert.equal(step, "first");
   assert.match(textOf(view), /What's on your mind right now\?/);
   assert.deepEqual(labels(view), ["Talk it out", "Type it"], "two equal ways in");
@@ -144,14 +152,13 @@ test("Profile shows the Flow type and an editable plate; Progress shows the leve
     React.createElement(Profile, { profile, threads, notes: [{ id: "f", captureKind: "feedback", title: "x", text: "x", createdAt: "" }], onRetake() {}, onFeedback: (m) => fb.push(m), onPlate: (p) => plates.push(p) }),
   );
   let text = textOf(view);
-  assert.match(text, /Catalyst/);
   assert.match(text, /Work project/);
   assert.match(text, /Boss/);
   assert.match(text, /Sam/);
   assert.match(text, /Mornings/);
   await press(view, "Record feedback");
   assert.deepEqual(fb, ["voice"]);
-  assert.ok(labels(view).includes("Redo the test and profile"));
+  assert.ok(!labels(view).includes("Redo the test and profile"), "no personality layer in the way");
   await press(view, "Edit profile");
   await press(view, "Health");
   assert.deepEqual(plates.at(-1).areas, ["Work project", "Health"]);
@@ -171,11 +178,11 @@ test("Profile shows the Flow type and an editable plate; Progress shows the leve
 test("profile completion is one honest number", async () => {
   const { profileProgress } = await import("../src/profile-progress.ts");
   assert.equal(profileProgress(newProfile(), []).percent, 0);
-  const tested = { ...newProfile(), answers: Array(20).fill(3) };
-  assert.equal(profileProgress(tested, []).percent, 40);
-  assert.equal(profileProgress(tested, []).next, "What's on your plate");
-  const full = { ...tested, plate: { areas: ["Health"], people: ["Partner"], timeWindow: "Evenings", obstacles: ["Money"], datedSoon: "Not really" } };
-  assert.equal(profileProgress(full, []).percent, 90);
-  assert.equal(profileProgress(full, [{ ...suggestDraft("t", "Fix the tap.", new Date()), messages: [{ id: "m", from: "you", kind: "transcript", text: "x", createdAt: "" }] }]).percent, 100);
-  assert.equal(profileProgress(full, []).next, "First thread");
+  const connected = newProfile();
+  assert.equal(profileProgress(connected, [], true).percent, 40, "the calendar is the big piece");
+  assert.equal(profileProgress(connected, [], false).next, "Calendar connected");
+  const full = { ...connected, plate: { areas: ["Health"], people: ["Partner"], timeWindow: "Evenings", obstacles: ["Money"], datedSoon: "Not really" } };
+  assert.equal(profileProgress(full, [], true).percent, 90);
+  assert.equal(profileProgress(full, [{ ...suggestDraft("t", "Fix the tap.", new Date()), messages: [{ id: "m", from: "you", kind: "transcript", text: "x", createdAt: "" }] }], true).percent, 100);
+  assert.equal(profileProgress(full, [], true).next, "First thread");
 });

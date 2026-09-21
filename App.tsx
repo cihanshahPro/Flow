@@ -20,11 +20,15 @@ import { randomUUID } from "expo-crypto";
 import VoiceCapture, { AudioPlayback, type SavedVoiceNote } from "./src/components/VoiceCapture";
 import Today from "./src/components/Today";
 import Threads from "./src/components/Threads";
-import Progress from "./src/components/Progress";
+import CalendarTab from "./src/components/CalendarTab";
 import Profile from "./src/components/Profile";
 import TabBar, { type Tab } from "./src/components/TabBar";
 import ThreadChat from "./src/components/ThreadChat";
-import Intake from "./src/components/Intake";
+import WeekPlan from "./src/components/WeekPlan";
+import type { WeekPlan as Plan } from "./src/services/intake";
+import { dayPlan } from "./src/services/intake";
+import { calendarConnected, connectCalendar, connectReminders, readWeek, seedDemoCalendar } from "./src/services/calendar-read";
+import type { CalEvent } from "./src/calendar";
 import Thinking from "./src/components/Thinking";
 import Funnel, { type FunnelStep } from "./src/components/Funnel";
 import { C } from "./src/components/theme";
@@ -32,7 +36,7 @@ import { loadWorkspace, saveNote, registerVoiceNote, saveTask } from "./src/serv
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
 import { loadProfile, saveProfile } from "./src/services/profile";
 import { syncProgress } from "./src/services/progress";
-import { processCapturedNote, resortDumps } from "./src/services/processing";
+import { processCapturedNote } from "./src/services/processing";
 import { capabilities } from "./src/services/processors";
 import { loadAiState, setCloudConsent } from "./src/services/ai-state";
 import type { Consent } from "./src/ai-policy";
@@ -40,13 +44,11 @@ import { syncReminders } from "./src/services/reminders";
 import { exportAllData, deleteAllData } from "./src/services/data";
 import Constants from "expo-constants";
 import { addTaskToCalendar, type ChooseCalendar } from "./src/services/calendar";
-import { newProfile, needsFunnel, shouldInviteAssessment, type Profile as ProfileModel } from "./src/personality";
-import { profileProgress } from "./src/profile-progress";
+import { newProfile, needsFunnel, type Profile as ProfileModel } from "./src/personality";
 import { newProgress, levelForProgress } from "./src/progress";
 import { completeTask, pickNextTask } from "./src/task-flow";
 import * as Haptics from "expo-haptics";
 import { flowType, modeFor, DEFAULT_MODE } from "./src/flow-voice";
-import { formulaFromAnswers } from "./src/formula";
 import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, noteMoveDone, moveHeadline, pendingMessage, plannedDateFor, moveWhen, suggestPrompt, threadTasks, wakeThread } from "./src/thread";
 import { whenFromAnswer, type When } from "./src/when";
 import { suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
@@ -77,8 +79,11 @@ function Flow() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [screen, setScreen] = useState<Screen>("today");
-  /** The thread starters from the last dump, shown once, then the person records more or moves on. */
-  const [intake, setIntake] = useState<ThoughtDraft[]>([]);
+  /** The week plan from the last dump, shown once. */
+  const [plan, setPlan] = useState<Plan | null>(null);
+  /** The phone's calendar, as last read. */
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [calendarOn, setCalendarOn] = useState(false);
   const [lastTab, setLastTab] = useState<Tab>("today");
   const [openId, setOpenId] = useState<string | null>(null);
   const [funnel, setFunnel] = useState(false);
@@ -107,8 +112,8 @@ function Flow() {
   captureOpen.current = !!capture;
 
   const mode = modeFor(profile.answers) ?? DEFAULT_MODE;
-  // The person's roof and rhythm (formula.ts): which words Flow uses and how many times it asks "And what else?".
-  const formula = formulaFromAnswers(profile.answers);
+  // Same plain questions for everyone: no personality layer in the path.
+  const formula = null;
   const current = threads.find((t) => t.id === openId);
   const level = levelForProgress(progress);
   const type = flowType(profile.answers);
@@ -176,11 +181,9 @@ function Flow() {
         // New (and pre-build-12) profiles get welcome → first thought. Anyone who finished the test-first funnel keeps their flow.
         setFunnel(needsFunnel(p));
         setFunnelStep("intro");
-        // Recordings from before the intake existed are re-sorted from their saved transcripts — nothing to redo.
-        const resorted = await resortDumps().catch(() => ({ recordings: 0, threads: 0 }));
-        if (resorted.threads) setNotice(`Re-sorted ${resorted.recordings === 1 ? "an earlier recording" : `${resorted.recordings} earlier recordings`} into ${resorted.threads} new thread${resorted.threads === 1 ? "" : "s"}. They're in your threads.`);
-        await evaluateAll(resorted.threads ? await refresh() : data);
+        await evaluateAll(data);
         setReady(true);
+        void refreshCalendar();
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : "Flow could not open its saved data.");
@@ -191,7 +194,10 @@ function Flow() {
   useEffect(() => {
     if (!ready) return;
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void evaluateAll().catch(() => {});
+      if (state === "active") {
+        void evaluateAll().catch(() => {});
+        void refreshCalendar().catch(() => {});
+      }
     });
     const timer = setInterval(() => void evaluateAll().catch(() => {}), EVALUATE_EVERY_MS);
     return () => {
@@ -199,6 +205,19 @@ function Flow() {
       clearInterval(timer);
     };
   }, [ready, mode]);
+
+  /** Read the phone's calendar for the coming two weeks (no-op until connected). */
+  async function refreshCalendar() {
+    const on = await calendarConnected();
+    setCalendarOn(on);
+    if (on) setEvents(await readWeek().catch(() => []));
+  }
+  async function connectCalendarNow(): Promise<boolean> {
+    const ok = await connectCalendar();
+    if (ok) await connectReminders().catch(() => false);
+    await refreshCalendar();
+    return ok;
+  }
 
   async function run(fn: () => Promise<void>) {
     if (lock.current) return;
@@ -352,10 +371,11 @@ function Flow() {
       const stayedHere = captureOpen.current;
       setCapture(null);
       if (result.kind === "intake") {
-        // Several things in one breath: show they were all caught and sorted, then ask for more.
-        setIntake(result.drafts);
+        // The week, planned around the calendar. Shown once; nothing is asked.
+        setPlan(result.plan);
+        setEvents(result.plan.events);
         if (stayedHere) setScreen("intake");
-        else setNotice(`Flow started ${result.drafts.length} threads from that. They're in your threads.`);
+        else setNotice(`Flow placed ${result.plan.placements.length} things on your week.`);
         await evaluateAll(data);
         return;
       }
@@ -658,6 +678,8 @@ function Flow() {
           }
           onRecordFirst={(prompt) => startCapture("voice", null, "thought", prompt)}
           onWriteFirst={(prompt) => startCapture("text", null, "thought", prompt)}
+          onConnectCalendar={connectCalendarNow}
+          calendarConnected={calendarOn}
           onExit={needsFunnel(profile) ? undefined : () => void run(async () => { await updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() }); setFunnel(false); selectTab("today"); })}
         />
         {captureSheet}
@@ -684,18 +706,8 @@ function Flow() {
             busy={busy}
             processing={processing && !capture}
             onCancelProcessing={cancelShaping}
-            invite={
-              shouldInviteAssessment(profile, threads.some((t) => !t.example))
-                ? {
-                    onStart: () => {
-                      setFunnelStep("test");
-                      setFunnel(true);
-                    },
-                    onLater: () => void run(() => updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() })),
-                    percent: profileProgress(profile, threads).percent,
-                  }
-                : null
-            }
+            day={dayPlan(events, tasks)}
+            calendar={{ connected: calendarOn, onConnect: () => void connectCalendarNow() }}
             notice={notice}
             error={error}
             onRecord={() => startCapture("voice", null, "thought", suggestion.prompt)}
@@ -704,7 +716,7 @@ function Flow() {
             onOpenThread={openThread}
             onDoneNext={doneNext}
             onCalendarNext={calendarNext}
-            onOpenMe={() => selectTab("progress")}
+            onOpenMe={() => selectTab("calendar")}
             onDismissNotice={() => {
               setNotice("");
               setError("");
@@ -714,7 +726,17 @@ function Flow() {
         {screen === "threads" && (
           <Threads threads={threads} tasks={tasks} busy={busy} onOpenThread={openThread} onNew={() => startCapture("voice", null, "thought", suggestion.prompt)} />
         )}
-        {screen === "progress" && <Progress progress={progress} threads={threads} />}
+        {screen === "calendar" && (
+          <CalendarTab
+            events={events}
+            tasks={tasks}
+            connected={calendarOn}
+            busy={busy}
+            onConnect={() => void connectCalendarNow()}
+            onRefresh={() => void refreshCalendar()}
+            onSeed={typeof __DEV__ !== "undefined" && __DEV__ ? () => void seedDemoCalendar().then(() => refreshCalendar()) : undefined}
+          />
+        )}
         {screen === "profile" && (
           <Profile
             profile={profile}
@@ -728,6 +750,7 @@ function Flow() {
                 setFunnel(true);
               })
             }
+            calendar={{ connected: calendarOn, onConnect: () => void connectCalendarNow() }}
             onFeedback={(m) => startCapture(m, null, "feedback")}
             onPlate={(plate) => void run(() => updateProfile({ ...profile, plate }))}
             notificationsOn={!profile.notificationsOff}
@@ -778,15 +801,15 @@ function Flow() {
             }
           />
         )}
-        {screen === "intake" && (
-          <Intake
-            drafts={intake.map((d) => threads.find((t) => t.id === d.id) ?? d)}
+        {screen === "intake" && plan && (
+          <WeekPlan
+            plan={plan}
             busy={busy}
-            onOpen={openThread}
-            onMore={() => startCapture("voice", null, "thought", "And what else?")}
+            onOpenProject={openThread}
+            onRecord={() => startCapture("voice", null, "thought", "Anything else on your mind?")}
             onDone={() => {
-              setIntake([]);
-              selectTab("threads");
+              setPlan(null);
+              selectTab("today");
             }}
           />
         )}

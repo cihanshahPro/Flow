@@ -53,9 +53,8 @@ const config: ExpoConfig = {
       "expo-calendar",
       {
         calendarPermission:
-          "Flowthread saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
-        // Reminders are never read or written.
-        remindersPermission: false,
+          "Flowthread reads your calendar to plan your week around what's already there and writes its moves into the gaps.",
+        remindersPermission: "Flowthread adds the things you're waiting on to a Flow list in Reminders so you're nudged to chase them.",
       },
     ],
   ],

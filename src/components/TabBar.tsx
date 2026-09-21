@@ -2,12 +2,12 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { C } from "./theme.ts";
 
-export type Tab = "today" | "threads" | "progress" | "profile";
+export type Tab = "today" | "threads" | "calendar" | "profile";
 
 const TABS: { id: Tab; label: string; glyph: string }[] = [
   { id: "today", label: "Today", glyph: "◉" },
   { id: "threads", label: "Threads", glyph: "≡" },
-  { id: "progress", label: "Progress", glyph: "▲" },
+  { id: "calendar", label: "Calendar", glyph: "▦" },
   { id: "profile", label: "Profile", glyph: "●" },
 ];
 

@@ -102,3 +102,58 @@ export const SHAPE_TOOL = {
     },
   },
 } as const;
+
+// ---------------------------------------------------------------- plan (the intake)
+export const PLAN_KINDS = ["action", "waiting", "appointment", "later"] as const;
+export const PLAN_AREAS = ["Work", "Money", "Legal & admin", "Health", "Home", "Family & friends", "Learning", "Other"] as const;
+export const planRequestSchema = z.object({
+  version: z.literal(1),
+  text: z.string(),
+  locale: z.string().max(35).default("en-US"),
+  context: z.string().max(4000).default(""),
+});
+export const planSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(120),
+        kind: z.enum(PLAN_KINDS),
+        project: z.string().max(120).default(""),
+        area: z.enum(PLAN_AREAS).optional(),
+        person: z.string().max(120).default(""),
+        when: z.string().max(120).default(""),
+        minutes: z.number().int().min(5).max(120).optional(),
+        evidence: z.string().trim().min(1).max(400),
+      }),
+    )
+    .max(12),
+});
+export type Plan = z.infer<typeof planSchema>;
+export const PLAN_TOOL = {
+  name: "submit_plan",
+  description: "Submit the items of the person's weekly plan.",
+  input_schema: {
+    type: "object",
+    required: ["items"],
+    properties: {
+      items: {
+        type: "array",
+        maxItems: 12,
+        items: {
+          type: "object",
+          required: ["title", "kind", "project", "area", "evidence"],
+          properties: {
+            title: { type: "string", description: "2 to 7 words; an action starts with a verb" },
+            kind: { type: "string", enum: [...PLAN_KINDS] },
+            project: { type: "string", description: "2 to 5 words naming what this belongs to; the same string for items that belong together; empty for a one-off" },
+            area: { type: "string", enum: [...PLAN_AREAS] },
+            person: { type: "string", description: "The other person, as named; empty when none" },
+            when: { type: "string", description: "The date or time exactly as said; empty when none" },
+            minutes: { type: "integer", minimum: 5, maximum: 120 },
+            evidence: { type: "string", description: "3 to 12 consecutive words copied exactly from the input" },
+          },
+        },
+      },
+    },
+  },
+};

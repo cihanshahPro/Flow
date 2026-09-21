@@ -18,13 +18,11 @@ import { C } from "./theme.ts";
 const RATINGS = ["Not me", "Not really", "Somewhat", "Mostly", "Very me"];
 
 /**
- * The funnel: value first, test second, one thing to do per screen.
- *   New people: welcome → first thought ("What's on your mind right now?").
- *   Later, by invitation from Today or Profile ("Let Flow get to know you"):
- *   the personality test (twenty taps) → the reveal → five guided profile
- *   questions answered by tapping suggestions → back to Today.
+ * The funnel: Welcome → Connect calendar → Record. Four taps from install to
+ * a planned week. The personality test and profile questions remain as
+ * optional steps reachable from Profile only; they are not in the path.
  */
-export type FunnelStep = "intro" | "test" | "reveal" | "plate" | "first";
+export type FunnelStep = "intro" | "calendar" | "test" | "reveal" | "plate" | "first";
 
 export const PLATE_QUESTIONS: {
   key: keyof Plate;
@@ -43,7 +41,7 @@ export const PLATE_QUESTIONS: {
 ];
 
 export const FIRST_QUESTION = "What's on your mind right now?";
-export const FIRST_PROMPT = `${FIRST_QUESTION} Say it the way it comes. Don't organise it — Flow will ask the rest.`;
+export const FIRST_PROMPT = `${FIRST_QUESTION} Everything, in any order. Don't organise it — Flow sorts it and shows you your week.`;
 
 export default function Funnel({
   profile,
@@ -54,6 +52,8 @@ export default function Funnel({
   onRecordFirst,
   onWriteFirst,
   onExit,
+  onConnectCalendar,
+  calendarConnected = false,
   busy = false,
   error = "",
 }: {
@@ -66,6 +66,9 @@ export default function Funnel({
   onWriteFirst: (prompt: string) => void;
   /** Leave the optional test/profile for later (only offered after the first thread). */
   onExit?: () => void;
+  /** Asks the phone once; resolves true when Flow may read the calendar. */
+  onConnectCalendar?: () => Promise<boolean>;
+  calendarConnected?: boolean;
   busy?: boolean;
   error?: string;
 }) {
@@ -105,9 +108,24 @@ export default function Funnel({
       )}
       {step === "intro" && (
         <>
-          <Text style={s.headline}>Record it once.{"\n"}Flow keeps the thread.</Text>
-          <Text style={s.body}>Say or type what's on your mind. Flow asks a couple of questions and picks one next step.</Text>
-          <Primary label="Get started" onPress={() => onStep("first")} busy={busy} />
+          <Text style={s.headline}>Say it once.{"\n"}Your week plans itself.</Text>
+          <Text style={s.body}>Talk about everything on your mind. Flow sorts it, puts it on your calendar around what's already there, and tells you what today looks like.</Text>
+          <Primary label="Get started" onPress={() => onStep(calendarConnected ? "first" : "calendar")} busy={busy} />
+        </>
+      )}
+      {step === "calendar" && (
+        <>
+          <Text style={s.kicker}>1 OF 2</Text>
+          <Text style={s.headline}>Let Flow see your week</Text>
+          <Text style={s.body}>Apple Calendar and any Google calendar on this phone, through one permission. Flow plans around what's already there and puts its moves in the gaps. It never changes your events.</Text>
+          <Primary
+            label="Connect calendar"
+            onPress={() => void (onConnectCalendar ? onConnectCalendar() : Promise.resolve(false)).then(() => onStep("first"))}
+            busy={busy}
+          />
+          <Pressable accessibilityRole="button" accessibilityLabel="Not now" onPress={() => onStep("first")} hitSlop={8} style={{ alignSelf: "center" }}>
+            <Text style={s.link}>Not now</Text>
+          </Pressable>
         </>
       )}
       {step === "test" && (
@@ -220,10 +238,10 @@ export default function Funnel({
       )}
       {step === "first" && (
         <>
-          <Text style={s.kicker}>YOUR FIRST THREAD</Text>
+          <Text style={s.kicker}>2 OF 2</Text>
           <Text style={s.headline}>{FIRST_QUESTION}</Text>
-          <Text style={s.body}>Say it the way it comes — a worry, a to-do, a half idea. You don't have to organise it.</Text>
-          <Text style={s.small}>Flow turns it into a thread, asks you one thing at a time, and offers one next move.</Text>
+          <Text style={s.body}>Everything, in any order — the lawyer, the app, the thing you keep forgetting. Don't organise it.</Text>
+          <Text style={s.small}>Flow sorts it and shows you your week. No questions.</Text>
           {/* Two equal ways in; the microphone is only asked for once Talk is chosen. */}
           <View style={s.choices}>
             <Pressable

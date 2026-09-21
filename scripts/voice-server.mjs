@@ -62,7 +62,7 @@ export async function transcribeAudio(bytes, config) {
     await rm(folder, { recursive: true, force: true });
   }
 }
-export function shapeText(text, binary, context = "") {
+export function shapeText(text, binary, context = "", mode = "") {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, [], { stdio: ["pipe", "pipe", "pipe"] });
     let output = "",
@@ -96,7 +96,7 @@ export function shapeText(text, binary, context = "") {
         finish(error);
       }
     });
-    child.stdin.end(context ? JSON.stringify({ text, context }) : text);
+    child.stdin.end(context || mode ? JSON.stringify({ text, context, ...(mode ? { mode } : {}) }) : text);
   });
 }
 export function createVoiceServer({
@@ -143,11 +143,12 @@ export function createVoiceServer({
       req.resume();
       return;
     }
-    if (req.method !== "POST" || req.url !== "/process") {
+    if (req.method !== "POST" || (req.url !== "/process" && req.url !== "/plan")) {
       reply(404, { error: "Not found" });
       req.resume();
       return;
     }
+    const wantPlan = req.url === "/plan";
     if (busy) {
       reply(503, {
         error:
@@ -226,11 +227,20 @@ export function createVoiceServer({
       let organization;
       if (shape) {
         try {
-          log(JSON.stringify({ id, stage: "organizing" }));
-          organization = await shape(text, context);
+          log(JSON.stringify({ id, stage: wantPlan ? "planning" : "organizing" }));
+          organization = await shape(text, context, wantPlan ? "plan" : "");
         } catch {
           log(JSON.stringify({ id, stage: "organizer-unavailable" }));
         }
+      }
+      if (wantPlan) {
+        if (!organization) {
+          reply(503, { error: "The planner is unavailable." });
+          return;
+        }
+        reply(200, { plan: organization });
+        log(JSON.stringify({ id, stage: "complete", elapsedMs: Date.now() - started }));
+        return;
       }
       reply(200, {
         text,
@@ -283,7 +293,7 @@ if (
     webOrigin: process.env.FLOW_PROCESSOR_WEB_ORIGIN,
     transcribe: (bytes) => transcribeAudio(bytes, config),
     shape: process.env.FLOW_SHAPER_BIN
-      ? (text, context) => shapeText(text, process.env.FLOW_SHAPER_BIN, context)
+      ? (text, context, mode) => shapeText(text, process.env.FLOW_SHAPER_BIN, context, mode)
       : undefined,
   });
   server.listen(

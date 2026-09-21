@@ -3,7 +3,6 @@ import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Note } from "../model.ts";
 import { emptyPlate, OBSTACLES, PLATE_AREAS, PLATE_PEOPLE, TIME_WINDOWS, type Plate, type Profile } from "../personality.ts";
-import { flowType } from "../flow-voice.ts";
 import { peopleMentioned } from "../thread.ts";
 import { profileProgress } from "../profile-progress.ts";
 import { C } from "./theme.ts";
@@ -25,6 +24,7 @@ export default function Profile({
   notes,
   busy = false,
   onRetake,
+  calendar,
   onFeedback,
   onPlate,
   notificationsOn = true,
@@ -44,6 +44,7 @@ export default function Profile({
   notes: Note[];
   busy?: boolean;
   onRetake: () => void;
+  calendar?: { connected: boolean; onConnect: () => void };
   onFeedback: (mode: "voice" | "text") => void;
   onPlate: (plate: Plate) => void;
   notificationsOn?: boolean;
@@ -58,9 +59,8 @@ export default function Profile({
   cloudShaping?: boolean;
   onCloudShaping?: (on: boolean) => void;
 }) {
-  const type = flowType(profile.answers);
   const plate = profile.plate ?? emptyPlate();
-  const progress = profileProgress(profile, threads);
+  const progress = profileProgress(profile, threads, calendar?.connected ?? false);
   const real = threads.filter((t) => !t.example);
   const people = peopleMentioned(real);
   const feedback = notes.filter((n) => n.captureKind === "feedback").length;
@@ -85,7 +85,7 @@ export default function Profile({
     <ScrollView contentContainerStyle={s.page}>
       <View style={s.header}>
         <Text style={s.brand}>Profile</Text>
-        <Text style={s.kicker}>{type ? type.name.toUpperCase() : "NOT SET"}</Text>
+        <Text style={s.kicker}>{threads.filter((t) => !t.example).length} THREADS</Text>
       </View>
       <View style={s.card} accessibilityLabel={`Profile ${progress.percent} percent complete`}>
         <View style={s.rowBetween}>
@@ -98,25 +98,16 @@ export default function Profile({
         {progress.next ? (
           <Text style={s.body}>
             Next: <Text style={s.bodyStrong}>{progress.next}</Text>
-            {progress.next === "Personality test" ? " — 2 minutes, and Flow talks to you in your own style." : ""}
           </Text>
         ) : (
           <Text style={s.body}>Flow has what it needs. Edit anything below whenever it changes.</Text>
         )}
-        {!progress.parts[0].done && (
-          <Pressable accessibilityRole="button" accessibilityLabel="Take the test" onPress={onRetake} disabled={busy} style={({ pressed }) => [s.primary, (pressed || busy) && { opacity: 0.6 }]}>
-            <Text style={s.primaryText}>Take the test · 2 min</Text>
+        {calendar && !calendar.connected && (
+          <Pressable accessibilityRole="button" accessibilityLabel="Connect calendar" onPress={calendar.onConnect} disabled={busy} style={({ pressed }) => [s.primary, (pressed || busy) && { opacity: 0.6 }]}>
+            <Text style={s.primaryText}>Connect calendar</Text>
           </Pressable>
         )}
-      </View>
-      <View style={s.card}>
-        <Text style={s.kicker}>YOUR FLOW TYPE</Text>
-        <Text style={s.title}>{type ? type.name : "Not set yet"}</Text>
-        <Text style={s.body}>{type ? type.line : "The two-minute test tells Flow how you tick."}</Text>
-        {type && <Text style={s.bodyStrong}>{type.promise}</Text>}
-        <Pressable accessibilityRole="button" accessibilityLabel={type ? "Redo the test and profile" : "Take the test"} onPress={onRetake} disabled={busy} hitSlop={8}>
-          <Text style={s.link}>{type ? "Redo the test and profile" : "Take the test · 2 min"}</Text>
-        </Pressable>
+        {calendar?.connected && <Text style={s.small}>Calendar connected — Flow plans around it and writes its moves into the gaps.</Text>}
       </View>
       <View style={s.card}>
         <View style={s.rowBetween}>

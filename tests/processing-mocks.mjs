@@ -11,10 +11,19 @@ export const harness = {
   native: null,
   ai: {},
   cloud: { status: 200, body: null, fail: null },
+  /** The intake: the plan the LAN processor answers with (null = local pass), the calendar, and what Flow wrote to the phone. */
+  plan: null,
+  events: [],
+  tasks: [],
+  calendarWrites: [],
   reset() {
     this.native = null;
     this.ai = {};
     this.cloud = { status: 200, body: null, fail: null };
+    this.plan = null;
+    this.events = [];
+    this.tasks = [];
+    this.calendarWrites = [];
     this.notes = [];
     this.drafts = [];
     this.fetches = 0;
@@ -36,6 +45,9 @@ export async function fetch(url, options) {
   harness.requests.push({ ...options, url });
   harness.fetches++;
   if (harness.offline) throw Error("network failed");
+  if (url.endsWith("/plan")) {
+    return { ok: !!harness.plan, status: harness.plan ? 200 : 503, json: async () => (harness.plan ? { plan: harness.plan } : { error: "no plan" }) };
+  }
   if (url.endsWith("/v1/shape")) {
     if (harness.cloud.fail) throw Error(harness.cloud.fail);
     return {
@@ -53,7 +65,25 @@ export async function fetch(url, options) {
   };
 }
 export async function loadWorkspace() {
-  return { notes: harness.notes, tasks: [] };
+  return { notes: harness.notes, tasks: harness.tasks };
+}
+export async function saveTask(task) {
+  harness.tasks = [...harness.tasks.filter((t) => t.id !== task.id), structuredClone(task)];
+}
+// calendar-read stand-ins
+export async function readWeek() {
+  return harness.events;
+}
+export async function calendarConnected() {
+  return true;
+}
+export async function writePlanEvent(input) {
+  harness.calendarWrites.push({ kind: "event", ...input });
+  return "evt-" + harness.calendarWrites.length;
+}
+export async function writeReminder(input) {
+  harness.calendarWrites.push({ kind: "reminder", ...input });
+  return { id: "rem-" + harness.calendarWrites.length, via: "reminders" };
 }
 export async function loadProfile() {
   return { version: 1, answers: [], stage: "intro", areaIndex: 0, areas: {} };

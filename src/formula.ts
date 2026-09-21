@@ -199,6 +199,29 @@ export const ROOFS: Record<Roof, RoofScript> = {
   },
 };
 
+/** The book's own words, the same for everyone. This is what Flow uses; the roofs remain for anyone who wants them. */
+export const PLAIN: RoofScript = {
+  keirsey: "Guardian",
+  name: "Steward",
+  words: "concrete",
+  aims: "cooperative",
+  need: "to be understood before being helped",
+  reflects: "what they just said, in their words",
+  questions: {
+    mind: MIND,
+    else: ELSE,
+    challenge: "What's the real challenge here for you?",
+    want: "What do you want?",
+    help: HELP,
+    trade: "If you're saying yes to this, what are you saying no to?",
+    useful: USEFUL,
+  },
+  summaryLead: "Here's how I see it:",
+  moveShape: "one concrete step with a moment to do it",
+  full: "✅ I've got the full picture.",
+  done: "✅ Done.",
+};
+
 /** Keirsey's rule: S+P Artisan, S+J Guardian, N+F Idealist, N+T Rational. */
 export function roofFor(code: string): Roof {
   const c = code.toUpperCase();

@@ -14,7 +14,7 @@ import { whenFromAnswer, type When } from "./when.ts";
 import { areaPhrase, type Plate } from "./personality.ts";
 import type { ThreadContext } from "./ai-policy.ts";
 import { QUESTION_ORDER, voice, type Mode, DEFAULT_MODE } from "./flow-voice.ts";
-import { formulaFor, formulaPrompt, nextStage, progressOf, understood, type Formula, type Stage, type ThreadState } from "./formula.ts";
+import { PLAIN, formulaFor, formulaPrompt, nextStage, progressOf, understood, type Formula, type Stage, type ThreadState } from "./formula.ts";
 
 /**
  * A thread is one conversation between the user and Flow about one subject.
@@ -246,7 +246,7 @@ export function isUnderstood(thread: Pick<ThoughtDraft, "messages" | "threadPoin
   return understoodPercent(thread, { elseRounds: 1 }) >= 100;
 }
 
-export const DEFAULT_FORMULA: Formula = formulaFor("ISTJ");
+export const DEFAULT_FORMULA: Formula = { ...formulaFor("ISTJ"), script: PLAIN };
 
 export function isReady(points: ThreadPoint[] | undefined): boolean {
   const known = (points ?? []).filter((p) => p.state === "known");
@@ -282,7 +282,8 @@ export function extractDueHints(text: string, now = new Date()): DueHint[] {
     const m = lower.match(new RegExp(`\\b(next |this )?${name}\\b`));
     if (!m) continue;
     let ahead = (i - base.getDay() + 7) % 7;
-    if (ahead === 0) ahead = 7;
+    // "this Monday" said on a Monday is today; a bare "Monday" is next week's.
+    if (ahead === 0) ahead = m[1]?.trim() === "this" ? 0 : 7;
     if (m[1]?.trim() === "next" && ahead < 7) ahead += 7;
     add(new Date(base.getTime() + ahead * 864e5), m[0].trim());
   }
@@ -779,7 +780,7 @@ export function respondToRecording(
     plate?: Plate;
     /** Other subjects the shaper heard in this message; Flow offers to split them off. */
     branches?: { title: string; evidence: string }[];
-    /** An intake starter: the transcript and Flow's reflection, no question until the person opens the thread. */
+    /** An intake turn: the transcript and Flow's reflection, no question until the person opens the thread. */
     quiet?: boolean;
   } = {},
 ): ThoughtDraft {
@@ -853,7 +854,7 @@ export function respondToRecording(
     kind: "ack",
     text: reply || templateReply(text, thread.threadPoints, points, isFirst, mode, noteId),
   });
-  if (options.quiet && isFirst) return { ...withMessages(next, added), hypeGiven: [...hyped] };
+  if (options.quiet) return { ...withMessages(next, added), hypeGiven: [...hyped] };
   // Several subjects in one breath: offer to give the others their own thread, once.
   const heard = [...(options.branches ?? []), ...detectBranches(text, next)];
   const same = (a: string, b: string) => {

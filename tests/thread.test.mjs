@@ -177,7 +177,7 @@ test("the meter climbs with the script and nothing is offered before How can I h
   assert.equal(offer.kind, "offer");
   assert.equal(offer.chips, undefined, "a move has no buttons; it is accepted by replying");
   assert.match(offer.text, /Say “do it”/);
-  assert.match(offer.text, /If you commit to this, what are you saying no to\?/, "the trade-off question rides with the move");
+  assert.match(offer.text, /If you're saying yes to this, what are you saying no to\?/, "the trade-off question rides with the move");
   // A further recording does not hype again.
   const again = respondToRecording(t, "n9", "Also I should ask Dad for the trailer.", { mode: "builder", now });
   assert.equal(again.messages.filter((m) => m.kind === "hype").length, 1);

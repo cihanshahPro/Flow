@@ -29,6 +29,13 @@ export type Task = {
   followUp?: "waiting" | "blocked";
   completedAt?: string;
   reviewedAt?: string;
+  /** The map (see src/map.ts): what kind of item, which area and project it sits on, and its place on the phone. */
+  kind?: "action" | "waiting" | "appointment" | "later";
+  area?: string;
+  projectId?: string;
+  later?: boolean;
+  eventId?: string;
+  reminderId?: string;
 };
 export type Note = {
   captureKind?: "thought" | "note" | "feedback";

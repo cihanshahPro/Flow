@@ -2,14 +2,16 @@ import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ThoughtDraft } from "../drafts.ts";
 import type { Task } from "../model.ts";
-import { attentionLabel, clarity, moveHeadline, pendingMessage } from "../thread.ts";
+import { moveHeadline } from "../thread.ts";
+import type { CalEvent, WatchOut } from "../calendar.ts";
+import { timeLabel } from "../calendar.ts";
 import Celebrate from "./Celebrate.tsx";
 import Thinking from "./Thinking.tsx";
 import { C } from "./theme.ts";
 
 /**
- * Today: your one Next move, what Flow suggests recording, and only the
- * threads that need you right now. There is nothing to organise.
+ * Today's plan: what's on the calendar, your one move, anything to chase,
+ * tomorrow's watch-out — and the Record button. There is nothing to organise.
  */
 export default function Today({
   threads,
@@ -23,7 +25,8 @@ export default function Today({
   busy = false,
   processing = false,
   onCancelProcessing,
-  invite,
+  day,
+  calendar,
   notice = "",
   error = "",
   onRecord,
@@ -50,8 +53,10 @@ export default function Today({
   /** Flow is shaping a thought in the background. */
   processing?: boolean;
   onCancelProcessing?: () => void;
-  /** The soft "let Flow get to know you" card; null once done or snoozed. */
-  invite?: { onStart: () => void; onLater: () => void; percent?: number } | null;
+  /** Today as the calendar and the map see it. */
+  day?: { events: CalEvent[]; moves: Task[]; chases: Task[]; tomorrow: WatchOut[] };
+  /** Calendar connection: shown as one card until connected. */
+  calendar?: { connected: boolean; onConnect: () => void };
   notice?: string;
   error?: string;
   onRecord: () => void;
@@ -63,10 +68,10 @@ export default function Today({
   onOpenMe: () => void;
   onDismissNotice: () => void;
 }) {
-  const lastAt = (t: ThoughtDraft) => t.messages?.at(-1)?.createdAt ?? t.createdAt;
-  const sorted = threads
-    .filter((t) => !t.example && t.state !== "parked" && !t.resolvedAt)
-    .sort((a, b) => Number(!!pendingMessage(b)) - Number(!!pendingMessage(a)) || lastAt(b).localeCompare(lastAt(a)));
+  const onCalendar = day?.events ?? [];
+  const chases = day?.chases ?? [];
+  const tomorrow = day?.tomorrow ?? [];
+  void threads;
   return (
     <View style={s.root}>
       <View style={s.header}>
@@ -145,48 +150,48 @@ export default function Today({
             </Pressable>
           </View>
         </View>
-        {invite && (
+        {calendar && !calendar.connected && (
           <View style={s.suggest}>
-            <Text style={s.kickerBlue}>MAKE FLOW FIT YOU</Text>
-            <Text style={s.headline}>Let Flow get to know you</Text>
-            {typeof invite.percent === "number" && <Text style={s.kicker}>PROFILE {invite.percent}% COMPLETE</Text>}
-            <Text style={s.body}>2 minutes — makes its questions fit you.</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Get to know me" onPress={invite.onStart} disabled={busy} style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}>
-              <Text style={s.recordText}>Start</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Later" onPress={invite.onLater} hitSlop={8} style={{ alignSelf: "center" }}>
-              <Text style={s.link}>Later</Text>
+            <Text style={s.kickerBlue}>YOUR WEEK</Text>
+            <Text style={s.headline}>Let Flow see your calendar</Text>
+            <Text style={s.body}>Apple and Google, through the phone. Flow plans around what's already there and puts its moves in the gaps.</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Connect calendar" onPress={calendar.onConnect} disabled={busy} style={({ pressed }) => [s.record, (pressed || busy) && { opacity: 0.6 }]}>
+              <Text style={s.recordText}>Connect calendar</Text>
             </Pressable>
           </View>
         )}
-        {sorted.length > 0 && (
+        {day && (onCalendar.length > 0 || chases.length > 0 || tomorrow.length > 0) && (
           <View style={s.threads}>
-            <Text style={s.kicker}>YOUR THREADS</Text>
-            {sorted.map((t) => {
-              const meter = clarity(t.threadPoints);
-              const pending = pendingMessage(t);
-              return (
-                <Pressable
-                  key={t.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open thread ${t.title}`}
-                  onPress={() => onOpenThread(t.id)}
-                  disabled={busy}
-                  style={({ pressed }) => [s.card, pressed && { opacity: 0.7 }]}
-                >
-                  <View style={s.cardRow}>
-                    <Text style={s.cardTitle} numberOfLines={2}>
-                      {t.title}
+            <Text style={s.kicker}>TODAY'S PLAN</Text>
+            {onCalendar.map((e) => (
+              <View key={e.id} style={[s.line, e.mine && s.lineMine]}>
+                <Text style={[s.lineTime, e.mine && s.lineTimeMine]}>{e.allDay ? "all day" : timeLabel(e.start)}</Text>
+                <Text style={[s.lineTitle, e.mine && s.lineTitleMine]} numberOfLines={2}>
+                  {e.title}
+                </Text>
+              </View>
+            ))}
+            {chases.map((t) => (
+              <View key={t.id} style={[s.line, s.lineChase]}>
+                <Text style={[s.lineTime, s.lineTimeChase]}>chase</Text>
+                <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
+                  {t.waitingOn}: {t.title}
+                </Text>
+              </View>
+            ))}
+            {tomorrow.length > 0 && (
+              <>
+                <Text style={[s.kicker, { marginTop: 6 }]}>TOMORROW · WATCH OUT</Text>
+                {tomorrow.map((w, i) => (
+                  <View key={i} style={[s.line, s.lineChase]}>
+                    <Text style={[s.lineTime, s.lineTimeChase]}>{w.kind === "full" ? "full" : w.kind === "trip" ? "away" : "soon"}</Text>
+                    <Text style={[s.lineTitle, s.lineTitleChase]} numberOfLines={2}>
+                      {w.title}
                     </Text>
-                    {pending && <View style={s.dotBadge} accessibilityLabel="Needs you" />}
                   </View>
-                  <Text style={[s.cardMeta, pending && s.cardMetaLive]}>{attentionLabel(t, tasks)}</Text>
-                  <View style={s.track}>
-                    <View style={[s.fill, { width: `${Math.round((meter.known / meter.total) * 100)}%` }]} />
-                  </View>
-                </Pressable>
-              );
-            })}
+                ))}
+              </>
+            )}
           </View>
         )}
       </ScrollView>
@@ -218,7 +223,16 @@ const s = StyleSheet.create({
   nextThread: { fontSize: 13, color: C.heroMuted },
   done: { backgroundColor: C.lime, borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 4 },
   doneText: { color: C.onLime, fontSize: 16, fontWeight: "800" },
-  threads: { gap: 10, marginTop: 10 },
+  threads: { gap: 6, marginTop: 4 },
+  line: { flexDirection: "row", gap: 10, alignItems: "flex-start", backgroundColor: C.card, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 },
+  lineMine: { backgroundColor: C.blueSoft, borderLeftWidth: 3, borderLeftColor: C.blue },
+  lineChase: { backgroundColor: "#FFF3E2", borderLeftWidth: 3, borderLeftColor: "#FFB86B" },
+  lineTime: { width: 58, fontSize: 12, fontWeight: "700", color: C.muted, paddingTop: 2 },
+  lineTimeMine: { color: C.blue },
+  lineTimeChase: { color: "#8A5A12" },
+  lineTitle: { flex: 1, fontSize: 15, lineHeight: 20, fontWeight: "600", color: C.ink },
+  lineTitleMine: { color: C.blue },
+  lineTitleChase: { color: "#8A5A12" },
   card: { padding: 16, borderRadius: 18, backgroundColor: C.card, gap: 8 },
   cardRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardTitle: { flex: 1, fontSize: 17, lineHeight: 22, fontWeight: "700", color: C.ink },

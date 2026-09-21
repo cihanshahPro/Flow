@@ -61,7 +61,7 @@ test("an understood thread shows the hype bubble, Flow gets it, and a move with 
   );
   const found = labels(view);
   assert.ok(!found.includes("Do this"), "a move is accepted by replying, not by a button");
-  assert.match(textOf(view), /Clear picture/);
+  assert.match(textOf(view), /full picture/);
   assert.match(textOf(view), /Flow gets it/);
   assert.match(textOf(view), /Say “do it”/);
   await act(async () => view.unmount());
@@ -104,39 +104,44 @@ test("the meter reflects the fingerprint and expands to the person's own evidenc
   await act(async () => view.unmount());
 });
 
-test("Today is the Next card, Flow's suggestion with one Record button, and only the threads that need you", async () => {
-  const a = respondToRecording(suggestDraft("a", vague, now), "n1", vague, { now });
+test("Today is the day's plan: what's on the calendar, the one move, chases, tomorrow's watch-out, one Record button", async () => {
   const b = toMove(respondToRecording(suggestDraft("b", rich, now), "n2", rich, { now }));
   const task = { id: "flow:b:auto", title: "Collect the receipts", done: false, createdAt: now.toISOString(), plannedDate: "" };
-  const opened = [];
+  const events = [
+    { id: "sync", calendarId: "c", title: "Team sync", start: "2026-09-19T15:00:00.000Z", end: "2026-09-19T15:45:00.000Z", allDay: false },
+    { id: "mine", calendarId: "c", title: "Call the DUI lawyer", start: "2026-09-19T16:00:00.000Z", end: "2026-09-19T16:20:00.000Z", allDay: false, mine: true, ref: "flow:x" },
+  ];
+  const chase = { id: "flow:dui:chase", title: "Lawyer's follow-up", kind: "waiting", waitingOn: "the lawyer", chaseDate: "2026-09-19", done: false, createdAt: now.toISOString(), plannedDate: "" };
   const view = await render(
     React.createElement(Today, {
-      threads: [a, b, { ...suggestDraft("ex", rich, now), example: true }],
-      tasks: [task],
-      nextTask: task,
-      nextThread: b,
-      levelLabel: "Starting point",
+      threads: [b], tasks: [task, chase], nextTask: task, nextThread: b, levelLabel: "Starting point",
       suggestion: { title: "Health", prompt: "What's the one thing in health hanging over you?" },
-      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {},
-      onOpenThread: (id) => opened.push(id),
+      day: { events, moves: [], chases: [chase], tomorrow: [{ kind: "important", date: "2026-09-20", title: "Court hearing", note: "tomorrow · 10am" }] },
+      calendar: { connected: true, onConnect() {} },
+      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
     }),
   );
   const found = labels(view);
   assert.equal(found.filter((l) => l === "Record").length, 1);
   assert.ok(found.includes("Done"));
-  assert.ok(found.includes("Put it on my calendar"));
-  assert.ok(found.includes("Your level"));
-  assert.ok(!found.some((l) => /Library|My mind|Settings/.test(l)));
-  const cards = found.filter((l) => l.startsWith("Open thread "));
-  assert.equal(cards.length, 2, "both threads need the person; example drafts are never shown");
+  assert.ok(!found.some((l) => /Library|My mind|Settings|Get to know me|Connect calendar/.test(l)));
   const text = textOf(view);
-  assert.match(text, /YOUR THREADS/);
-  assert.match(text, /Flow has a question/);
-  assert.match(text, /Flow has a move for you/);
-  const card = view.root.findAllByType("Pressable").find((n) => n.props.accessibilityLabel === `Open thread ${a.title}`);
-  await act(async () => card.props.onPress());
-  assert.deepEqual(opened, ["a"]);
+  assert.match(text, /TODAY'S PLAN/);
+  assert.match(text, /Team sync/);
+  assert.match(text, /Call the DUI lawyer/);
+  assert.match(text, /"the lawyer",": ","Lawyer's follow-up"/);
+  assert.match(text, /TOMORROW · WATCH OUT/);
+  assert.match(text, /Court hearing/);
+  assert.doesNotMatch(text, /YOUR THREADS|MAKE FLOW FIT YOU/);
   await act(async () => view.unmount());
+  const off = await render(
+    React.createElement(Today, {
+      threads: [], tasks: [], levelLabel: "Me", suggestion: { title: "x", prompt: "y" }, calendar: { connected: false, onConnect() {} },
+      onRecord() {}, onWrite() {}, onRecordOther() {}, onDoneNext() {}, onCalendarNext() {}, onOpenMe() {}, onDismissNotice() {}, onOpenThread() {},
+    }),
+  );
+  assert.ok(labels(off).includes("Connect calendar"), "one card until the calendar is connected");
+  await act(async () => off.unmount());
 });
 
 test("an empty Today is Flow's suggested prompt with one Record button", async () => {
@@ -174,7 +179,7 @@ test("Threads is a Messages-style list: newest first, quiet ones last, a dot whe
   const picked = [];
   const bar = await render(React.createElement(TabBar, { active: "today", badge: 2, onSelect: (t) => picked.push(t) }));
   const tabs = bar.root.findAllByType("Pressable").map((n) => n.props.accessibilityLabel);
-  assert.deepEqual(tabs, ["Today", "Threads", "Progress", "Profile"]);
+  assert.deepEqual(tabs, ["Today", "Threads", "Calendar", "Profile"]);
   assert.match(textOf(bar), /"2"/);
   await act(async () => bar.root.findAllByType("Pressable")[3].props.onPress());
   assert.deepEqual(picked, ["profile"]);
