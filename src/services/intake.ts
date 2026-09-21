@@ -8,7 +8,7 @@ import { calendarContextText, type PlanShapeItem } from "../ai-policy";
 import { planText, type ShapeOptions } from "./processors";
 import { readWeek, writePlanEvent, writeReminder } from "./calendar-read";
 import { eventsOn, timeLabel, watchOuts, weekDays, type CalEvent, type WatchOut } from "../calendar";
-import { attachItems, placePlan, type Area, type Placement, type PlanItem, type ProjectRef } from "../map";
+import { AREAS, attachItems, placePlan, type Area, type Placement, type PlanItem, type ProjectRef } from "../map";
 import { contentWords as contentWordsOf, localPlan } from "../intake";
 import { extractDueHints, respondToRecording } from "../thread";
 
@@ -90,7 +90,8 @@ export async function runIntake(note: Note, text: string, options: ShapeOptions 
   // 2. Attach each item to the map.
   const live = live0;
   const refs: ProjectRef[] = live.map((t) => ({ id: t.id, title: t.title, area: t.area, people: t.people, words: [t.source, ...t.updates].join(" ") }));
-  const attached = attachItems(items, refs);
+  // A project named after an area ("Work", "Other") is the model shrugging: that item is a one-off on its area.
+  const attached = attachItems(items.map((i) => ((AREAS as readonly string[]).includes(i.project.trim()) ? { ...i, project: "" } : i)), refs);
   // 3. Place around the week.
   const placements = placePlan(attached, events, now);
   // 4. Projects: a thread per project (GTD: more than one step, or a named outcome); one-offs sit on their area.
