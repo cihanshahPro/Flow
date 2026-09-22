@@ -11,3 +11,11 @@
 | D7 | Onboarding order | test-first · value-first | Cihan | Value-first (Samil's), test by invitation later | 2026-09-20 |
 | D8 | Personality layer in the path | in · out | Cihan | Out; same plain questions for everyone | 2026-09-20 |
 | D9 | Real personal data in git | allowed · never | both | Never; invented fixtures of the same shape | 2026-09-21 |
+| D10 | Tab bar: Muse's Chat · Library · Ideas · Tasks · Apps + ☰ instead of Today · Threads · Calendar · Me | yes · keep v2 | Cihan | — | |
+| D11 | Home = Chat (main thread with the briefing) instead of Today | Chat · Today | Cihan | — | |
+| D12 | Plus price | $9.99 · $14.99 · $19.99 /mo | Cihan | — (plan proposes $14.99, $99/yr; Max $59.99) | |
+| D13 | Launch without Gmail (CASA takes weeks)? | launch, add later · wait | Cihan | — | |
+| D14 | Avatar/character in the header | avatar · one mark | Cihan | — (plan proposes one mark) | |
+| D15 | App name | Dote · Seer · Spur · Okay · Then | Cihan | **Okay** | 2026-09-21 |
+| D16 | Brain runtime | own worker only · OpenClaw Gateway per-user agents behind the worker | Cihan | — (plan proposes the Gateway) | |
+| D17 | Cloud model | Muse Spark 1.3 (Meta API) · Claude · both by tier | Cihan | — (plan proposes both by tier; never the Contributor variant) | |

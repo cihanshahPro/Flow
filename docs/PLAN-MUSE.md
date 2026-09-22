@@ -1,6 +1,6 @@
 # Plan — make Flow look and work like Muse, patch its gaps, ship
 
-Written 21 Sep 2026 from the Muse App Store listing (six screenshots, v8.0), Meta's July newsroom post, and four reviews (saner.ai, saascrmreview, usecarly, myclaw). Nothing here is built yet. This is the plan the owner asked for before any code changes. Decisions it needs are at the end as D10–D14.
+Written 21 Sep 2026 from the Muse App Store listing (six screenshots, v8.0), Meta's July newsroom post, and four reviews (saner.ai, saascrmreview, usecarly, myclaw). Nothing here is built yet. This is the plan the owner asked for before any code changes. Decisions it needs are at the end as D10–D14; D15 (name) is answered: **Okay**. §12–§14 (full gap list, the brain, the business model) added the same day.
 
 ## 1 · What Muse is, exactly
 
@@ -139,8 +139,91 @@ Nothing is built until D10 and D11 are answered. D12–D14 can be answered befor
 | Sail | smooth sailing — the Flow feeling | 26 tiny apps | sail.app taken |
 | Told / Said / Sure / Done | replies and states | 2–15 tiny apps | weaker as a word on an icon |
 
-Recommendation: **Okay**. It reads like Apple (Journal, Freeform, Reminders), it is what the app says after every message, and no one has taken it. App Store name "Okay — say it, it's handled". Runner-up **Then** (the one with a free `.app`). Trademark: "Okay" is a common word; a class 9/42 mark is weak but the name is usable — Samil checks USPTO before build 12. Bundle id and URL scheme change in build 10 (new App Store Connect record).
+**Answered 21 Sep 2026: Okay.** It reads like Apple (Journal, Freeform, Reminders), it is what the app says after every message, and no one has taken it. App Store name "Okay — say it, it's handled". Runner-up **Then** (the one with a free `.app`). Trademark: "Okay" is a common word; a class 9/42 mark is weak but the name is usable — Samil checks USPTO before build 12. Bundle id and URL scheme change in build 10 (new App Store Connect record).
 
 ## 11 · Goals as the funnel
 
 Muse's Tasks tab is goals with check-ins. Ours: onboarding ends with one question — "What's one thing you want done this month?" — that becomes the first thread with a step tree, and the first Idea the next morning is its first step. Every later voice dump adds threads to the same Tasks tab. Progress ring per goal = steps done. Nothing else in onboarding (D7 value-first stands).
+
+## 12 · Every gap, Muse vs Okay, and how each one closes
+
+Sources: the six listing screens, Meta newsroom (Jul 2026), Stark Insider's Muse-vs-OpenClaw piece (the agent itself described its runtime), saner.ai, saascrmreview, docs.openclaw.ai. "Okay today" = the app on `kodavena/v1.0.0` at `20cb5f3`.
+
+| # | Muse has | Okay today | Close it with | Build |
+|---|---|---|---|---|
+| 1 | One main chat with the agent; topic threads behind ☰ | One chat *per thread*, no main chat | Main thread "Okay" as home; topic threads reachable from ☰ and from cards | 10 |
+| 2 | Status line under the name while it works ("Booking reservation…") | Thinking dots | Status line fed by the gateway's stream ("Reading your week…", "Placing 3 moves…") | 10 |
+| 3 | Cards inside the chat (document, browser, checkout, tracker) | Summary card + step tree | Card kinds: briefing, calendar-move (Not now / Do it), chase-draft (Edit / Send), plan-locked, week | 11 |
+| 4 | `+ Message 🎤` composer, attach on the left | Text composer + separate record button | Same composer; `+` = photo/file to the thread, 🎤 = voice dump | 10 |
+| 5 | Persistent memory: MEMORY.md, USER.md, SOUL.md, semantic search over past chats | Profile + threads in AsyncStorage, no search | Per-user agent workspace on the gateway (MEMORY.md, USER.md); "What Okay knows" page edits USER.md; search = gateway memory search | 11 |
+| 6 | Daily briefing at your time, reads calendar + email, flags double bookings | Morning push "Your day" + Today screen | Cron on the agent at the user's rhythm time → briefing message in the main chat + push; conflicts from `replanConflicts` | 11 |
+| 7 | Standing tasks with a time ("every Friday 5pm…") | Routines (fixed kinds) and Plan tomorrow | Free-text standing tasks → agent cron; listed in Upcoming with last/next run | 11 |
+| 8 | Goals with check-ins | Threads with step trees, no check-ins | Tasks tab = goals; a check-in message per goal on its cadence; progress ring = steps done | 11 |
+| 9 | Follows up with people (sends the email itself, after approval) | Waiting-on rows with chase dates | Chase-draft card → share sheet (Messages/WhatsApp/Mail); the user taps send; no approval layer (P4) | 11 |
+| 10 | Ideas tab: proactive offers from connector data | `suggestForTomorrow`, WATCH OUT | Ideas generated nightly by the agent from calendar, waiting-on, routines, unlocked tomorrow; Google data later | 11 |
+| 11 | Connectors: Gmail, Google Calendar, Outlook, Google Docs/Contacts, Spotify, Plaid, OpenTable, Ticketmaster, Apple Health, Peloton, Withings, Function Health, Hue, Telegram, FB/IG/Threads/Messenger, Custom | Apple Calendar + Reminders (two-way) | Apps tab: Apple Calendar, Reminders, Contacts (on device) · Google Calendar (build 12) · Gmail (after CASA) · Apple Health (read, later). Nothing else at launch | 10/12 |
+| 12 | Browser agent: fills forms, books, buys, tracks prices | — | Not built. Position against it ("nothing to approve because it never spends") | — |
+| 13 | Sentinel: Deny/Allow for every send/spend, policy in Settings | — | Not needed: Okay never sends or spends. Only card with buttons = chase draft, and the user sends it | — |
+| 14 | Library: documents, images, podcasts it made | Recording summaries under Threads | Library tab: summaries, week plans, locked tomorrows; "ask across my notes" = chat with Library as context | 10/11 |
+| 15 | WhatsApp channel: talk to Muse from WhatsApp | — | Gateway WhatsApp channel bound per agent (`bindings` by `accountId`); one number, routed by sender. Ships after 12 | 13 |
+| 16 | Web app (muse.ai) | — | Gateway WebChat behind Sign in with Apple; after 13 | 14 |
+| 17 | Android | — | Expo builds Android; after iOS launch | 14 |
+| 18 | Voice input | Voice dump → threads | Keep; Muse's is plain dictation, ours becomes threads + steps | — |
+| 19 | Incognito chats | — | "Don't remember this" toggle on a thread → agent runs with memory off | 12 |
+| 20 | Identity: name, avatar, vibe | — | Out (D8, D14): one mark, no character | — |
+| 21 | Subagents, skills, cron hooks | — | Gateway provides all three; we use cron (6, 7) and one skill (planner) | 11 |
+| 22 | Usage meter and tiers with weekly reset | — | §14 | 12 |
+| 23 | Onboarding under one minute | Value-first, 4 screens | Sign in with Apple → Calendar + Reminders permission → one goal question → first briefing in the chat within 10 s | 10 |
+| 24 | Meta account, US-only, 18+ | Sign in with Apple, worldwide | Keep; it is the wedge | — |
+
+## 13 · The brain — where Muse's power comes from, and how Okay gets the same shape
+
+**What Muse runs on.** A persistent Linux VM per user with a bash shell, a Chromium browser that keeps its sessions, `MEMORY.md` / `USER.md` / `SOUL.md`, semantic search over memory and chats, subagents, reusable skills, cron with event hooks; a separate Sentinel agent gates every network action. The model is **Muse Spark 1.3** (1M context), built under Alexandr Wang. The agent itself says its shape is "an agent with a real computer, file access, browser, messaging channels, and markdown config files for its persona" — the shape of **OpenClaw**, the MIT-licensed gateway (channels: WhatsApp, iMessage, Telegram, Signal, Slack, WebChat; memory files; cron/hooks; skills; multi-agent with per-agent workspace, `agentDir` and SQLite session store; iOS/Android nodes).
+
+**Two facts that change the plan.**
+1. **Muse Spark is a public API.** `https://api.meta.ai/v1`, model `meta/muse-spark-1.3`, $1.25 in / $0.15 cached / $4.25 out per 1M tokens (a "Contributor" variant at $0.10 / $0.002 / $0.20 lets Meta train on the content — **not for us**, it kills P8). Okay can run on the *same model* as Muse, or on Claude, behind one switch.
+2. **OpenClaw is the runtime Muse is shaped after, and it is free.** One Gateway process runs many isolated agents (`agents.entries.<id>.workspace` / `agentDir`), each with its own memory, sessions, cron and channel binding. It exposes `POST /v1/chat/completions` (OpenAI-shaped; `model` = agent id, `user` = stable session key) and the OpenResponses API on port 18789. The owner already runs OpenClaw.
+
+**Okay's brain, three layers.**
+
+| Layer | What | Who |
+|---|---|---|
+| On device | Apple Foundation Models shaper + `localPlan` floor — Free tier, offline, automatic calls (D2) | exists |
+| Gateway | One OpenClaw Gateway on a Linux box (Hetzner/Fly, EU). One agent per user: `agents.entries.<userId>` with workspace = `USER.md` (what Okay knows), `MEMORY.md`, `AGENTS.md` (the planner rules = today's `CHAT_INSTRUCTIONS`/`PLAN` contract), cron entries for briefing/standing tasks/goal check-ins. Tools allowlist: memory, cron, skills only — **no exec, no browser, sandbox off** (nothing to escape). `tools.agentToAgent.enabled: false`, `tools.sessions.visibility` restricted. Model per agent: `meta/muse-spark-1.3` or `anthropic/claude-*` by tier | Cihan's side builds the agent template and the planner skill; Samil hosts |
+| Proxy | The existing Cloudflare worker becomes the only thing the app talks to: verifies Sign in with Apple, maps user → agent id, forwards to the gateway with the gateway token (which is owner-level and must never reach the phone), meters usage per user, gates by tier. Keeps `/v1/plan` as is | Samil |
+
+**What stays on the phone.** Apple Calendar, Reminders, Contacts never leave the device. The app sends the agent busy ranges (D1) and the thread text; the agent replies with a plan/actions (`move`, `chase`, `step`) and the app applies them to EventKit — the same contract as today's `/v1/chat`. Google Calendar is the one connector the gateway holds itself (OAuth token in the agent's `agentDir`).
+
+**What Okay does not copy.** The VM-with-browser and the Sentinel. They exist because Muse acts in your accounts. Okay plans, follows up, and drafts; the user does the last tap. That is 90% of the value at 5% of the infrastructure.
+
+**Cost of the brain per active user.** A planning turn is ~6K tokens in (mostly cached) and ~400 out. 30 turns a day + briefing + nightly Ideas ≈ 6M tokens a month: Muse Spark standard ≈ **$2–3 / user / month**, Claude Haiku 4.5 less, Claude Sonnet ≈ $5. Free tier on-device costs nothing.
+
+## 14 · Business model — Muse's, slightly cheaper
+
+**Muse today.** Free ≈ 100M "Muse tokens" a week · Power $20/mo (iOS) or $16 (web) = 500M/wk · Maximum $100 / $80 = 3B/wk. Weekly reset, monthly renewal. Meter visible in the app. Zuckerberg: "most people to stay on the free tier". Complaint on record: the meter is opaque and a normal day can burn most of it (G5).
+
+**Okay.** Same shape, three tiers, weekly reset, meter in ☰ — but the unit is *turns*, not tokens (a turn = one message answered, a briefing, or an Idea batch). Users understand turns; nobody understands 100M tokens.
+
+| Tier | Price (iOS) | Price (web, when there is one) | Allowance / week | Brain |
+|---|---|---|---|---|
+| Free | $0 | $0 | On-device unlimited · 20 cloud turns | Apple on-device; cloud turns on Muse Spark |
+| **Plus** | **$14.99/mo · $99/yr** | $11.99/mo | 500 turns | Muse Spark 1.3 or Claude Haiku 4.5 |
+| Max | $59.99/mo | $49.99/mo | 3,000 turns + WhatsApp channel + Google connectors first | Claude Sonnet / Opus for chat, Spark for cron |
+
+Plus is 25% under Muse Power; Max is 40% under Muse Maximum. Gross margin at Plus with a heavy user (500 turns × 6.5K tokens ≈ 3.3M tokens/wk ≈ 14M/mo) ≈ $6 of model cost on Spark against $14.99 → **~60%** after Apple's 15% small-business cut; a typical user costs under $3 → ~80%. Annual at $99 is the one to push (Muse has no annual).
+
+Two more that Muse does not do: **founding price** — first 1,000 Plus subscribers keep $9.99 forever (fills the review queue in week one); **family**: not at launch.
+
+StoreKit 2 products: `okay.plus.monthly`, `okay.plus.yearly`, `okay.max.monthly`. The worker reads the App Store Server API to set the tier per user; the meter counts turns on the worker. Free users never hit the gateway after their 20 turns; the app says so plainly and keeps working on-device.
+
+## 15 · Build order, updated for §12–§14
+
+| Build | Adds | Done when |
+|---|---|---|
+| 10 · Shell + name | Rename to Okay (bundle id, scheme `okay://`, new ASC record); five tabs; ☰; main chat; composer; Library; Tasks (Today+Calendar); Apps with Apple connectors; onboarding with the goal question | Skeleton v3 = app screen for screen; owner's data loads; `npm run verify` green |
+| 11 · Gateway brain + Muse behaviours | Agent template (AGENTS.md planner rules, USER.md, cron); worker proxy; briefing in chat; standing tasks; goal check-ins; Ideas; cards (move, chase, plan-locked); Upcoming; Memory page | Briefing arrives on the simulator at the rhythm time from a real gateway; each card kind has a fixture test; chase draft opens the share sheet |
+| 12 · Money + Google | StoreKit tiers + meter; Google Sign-In + Google Calendar; incognito toggle; listing + six screenshots in Muse's layout | Sandbox purchase sets the tier on the worker; Google events show in Tasks and the briefing; submitted |
+| 13 · WhatsApp | Gateway WhatsApp channel bound per user | A message from the owner's WhatsApp reaches his agent and the reply lands in both places |
+| 14 · Web + Android | WebChat behind Sign in with Apple; Expo Android build | — |
+
+Owners: Cihan's side = app (10, 11 app side, 12 app side) and the agent template. Samil = gateway hosting, worker proxy, StoreKit/ASC, Google Cloud OAuth, listing. Every handoff per `docs/HANDOFF-PROTOCOL.md`.
