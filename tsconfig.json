@@ -4,5 +4,11 @@
     "strict": true,
     "noEmit": true,
     "allowImportingTsExtensions": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "server",
+    "ios",
+    "android"
+  ]
 }

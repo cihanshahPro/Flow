@@ -35,17 +35,22 @@ export const AppState = {
   },
 };
 export const Platform = { OS: "ios" };
-export const Linking = { openSettings: async () => {} };
+export const Linking = { openSettings: async () => {}, openURL: async () => {} };
 export const StyleSheet = { create: (x) => x };
 export const ScrollView = "ScrollView",
   ActivityIndicator = "ActivityIndicator";
 export const Pressable = "Pressable",
   Text = "Text",
   TextInput = "TextInput",
-  View = "View";
+  View = "View",
+  Switch = "Switch";
 export const SafeAreaView = "SafeAreaView",
   KeyboardAvoidingView = "KeyboardAvoidingView",
   Modal = "Modal";
+export const Keyboard = { addListener: () => ({ remove() {} }), dismiss() {} };
+export function useSafeAreaInsets() {
+  return { top: 0, bottom: 34, left: 0, right: 0 };
+}
 export const RecordingPresets = { HIGH_QUALITY: {} };
 export async function requestRecordingPermissionsAsync() {
   if (harness.permissionDialog) {
@@ -129,3 +134,40 @@ export class File {
     files.delete(this.uri);
   }
 }
+
+// Minimal Animated/Dimensions/Easing so decorative components render in tests.
+class AnimatedValue {
+  constructor(v) {
+    this.value = v;
+  }
+  setValue(v) {
+    this.value = v;
+  }
+  interpolate() {
+    return 0;
+  }
+}
+const animation = () => ({ start(cb) { cb?.({ finished: true }); }, stop() {} });
+export const Animated = {
+  Value: AnimatedValue,
+  View: "Animated.View",
+  Text: "Animated.Text",
+  timing: () => animation(),
+  parallel: () => animation(),
+  sequence: () => animation(),
+  loop: () => animation(),
+  spring: () => animation(),
+};
+export const PanResponder = { create: (cfg) => ({ panHandlers: { __pan: cfg } }) };
+export const Easing = { in: (f) => f, inOut: (f) => f, quad: (x) => x };
+export const Dimensions = { get: () => ({ width: 390, height: 844 }) };
+export const Alert = { alert() {} };
+// expo-notifications is never exercised in tests; the planner is pure.
+export const SchedulableTriggerInputTypes = { DATE: "date" };
+export function setNotificationHandler() {}
+export async function getAllScheduledNotificationsAsync() { return []; }
+export async function cancelAllScheduledNotificationsAsync() {}
+export async function cancelScheduledNotificationAsync() {}
+export async function getPermissionsAsync() { return { granted: false, canAskAgain: false }; }
+export async function requestPermissionsAsync() { return { granted: false, canAskAgain: false }; }
+export async function scheduleNotificationAsync() {}

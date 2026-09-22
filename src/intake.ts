@@ -1,0 +1,171 @@
+import { shortTitle } from "./drafts.ts";
+import { areaFor, type PlanItem } from "./map.ts";
+import { contentWords, sentences } from "./words.ts";
+export { contentWords, sentences };
+import { cleanMove, extractDueHints, secondPerson } from "./thread.ts";
+
+/**
+ * The intake: one long dump, many subjects. Flow's first job is not to ask —
+ * it is to show it caught everything and sort it into thread starters. The
+ * model lists the subjects when it can; this local pass is the floor, so a
+ * two-minute recording is never answered with a single question.
+ */
+
+export type Subject = { title: string; evidence: string };
+
+/** Signposts people use when they change subject mid-dump, spoken or written. */
+const OPENERS =
+  /^(?:oh,? and|also|and also|plus|separately|another (?:thing|one)(?: is)?(?: that)?|on top of that|and then there'?s|and then the other (?:one|thing)(?: is)?|and i (?:also|still)|and i keep|i also|unrelated,?|different thing,?|then there'?s|next,?|other than that,?|apart from that,?|besides that,?|the (?:other|next|second|third|fourth|last) (?:thing|one)(?: is)?(?: that)?|one more thing|the first (?:thing|one)(?: is)?(?: that)?|first(?:ly)?,|second(?:ly)?,|third(?:ly)?,|lastly,?|finally,?|starting with)\b[,\s]*(?:regarding|about|to|that)?\s*/i;
+const FIRST_ITEM = /^the first (?:thing|one)\b/i;
+const LEAD =
+  /^(?:(?:so|well|um|uh|like|basically|honestly|anyway|okay|ok|right|yeah|and|but|then)[,\s]+)*(?:(?:i|we) (?:really |also |still |just )?(?:need|have|want|got|ought|am supposed|are supposed) to |(?:i|we) (?:really |also |still )?(?:should|must|gotta|have got to) |(?:i|we) keep (?:meaning|forgetting|putting off|needing) to |(?:i'?m|i am|we'?re) (?:supposed|meant) to |(?:i'?m|i am|we'?re) (?:also |still )?(?:behind on|worried about|stuck on|late with|stressed about) |(?:i'?m |i am |i keep |i've been )?(?:thinking|worrying|wondering) about |(?:i'?m|i am|we'?re) (?:also |still |currently )?(?:doing|working on|trying to|dealing with) |(?:i|we) (?:am|are) (?:going to|gonna) |there'?s (?:also )?|(?:i|we) (?:still )?(?:haven'?t|have not|didn'?t|did not) )?/i;
+const CONTINUES = /^(?:first|then|after that|once|next|it|it'?s|its|he|she|they|that|this|which|but|so|and then|i'?ve|i already|i just|i also already|i get those|one of (?:the|those) things|so that'?s|basically)\b/i;
+const HANDS_OFF = /^(.{2,30}?)\s+(?:wants me to|needs me to|asked me to|is asking me to|keeps asking me to)\s+(.+)$/i;
+const ABOUT = /^(.{2,30}?)\s+(?:wants|needs|is asking (?:me )?(?:about|for)|keeps asking (?:me )?(?:about|for)|is chasing (?:me )?(?:about|for))\s+(.+)$/i;
+function overlap(a: Set<string>, b: Set<string>): number {
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / Math.max(1, Math.min(a.size, b.size));
+}
+
+/** A thread name from the first sentence of a subject: the noun phrase, not the filler around it. */
+export function subjectTitle(sentence: string): string {
+  let body = sentence.replace(OPENERS, "").replace(/^[,\s]+/, "").replace(LEAD, "").trim();
+  if (!body) body = sentence;
+  // "My sister wants me to sort mum's dinner" is about the dinner, not the sister.
+  const asked = body.match(HANDS_OFF) ?? body.match(ABOUT);
+  if (asked && asked[1].split(/\s+/).length <= 3) body = asked[2];
+  // The subject is the phrase before the verb ("the car insurance renewal"), when that phrase is a phrase.
+  // Spoken dumps restate the thing in the second clause ("do an app, start doing an app portfolio"): the fuller head wins.
+  const heads = body
+    .split(/,\s*/)
+    .slice(0, 2)
+    .map((clause) => clause.replace(LEAD, "").replace(/^(?:start(?:ing)? (?:doing|to do|on)?|doing|do)\s+/i, "").trim())
+    .map((clause) => clause.split(/\s+(?:is|are|was|were|keeps?|needs?|wants?|has|have|hasn'?t|haven'?t|by|at|because|so|but|which|that|who|where|before|after|until|since|and i|and my|and how|and the|and it)\b/i)[0].trim())
+    .filter((h) => h && h.length <= 44);
+  const head = heads.length > 1 && contentWords(heads[0]).size <= 1 && contentWords(heads[1]).size > contentWords(heads[0]).size ? heads[1] : heads[0] ?? "";
+  const raw = (head.split(/\s+/).length >= 2 ? head : shortTitle(body, 40)).replace(/…$/, "").replace(/[.,;:!?]+$/, "").trim();
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function clip(s: string, max = 1200): string {
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+}
+
+/**
+ * Split a dump into subjects. A new subject starts at a change-of-subject
+ * opener ("Also…") or when a sentence shares almost no vocabulary with the
+ * one being built. Short sentences ride along with their neighbour.
+ */
+export function segmentDump(text: string): Subject[] {
+  const parts = sentences(text);
+  const groups: { sentences: string[]; words: Set<string> }[] = [];
+  // A short dump with no change-of-subject words is one subject; only a real dump is cut on vocabulary alone.
+  const long = parts.length >= 4;
+  for (const s of parts) {
+    const words = contentWords(s);
+    const current = groups[groups.length - 1];
+    const opener = OPENERS.test(s);
+    if (!current) {
+      // Filler ("So there's a lot going on.") is not a subject.
+      if (words.size < 3 && !opener) continue;
+      groups.push({ sentences: [s], words });
+      continue;
+    }
+    const small = words.size < 3;
+    const related = overlap(words, current.words) >= 0.25 || CONTINUES.test(s) || !long;
+    // "Starting with a few things. The first one is…": the intro sentence belongs to the first item.
+    const intro = FIRST_ITEM.test(s) && current.sentences.length === 1;
+    if (small || intro || (!opener && related) || (opener && overlap(words, current.words) >= 0.6)) {
+      current.sentences.push(s);
+      for (const w of words) current.words.add(w);
+    } else groups.push({ sentences: [s], words });
+  }
+  const out: Subject[] = [];
+  for (const g of groups) {
+    if (g.words.size < 3 && out.length) {
+      out[out.length - 1].evidence = clip(out[out.length - 1].evidence + " " + g.sentences.join(" "));
+      continue;
+    }
+    const title = subjectTitle(g.sentences.find((x) => FIRST_ITEM.test(x)) ?? g.sentences[0]);
+    if (title.length < 4) continue;
+    if (out.some((o) => same(o.title, title))) continue;
+    out.push({ title, evidence: clip(g.sentences.join(" ")) });
+  }
+  return out;
+}
+
+function same(a: string, b: string): boolean {
+  const x = contentWords(a), y = contentWords(b);
+  return x.size > 0 && y.size > 0 && overlap(x, y) >= 0.8;
+}
+
+/**
+ * The subjects of a dump: the local groups, named by the model where it
+ * listed the same subject (its titles are better; its evidence is a short
+ * quote), plus any grounded subject the model found that the local pass
+ * missed, widened to its whole sentence. Order follows the text. At most
+ * eight; one subject means an ordinary thread.
+ */
+export function subjectsOf(text: string, listed: Subject[] = []): Subject[] {
+  const normalized = text.replace(/\s+/g, " ");
+  const lower = normalized.toLowerCase();
+  const grounded = listed
+    .map((b) => ({ title: b.title.trim().replace(/[.,;:!?]+$/, ""), evidence: b.evidence.replace(/\s+/g, " ").trim() }))
+    .filter((b) => b.title.length >= 3 && b.title.length <= 60 && b.evidence && lower.includes(b.evidence.toLowerCase()));
+  const local = segmentDump(text);
+  const used = new Set<number>();
+  const out: Subject[] = local.map((l) => {
+    const i = grounded.findIndex((g, k) => !used.has(k) && l.evidence.toLowerCase().includes(g.evidence.toLowerCase()));
+    if (i >= 0) {
+      used.add(i);
+      return { title: capitalise(grounded[i].title), evidence: l.evidence };
+    }
+    return l;
+  });
+  grounded.forEach((g, k) => {
+    if (used.has(k)) return;
+    const sentence = sentences(normalized).find((x) => x.toLowerCase().includes(g.evidence.toLowerCase())) ?? g.evidence;
+    if (out.some((o) => same(o.title, g.title) || o.evidence.toLowerCase().includes(sentence.toLowerCase()))) return;
+    out.push({ title: capitalise(g.title), evidence: clip(sentence) });
+  });
+  const position = (s: Subject) => lower.indexOf(s.evidence.slice(0, 40).toLowerCase());
+  return out.sort((a, b) => position(a) - position(b)).slice(0, 8);
+}
+
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const PERSON = /\b(?:my|the|our) (?:(?:new|old|other) )?((?:\w+ )?(?:lawyer|attorney|landlord|manager|boss|sister|brother|mum|mom|dad|wife|husband|partner|friend|guy|designer|accountant|doctor|dentist|client|agent|contractor|plumber|teacher|coach))\b/i;
+const WAITING = /\b(?:supposed to (?:give|send|get back|call)|waiting (?:on|for)|will (?:get back|follow up|call me|send)|owes? me|hasn'?t (?:sent|replied|got back|called)|he'?s going to (?:follow up|send|call)|she'?s going to (?:follow up|send|call)|they'?re going to (?:follow up|send|call))\b/i;
+const LATER = /\b(?:someday|one day|at some point|eventually|maybe later|down the line|no rush|when i get (?:a chance|time)|would be nice)\b/i;
+
+/** One short line ("call the dentist tomorrow") is a move, not a dump: no model, no week screen. */
+export function isQuickLine(text: string): boolean {
+  const t = text.trim();
+  if (t.length > 70 || t.length < 3) return false;
+  const words = t.split(/\s+/);
+  if (words.length > 10) return false;
+  if (/[.!?;,]\s+\S/.test(t)) return false;
+  return !/\b(and then|also|another thing|the other one)\b/i.test(t);
+}
+
+/** The floor when no model is available: subjects from the local pass, one item each. */
+export function localPlan(text: string, now = new Date()): PlanItem[] {
+  return segmentDump(text).map((s) => {
+    const kind = WAITING.test(s.evidence) ? "waiting" : LATER.test(s.evidence) ? "later" : "action";
+    const person = s.evidence.match(PERSON)?.[1];
+    // The day as they said it, plus a clock or a daypart when they gave one ("today at 2pm", "this evening", "by Friday").
+    const hint = extractDueHints(s.evidence, now)[0]?.phrase;
+    const clock = s.evidence.match(/\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i)?.[0];
+    const part = s.evidence.match(/\b(?:this\s+)?(?:evening|tonight|morning|afternoon)\b/i)?.[0];
+    const by = hint && new RegExp(`\\b(?:by|before|until)\\s+${hint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(s.evidence) ? `by ${hint}` : undefined;
+    const when = by ?? (clock ? [hint, clock].filter(Boolean).join(" ") : part ?? hint);
+    // A verb phrase becomes a move in the second person; a noun phrase ("My DEY case") stays the thing's name.
+    const move = cleanMove(s.title, 50);
+    const title = kind === "action" && !/^(?:my|our|the|a|an|this|that)\b/i.test(move) ? secondPerson(move) : s.title;
+    return { title, kind, project: s.title, area: areaFor(s.evidence), ...(person ? { person } : {}), ...(when ? { when } : {}), evidence: s.evidence };
+  });
+}
+

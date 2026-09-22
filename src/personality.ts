@@ -148,7 +148,86 @@ export type Profile = {
   completed?: boolean;
   // The chosen working step stays attached to the user’s route across reloads.
   activeTaskId?: string;
+  /** Which onboarding funnel this profile has been through. Build 12's test → reveal → profile → first thread is 3. */
+  funnelVersion?: number;
+  /** Guided profile: what is on the person's plate, in their own taps. Additive. */
+  plate?: Plate;
+  /** Settings: reminders switched off by the person. Additive; absent means on. */
+  notificationsOff?: boolean;
+  /** Settings: morning reminder time as "HH:MM" (default 08:30) and an off switch. Additive. */
+  morningTime?: string;
+  morningOff?: boolean;
+  /** Settings: the evening close as "HH:MM" (default 19:00). Additive. */
+  eveningTime?: string;
+  /** When the person tapped "Later" on the get-to-know-you invitation (ISO). Additive. */
+  assessmentLaterAt?: string;
 };
+/** 4: welcome → first thought → Flow's first move; the test and profile come after, by invitation. */
+export const FUNNEL_VERSION = 4;
+/** Profiles that finished build 12's test-first funnel (3) keep their flow untouched. */
+export const FUNNEL_DONE_VERSION = 3;
+export const needsFunnel = (p: Pick<Profile, "funnelVersion">): boolean => (p.funnelVersion ?? 0) < FUNNEL_DONE_VERSION;
+export const assessmentDone = (answers: number[] | undefined): boolean =>
+  !!answers && answers.length >= ITEMS.length && answers.slice(0, ITEMS.length).every((a) => Number.isInteger(a) && a >= 1 && a <= 5);
+/** "Later" quiets the invitation on Today for this long; Profile always offers the test. */
+export const INVITE_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+export function shouldInviteAssessment(p: Profile, hasFirstThread: boolean, now = new Date()): boolean {
+  if (!hasFirstThread || assessmentDone(p.answers) || needsFunnel(p)) return false;
+  const later = p.assessmentLaterAt ? Date.parse(p.assessmentLaterAt) : NaN;
+  return !(Number.isFinite(later) && now.getTime() - later < INVITE_SNOOZE_MS);
+}
+
+export type Plate = {
+  areas: string[];
+  people: string[];
+  timeWindow?: string;
+  obstacles: string[];
+  datedSoon?: string;
+};
+export const emptyPlate = (): Plate => ({ areas: [], people: [], obstacles: [] });
+
+/**
+ * The guided profile. Five questions, each answered by tapping suggestions.
+ * The area and people lists follow GTD's areas-of-focus / mind-sweep
+ * triggers; obstacles and the time window feed WOOP-style thread questions
+ * and if-then moves later.
+ */
+export const PLATE_AREAS = [
+  "Work project",
+  "Job or clients",
+  "Money & bills",
+  "Paperwork or legal",
+  "Health",
+  "Home & repairs",
+  "Family",
+  "Relationship",
+  "Studying",
+  "A side project",
+  "Moving or travel",
+] as const;
+export const PLATE_PEOPLE = [
+  "Partner",
+  "Kids",
+  "Parents",
+  "Boss",
+  "Team",
+  "Clients",
+  "A friend",
+  "Doctor",
+  "Lawyer or accountant",
+  "Landlord",
+] as const;
+export const TIME_WINDOWS = ["Mornings", "Lunchtime", "Evenings", "Weekends", "It varies"] as const;
+export const OBSTACLES = [
+  "Not enough time",
+  "Don't know where to start",
+  "Waiting on other people",
+  "Money",
+  "Energy or motivation",
+  "Too many things at once",
+  "I forget",
+] as const;
+export const DATED_SOON = ["Yes, this week", "Yes, this month", "Not really"] as const;
 export const newProfile = (): Profile => ({
   version: 1,
   answers: [],
@@ -278,4 +357,22 @@ export function obstaclePlan(obstacle: string, presentation: Presentation) {
   return presentation === "small"
     ? "Start with one five-minute action. Review after you finish."
     : "Follow the first step in your draft, then review the next one.";
+}
+
+const AREA_PHRASE: Record<string, string> = {
+  "Work project": "your work project",
+  "Job or clients": "your job or clients",
+  "Money & bills": "money and bills",
+  "Paperwork or legal": "paperwork or legal stuff",
+  Health: "your health",
+  "Home & repairs": "home and repairs",
+  Family: "your family",
+  Relationship: "your relationship",
+  Studying: "your studies",
+  "A side project": "your side project",
+  "Moving or travel": "moving or travel",
+};
+/** An area name as it reads mid-sentence: "Work project" → "your work project". */
+export function areaPhrase(area: string): string {
+  return AREA_PHRASE[area] ?? area.toLowerCase();
 }

@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Animated,
-  KeyboardAvoidingView,
+  AppState,
   Modal,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -16,97 +16,52 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { randomUUID } from "expo-crypto";
-import LegacyApp from "./LegacyApp";
-import VoiceCapture, {
-  AudioPlayback,
-  type SavedVoiceNote,
-} from "./src/components/VoiceCapture";
-import {
-  loadWorkspace,
-  saveNote,
-  registerVoiceNote,
-  saveTask,
-} from "./src/services/storage";
-import ProfileView from "./src/components/ProfileView";
-import PathRail from "./src/components/PathRail";
-import PlanMap from "./src/components/PlanMap";
-import TaskDetail from "./src/components/TaskDetail";
-import { completeTask, reviewTask, taskState } from "./src/task-flow";
-import { newProgress } from "./src/progress";
-import { syncProgress } from "./src/services/progress";
-import { profileCompletion } from "./src/profile-completion";
-import { journeyState, directionOptions } from "./src/journey";
-import { starterFor, starterDraft } from "./src/starters";
-import type { DirectionContext } from "./src/model";
-import Onboarding from "./src/components/Onboarding";
-import { loadProfile, saveProfile } from "./src/services/profile";
-import {
-  AREAS,
-  areaSelections,
-  productivityGuide,
-  newProfile,
-  type Profile,
-} from "./src/personality";
-import DraftReview from "./src/components/DraftReview";
-import ThreadReview from "./src/components/ThreadReview";
-import {
-  processCapturedNote,
-  createThoughtDraft,
-  organizeThought,
-} from "./src/services/processing";
+import VoiceCapture, { AudioPlayback, type SavedVoiceNote } from "./src/components/VoiceCapture";
+import Today from "./src/components/Today";
+import Threads from "./src/components/Threads";
+import RecordingPage from "./src/components/RecordingPage";
+import CalendarTab from "./src/components/CalendarTab";
+import Me from "./src/components/Me";
+import MoveSheet from "./src/components/MoveSheet";
+import PlanTomorrow from "./src/components/PlanTomorrow";
+import { dayPlanFor, loadRoutines, lockTomorrow, proposal as loadProposal, startDay, suggestForTomorrow } from "./src/services/tomorrow";
+import { morningLine, tomorrowOf, type Decision, type Proposal, type Routine } from "./src/tomorrow";
+import * as Notifications from "expo-notifications";
+import TabBar, { type Tab } from "./src/components/TabBar";
+import ThreadChat from "./src/components/ThreadChat";
+import WeekPlan from "./src/components/WeekPlan";
+import type { WeekPlan as Plan } from "./src/services/intake";
+import { calendarConnected, connectCalendar, connectReminders, listCalendars, readWeek, remindersConnected, removeAllFlowItems, seedDemoCalendar, setCalendarOn, type PhoneCalendar } from "./src/services/calendar-read";
+import { deleteMove, editMove, moveToEvening, moveToTomorrow, replanConflicts, syncFromPhone, tickMove, untickMove } from "./src/services/moves";
+import { watchOuts, type CalEvent } from "./src/calendar";
+import Thinking from "./src/components/Thinking";
+import Funnel, { type FunnelStep } from "./src/components/Funnel";
+import { C } from "./src/components/theme";
+import { loadWorkspace, loadRecord, saveNote, registerVoiceNote, saveTask } from "./src/services/storage";
 import { loadDrafts, saveDraft, acceptStep } from "./src/services/drafts";
-import {
-  appendPlanUpdate,
-  type ThoughtDraft,
-  type DraftStep,
-} from "./src/drafts";
-import { localDate, type Task, type Note } from "./src/model";
-import {
-  addTaskToCalendar,
-  type ChooseCalendar,
-} from "./src/services/calendar";
+import { loadProfile, saveProfile } from "./src/services/profile";
+import { syncProgress } from "./src/services/progress";
+import { ensureSteps, processCapturedNote, replayOldRecordings } from "./src/services/processing";
+import { buildStamp, mirrorToDev } from "./src/services/mirror";
+import { capabilities, devLanConfig } from "./src/services/processors";
+import { loadAiState, setCloudConsent } from "./src/services/ai-state";
+import type { Consent } from "./src/ai-policy";
+import { EVENING_ID, scheduledSummary, sendTestReminder, syncReminders } from "./src/services/reminders";
+import { exportAllData, deleteAllData, importAllData } from "./src/services/data";
+import Constants from "expo-constants";
+import { newProfile, needsFunnel, type Profile as ProfileModel } from "./src/personality";
+import { newProgress, levelForProgress } from "./src/progress";
+import { completeTask, pickNextTask } from "./src/task-flow";
+import * as Haptics from "expo-haptics";
+import { modeFor, DEFAULT_MODE } from "./src/flow-voice";
+import { answerChip, backfillConversation, respondToRecording, evaluateThread, noteLevelUp, moveHeadline, plannedDateFor, moveWhen, retireScriptQuestions, suggestPrompt } from "./src/thread";
+import { appendPlanUpdate, suggestDraft, taskForStep, type ThoughtDraft } from "./src/drafts";
+import type { Note, Task } from "./src/model";
 
-type Screen = "Today" | "My mind" | "Library" | "Profile" | "Feedback";
-const C = {
-  paper: "#F6F7FA",
-  ink: "#142138",
-  muted: "#697386",
-  line: "#E2E6ED",
-  blue: "#345BEE",
-  lime: "#DFF586",
-  white: "#FFFFFF",
-  soft: "#EDF0FF",
-  red: "#B44343",
-};
-function Tap({
-  label,
-  onPress,
-  primary = false,
-  disabled = false,
-}: {
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        s.tap,
-        primary ? s.primary : s.secondary,
-        (pressed || disabled) && { opacity: 0.55 },
-      ]}
-    >
-      <Text style={[s.tapText, primary && { color: C.white }]}>{label}</Text>
-    </Pressable>
-  );
-}
-function Label({ children }: { children: React.ReactNode }) {
-  return <Text style={s.label}>{children}</Text>;
-}
+type Screen = Tab | "thread" | "intake" | "recording" | "tomorrow";
+type Capture = { mode: "voice" | "text"; threadId: string | null; kind: "thought" | "feedback" | "tomorrow"; prompt?: string };
+const EVALUATE_EVERY_MS = 15 * 60 * 1000;
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -114,130 +69,296 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+function pendingQuestion(thread: ThoughtDraft): string | undefined {
+  const open = [...(thread.messages ?? [])].reverse().find((m) => m.from === "flow" && !m.answered && m.kind === "question");
+  return open ? `Flow asked: ${open.text}` : undefined;
+}
+
 function Flow() {
-  const [screen, setScreen] = useState<Screen>("Today");
-  const [profile, setProfile] = useState<Profile>(newProfile());
-  const [progress, setProgress] = useState(newProgress());
-  const [onboarding, setOnboarding] = useState(false);
-  const [completionSection, setCompletionSection] = useState<
-    "assessment" | "areas" | undefined
-  >();
-  const [timeChosenFor, setTimeChosenFor] = useState<string | null>(null);
-  const [captureKind, setCaptureKind] = useState<
-    "thought" | "note" | "feedback"
-  >("thought");
-  const [captureTopic, setCaptureTopic] = useState("");
   const [ready, setReady] = useState(false);
+  const [profile, setProfile] = useState<ProfileModel>(newProfile());
+  const [progress, setProgress] = useState(newProgress());
+  const [threads, setThreads] = useState<ThoughtDraft[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [drafts, setDrafts] = useState<ThoughtDraft[]>([]);
-  const [budget, setBudget] = useState(30);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
-  const [progressError, setProgressError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const lock = useRef(false);
-  const [composer, setComposer] = useState<"text" | "voice" | null>(null);
+  const [screen, setScreen] = useState<Screen>("today");
+  /** The week plan from the last dump, shown once. */
+  const [plan, setPlan] = useState<Plan | null>(null);
+  /** The phone's calendar, as last read. */
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [calendarOn, setCalendarOnState] = useState(false);
+  const [calendars, setCalendars] = useState<PhoneCalendar[]>([]);
+  const [remindersOn, setRemindersOn] = useState(false);
+  /** The recording page that is open, and the model's paragraph for it. */
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+  const [paragraph, setParagraph] = useState("");
+  const [alsoTaskIds, setAlsoTaskIds] = useState<string[]>([]);
+  /** The move sheet: the task being edited. */
+  const [editing, setEditing] = useState<Task | null>(null);
+  /** The evening ritual: what Flow proposes for tomorrow, and whether tomorrow is already set. */
+  const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [tomorrowSet, setTomorrowSet] = useState<{ date: string; closure: string } | null>(null);
+  const [suggestedLines, setSuggestedLines] = useState<string[]>([]);
+  const [lastTab, setLastTab] = useState<Tab>("today");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [funnel, setFunnel] = useState(false);
+  const [funnelStep, setFunnelStep] = useState<FunnelStep>("intro");
+  const [capture, setCapture] = useState<Capture | null>(null);
+  const [captureVisible, setCaptureVisible] = useState(false);
   const [input, setInput] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [threadDeveloping, setThreadDeveloping] = useState(false);
-  const [refining, setRefining] = useState<string | null>(null);
-  const [note, setNote] = useState<Note | null>(null);
-  const [settings, setSettings] = useState(false);
-  const [advanced, setAdvanced] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceResult, setVoiceResult] = useState<Note | null>(null);
   const [processing, setProcessing] = useState(false);
   const [processingError, setProcessingError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  // Plan D: older iPhones ask once before any note text goes to the cloud shaper.
+  const [consentAsk, setConsentAsk] = useState<((allowed: boolean) => void) | null>(null);
+  const [cloudConsent, setCloudConsentState] = useState<Consent>(undefined);
+  const [onDeviceAi, setOnDeviceAi] = useState(false);
+  const lock = useRef(false);
   const processingLock = useRef(false);
-  const [captureVisible, setCaptureVisible] = useState(false);
-  const [organizing, setOrganizing] = useState(false);
   const captureId = useRef("");
-  const captureDirection = useRef<DirectionContext | undefined>(undefined);
-  const pendingDraft = useRef<string | null>(null);
-  function finishSheetTransition() {
-    if (pendingTask.current) {
-      setEditingTask(pendingTask.current);
-      pendingTask.current = null;
-    }
-    if (pendingDraft.current) {
-      setSelected(pendingDraft.current);
-      pendingDraft.current = null;
-    }
+  const revealAfterSheet = useRef<string | null>(null);
+  const shapingAbort = useRef<AbortController | null>(null);
+  const captureOpen = useRef(false);
+  captureOpen.current = !!capture;
+  const captureKindRef = useRef<Capture["kind"] | null>(null);
+  captureKindRef.current = capture?.kind ?? captureKindRef.current;
+
+  const mode = modeFor(profile.answers) ?? DEFAULT_MODE;
+  // Same plain questions for everyone: no personality layer in the path.
+  const formula = null;
+  const current = threads.find((t) => t.id === openId);
+  const openNote = notes.find((n) => n.id === openNoteId);
+  const level = levelForProgress(progress);
+
+  /** Thread reminders plus the morning "today's one move" nudge, from the freshly saved data. */
+  function syncAll(data: { tasks: Task[]; threads: ThoughtDraft[] }, p: ProfileModel, ask = false) {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const done = data.tasks.filter((t) => t.done && t.completedAt?.slice(0, 10) === today).length;
+    // The morning line is tomorrow's day when it is sent after midnight, so it reads the next day.
+    const headline = morningLine(events, data.tasks, tomorrowOf(now));
+    return syncReminders(data.threads, data.tasks, now, {
+      ask,
+      enabled: !p.notificationsOff,
+      morning: { headline, time: p.morningTime, off: p.morningOff },
+      evening: { done, time: p.eveningTime, off: p.notificationsOff },
+    }).catch(() => 0);
   }
-  function revealDraftAfterSheet(id: string) {
-    if (Platform.OS === "ios") pendingDraft.current = id;
-    else setSelected(id);
+
+  /** The evening ritual: load what Flow proposes and open the screen. */
+  async function openTomorrow() {
+    const [p, r] = await Promise.all([loadProposal(), loadRoutines()]);
+    setProposal(p);
+    setRoutines(r);
+    setSuggestedLines([]);
+    setScreen("tomorrow");
   }
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const pendingTask = useRef<Task | null>(null);
-  const fade = useRef(new Animated.Value(0)).current;
-  const contentScroll = useRef<ScrollView>(null);
-  function navigate(next: Screen) {
-    setScreen(next);
-    setNotice("");
-    setError("");
-    contentScroll.current?.scrollTo({ y: 0, animated: false });
+  async function refreshTomorrow() {
+    const date = tomorrowOf(new Date());
+    const plan = await dayPlanFor(date).catch(() => null);
+    setTomorrowSet(plan ? { date, closure: plan.closure } : null);
   }
-  function closeThread() {
-    setSelected(null);
-    setThreadDeveloping(false);
+  function lockDay(decision: Decision) {
+    void run(async () => {
+      const closure = await lockTomorrow(decision);
+      const data = await refresh();
+      await refreshCalendar();
+      await refreshTomorrow();
+      void syncAll(data, profile);
+      setScreen("today");
+      setLastTab("today");
+      setNotice(closure);
+    });
   }
-  function threadPrompt(draft: ThoughtDraft): string {
-    const area = draft.direction?.areaId;
-    if (area === "people" || area === "admin" || area === "dates") {
-      return "What person, date, or commitment matters most in this thread?";
-    }
-    if (area === "health") {
-      return "What outcome or appointment are you trying to get clear about?";
-    }
-    if (area === "work" || area === "home") {
-      return "What result would make this thread feel resolved?";
-    }
-    return "What is the most important outcome you want Flow to understand?";
-  }
+
   async function refresh() {
     const [w, d] = await Promise.all([loadWorkspace(), loadDrafts()]);
     setTasks(w.tasks);
     setNotes(w.notes);
-    setDrafts(d);
-    await refreshProgress();
-  }
-  async function refreshProgress() {
+    setThreads(d);
+    // Dev only: the phone's data mirrors to the Mac mini so the real threads can be read and replayed there.
+    void mirrorToDev("refresh");
     try {
-      const saved = await syncProgress();
-      setProgress(saved);
-      setProgressError("");
-      return saved;
+      setProgress(await syncProgress());
     } catch {
-      setProgressError(
-        "Your work is saved. Accomplishment progress could not update yet.",
-      );
-      return null;
+      /* Levels catch up on the next sync; nothing else is blocked. */
+    }
+    return { tasks: w.tasks, threads: d };
+  }
+
+  /** Flow re-reads every open thread and adds a check-in where one is due. */
+  async function evaluateAll(source?: { tasks: Task[]; threads: ThoughtDraft[] }) {
+    // Always read what is saved, never a possibly stale render snapshot.
+    const data = source ?? { tasks: (await loadWorkspace()).tasks, threads: await loadDrafts() };
+    let changed = false;
+    for (const thread of data.threads) {
+      // A step marked accepted must have its task; repair any that a failed write left behind.
+      for (const step of thread.steps) {
+        const id = `flow:${thread.id}:${step.id}`;
+        if (step.accepted && !thread.example && !data.tasks.some((t) => t.id === id)) {
+          await saveTask(taskForStep(thread, step, plannedDateFor(profile.plate?.timeWindow)));
+          changed = true;
+        }
+      }
+      // Threads from older builds get their conversation first, their open script questions retired, then the usual check-ins.
+      const next = evaluateThread(retireScriptQuestions(backfillConversation(thread, { mode, plate: profile.plate })), data.tasks, { mode });
+      if (next !== thread) {
+        await saveDraft(next);
+        changed = true;
+      }
+    }
+    if (changed) await refresh();
+    void syncAll(data, profile);
+  }
+
+  useEffect(() => {
+    // The evening close, tapped, opens the ritual.
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => {
+      if (r.notification.request.identifier === EVENING_ID) void openTomorrow().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    void capabilities().then((c) => setOnDeviceAi(c.llm));
+    void loadAiState()
+      .then((a) => setCloudConsentState(a.consent))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    Promise.all([refresh(), loadProfile()])
+      .then(async ([data, p]) => {
+        setProfile(p);
+        // New (and pre-build-12) profiles get welcome → first thought. Anyone who finished the test-first funnel keeps their flow.
+        setFunnel(needsFunnel(p));
+        setFunnelStep("intro");
+        await evaluateAll(data);
+        setReady(true);
+        // A day nobody planned still gets its routine blocks.
+        await startDay().then(async (n) => { if (n) await refresh(); }).catch(() => {});
+        await refreshCalendar();
+        await refreshTomorrow();
+        // Earlier recordings that never went through the intake are planned now, from their transcripts.
+        void replayOldRecordings().then(async (n) => {
+          if (!n) return;
+          setNotice(`Planned ${n === 1 ? "an earlier recording" : `${n} earlier recordings`} into your week.`);
+          await evaluateAll(await refresh());
+          await refreshCalendar();
+        }).catch(() => {});
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Flow could not open its saved data.");
+        setReady(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void evaluateAll().catch(() => {});
+        void startDay().then(async (n) => { if (n) await refresh(); }).catch(() => {});
+        void refreshCalendar().catch(() => {});
+        void refreshTomorrow().catch(() => {});
+      }
+    });
+    const timer = setInterval(() => void evaluateAll().catch(() => {}), EVALUATE_EVERY_MS);
+    return () => {
+      sub.remove();
+      clearInterval(timer);
+    };
+  }, [ready, mode]);
+
+  /** Read the phone's calendar for the coming two weeks (no-op until connected), and what the person did there since. */
+  async function refreshCalendar() {
+    const on = await calendarConnected();
+    setCalendarOnState(on);
+    setRemindersOn(await remindersConnected().catch(() => false));
+    if (on) {
+      const back = await syncFromPhone().catch(() => ({ completed: 0, unplaced: 0 }));
+      // Something new on the calendar sat on a Flow block: the block moves, and the person hears about it.
+      const moved = await replanConflicts().catch(() => []);
+      if (moved.length) setNotice(`Moved ${moved.map((t) => t.title).slice(0, 2).join(" and ")}${moved.length > 2 ? ` and ${moved.length - 2} more` : ""} — something landed on ${moved.length === 1 ? "it" : "them"}.`);
+      if (back.completed || back.unplaced || moved.length) await refresh();
+      setEvents(await readWeek().catch(() => []));
+      setCalendars(await listCalendars().catch(() => []));
     }
   }
-  useEffect(() => {
-    Promise.all([
-      refresh(),
-      loadProfile().then((p) => {
-        setProfile(p);
-        if (typeof p.preferredMinutes === "number") {
-          setBudget(p.preferredMinutes);
-          setTimeChosenFor(localDate());
-        } else if (p.preferredMinutes === "varies") setBudget(10);
-        setOnboarding(!p.completed && p.stage === "intro");
-      }),
-    ])
-      .then(() => {
-        setReady(true);
-        Animated.timing(fade, {
-          toValue: 1,
-          duration: 350,
-          useNativeDriver: true,
-        }).start();
+  async function connectCalendarNow(): Promise<boolean> {
+    const ok = await connectCalendar();
+    if (ok) await connectReminders().catch(() => false);
+    await refreshCalendar();
+    return ok;
+  }
+  async function connectRemindersNow() {
+    await connectReminders().catch(() => false);
+    await refreshCalendar();
+  }
+
+  /** Every change to a move goes through services/moves, then the screen re-reads. */
+  function onTick(task: Task) {
+    void run(async () => {
+      if (task.done) await untickMove(task);
+      else {
+        await tickMove(task);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+      // The evening close counts what was done; keep it current.
+      void syncAll(await refresh(), profile);
+    });
+  }
+  function onTomorrow(task: Task) {
+    void run(async () => {
+      await moveToTomorrow(task);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function onEvening(task: Task) {
+    void run(async () => {
+      await moveToEvening(task);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function onDeleteMove(task: Task) {
+    void run(async () => {
+      await deleteMove(task);
+      setEditing(null);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function onSaveMove(task: Task, patch: { title: string; plannedDate: string; plannedTime: string; deadline: string; minutes: number; projectId?: string }) {
+    void run(async () => {
+      await editMove(task, patch);
+      setEditing(null);
+      await refresh();
+      await refreshCalendar();
+    });
+  }
+  function openRecording(id: string) {
+    setOpenNoteId(id);
+    setParagraph("");
+    setAlsoTaskIds([]);
+    setScreen("recording");
+    void loadRecord<{ summary?: string; knownTaskIds?: string[] }>("intake", `intake:${id}`)
+      .then((r) => {
+        setParagraph(r?.summary ?? "");
+        setAlsoTaskIds(r?.knownTaskIds ?? []);
       })
-      .catch((e) => setError(e.message));
-  }, []);
+      .catch(() => {});
+  }
+  function closeRecording() {
+    setOpenNoteId(null);
+    setScreen(lastTab);
+  }
+
   async function run(fn: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true;
@@ -245,1111 +366,301 @@ function Flow() {
     setError("");
     try {
       await fn();
-      await refresh();
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : "Something went wrong. Your saved thoughts are safe.",
-      );
+      setError(e instanceof Error ? e.message : "Something went wrong. Your saved thoughts are safe.");
     } finally {
       lock.current = false;
       setBusy(false);
     }
   }
-  function capture(
-    mode: "text" | "voice",
-    draftId: string | null = null,
-    topic = "",
-    direction?: DirectionContext,
-    kind: "thought" | "note" | "feedback" = "thought",
+
+  async function updateProfile(p: ProfileModel) {
+    await saveProfile(p);
+    setProfile(p);
+  }
+
+  /** Levels are announced inside the thread that earned them. */
+  async function announceLevel(threadId: string | undefined, before: number) {
+    const after = await syncProgress().catch(() => null);
+    if (!after) return;
+    setProgress(after);
+    const summary = levelForProgress(after);
+    if (!threadId || !summary.level || summary.level.number <= before) return;
+    const thread = (await loadDrafts()).find((t) => t.id === threadId);
+    if (!thread) return;
+    const next = noteLevelUp(thread, summary.level.title, mode);
+    if (next !== thread) {
+      await saveDraft(next);
+      await refresh();
+    }
+  }
+
+  function openThread(id: string) {
+    setOpenId(id);
+    setScreen("thread");
+    setNotice("");
+    setError("");
+    setProcessingError("");
+    // Nothing is asked on opening. A thin project gets its step tree from the brain, quietly.
+    void ensureSteps(id, { askCloudConsent })
+      .then(async (n) => {
+        if (n) await refresh();
+        await evaluateAll();
+      })
+      .catch(() => {});
+  }
+  function closeThread() {
+    setScreen(openNoteId ? "recording" : lastTab);
+    setOpenId(null);
+  }
+  function selectTab(tab: Tab) {
+    // Leaving Your week by a tab is the same as "Looks right".
+    if (screen === "intake") setPlan(null);
+    setLastTab(tab);
+    setScreen(tab);
+    setNotice("");
+    setError("");
+  }
+
+  function startCapture(
+    mode: "voice" | "text",
+    threadId: string | null,
+    kind: "thought" | "feedback" | "tomorrow" = "thought",
+    prompt?: string,
   ) {
-    setCaptureKind(kind);
-    captureDirection.current =
-      direction ?? drafts.find((d) => d.id === draftId)?.direction;
-    setCaptureTopic(topic);
+    captureId.current = randomUUID();
+    setInput("");
     setVoiceResult(null);
     setProcessingError("");
-    captureId.current = randomUUID();
-    setRefining(draftId);
-    setInput("");
     setCaptureVisible(false);
-    setComposer(mode);
     setNotice("");
+    setCapture({ mode, threadId, kind, prompt });
   }
-  async function submit() {
-    await run(async () => {
-      const text = input.trim();
-      if (!text) return;
-      const id = captureId.current || randomUUID();
-      const n: Note = {
-        id,
-        direction: captureDirection.current,
-        planId: refining ?? undefined,
-        captureKind,
-        title: text.slice(0, 80),
-        text,
-        createdAt: new Date().toISOString(),
-      };
-      await saveNote(n);
-      if (captureKind !== "thought") {
-        setComposer(null);
-        setInput("");
-        navigate(captureKind === "feedback" ? "Feedback" : "Library");
-        setNotice(
-          captureKind === "feedback"
-            ? "Feedback saved here. Nothing sent or added to your plan."
-            : "Note saved in Library. No task created.",
-        );
-        return;
-      }
-      const prior = drafts.find((d) => d.id === refining);
-      const shaped = await createThoughtDraft(id, text, n.direction);
-      const d = prior ? appendPlanUpdate(prior, shaped) : shaped;
-      await saveDraft(d);
-      setSelected(null);
-      setComposer(null);
-      setInput("");
-      navigate("My mind");
-      setNotice(
-        prior
-          ? "Update saved to this draft."
-          : "Thought saved to its thread. Flow will keep processing it in the background.",
-      );
-    });
+  function askCloudConsent() {
+    return new Promise<boolean>((resolve) =>
+      setConsentAsk(() => (allowed: boolean) => {
+        setConsentAsk(null);
+        setCloudConsentState(allowed ? "allowed" : "declined");
+        resolve(allowed);
+      }),
+    );
   }
+  function closeCapture() {
+    if (!voiceBusy && !busy && !processing) setCapture(null);
+  }
+  function finishSheetTransition() {
+    if (revealAfterSheet.current) {
+      openThread(revealAfterSheet.current);
+      revealAfterSheet.current = null;
+    }
+  }
+  function reveal(id: string) {
+    if (Platform.OS === "ios" && capture) revealAfterSheet.current = id;
+    else openThread(id);
+  }
+
   async function voiceSaved(v: SavedVoiceNote) {
-    // Registration alone decides whether recording saved successfully.
     await registerVoiceNote({
       ...v,
-      direction: v.captureKind ? undefined : captureDirection.current,
-      planId: v.captureKind ? undefined : refining ?? undefined,
-      captureKind: v.captureKind ?? captureKind,
+      planId: capture?.kind === "thought" ? capture.threadId ?? undefined : undefined,
+      captureKind: capture?.kind === "feedback" ? "feedback" : capture?.kind === "tomorrow" ? "note" : v.captureKind ?? "thought",
       id: v.audioUri,
       createdAt: new Date().toISOString(),
     });
   }
-  async function processRecording(entry: Note, origin: "capture" | "library") {
-    if (processingLock.current) return;
-    processingLock.current = true;
-    setProcessing(true);
-    setProcessingError("");
-    try {
-      const result = await processCapturedNote(entry);
-      await refresh();
-      if (result.kind === "note") {
-        if (origin === "capture") setComposer(null);
-        else setNote(null);
-        navigate(
-          result.note.captureKind === "feedback" ? "Feedback" : "Library",
-        );
-        setNotice("Recording and transcript saved here. No task created.");
-        return;
-      }
-      const draft = result.draft;
-      setSelected(null);
-      if (origin === "capture") setComposer(null);
-      else setNote(null);
-      navigate("My mind");
-      setNotice("Transcribed and shaped. Choose only what helps.");
-    } catch (failure) {
-      setProcessingError(
-        failure instanceof Error
-          ? failure.message
-          : "Processing paused. Your recording is saved.",
-      );
-      await refresh().catch(() => {});
-    } finally {
-      processingLock.current = false;
-      setProcessing(false);
-    }
-  }
   function recordingCompleted(saved: SavedVoiceNote) {
     const entry: Note = {
       ...saved,
-      direction: captureDirection.current,
-      planId: refining ?? undefined,
-      captureKind,
+      planId: capture?.kind === "thought" ? capture.threadId ?? undefined : undefined,
+      captureKind: capture?.kind === "feedback" ? "feedback" : capture?.kind === "tomorrow" ? "note" : "thought",
       id: saved.audioUri,
       createdAt: new Date().toISOString(),
     };
     setVoiceBusy(false);
     setVoiceResult(entry);
-    void processRecording(entry, "capture");
+    void processRecording(entry);
   }
-  const journey = journeyState(
-    profile.preferredMinutes === "varies" && timeChosenFor === localDate()
-      ? { ...profile, preferredMinutes: budget as 10 | 30 | 60 }
-      : profile,
-    notes,
-    drafts,
-    tasks,
-  );
-  const completion = profileCompletion(profile);
-  const next = journey.next;
-  const suggestedStarter = next.direction ? starterFor(next.direction) : null;
-  const nextTask = [
-    "task",
-    "check-in",
-    "follow-up",
-    "scheduled",
-    "paused",
-  ].includes(next.kind)
-    ? tasks.find((t) => t.id === next.id)
-    : undefined;
-  const nextPlan = nextTask
-    ? drafts.find((d) =>
-        d.steps.some((step) => nextTask.id === `flow:${d.id}:${step.id}`),
-      )
-    : next.kind === "draft"
-      ? drafts.find((d) => d.id === next.id)
-      : undefined;
-  const pathStage: 0 | 1 | 2 | 3 =
-    next.kind === "setup"
-      ? 0
-      : ["check-in", "follow-up", "paused", "complete"].includes(next.kind)
-        ? 3
-        : ["task", "scheduled"].includes(next.kind)
-          ? 2
-          : 1;
-  function openTask(task: Task) {
-    if (selected && Platform.OS === "ios") pendingTask.current = task;
-    else setEditingTask(task);
-    setSelected(null);
+  /** Stop waiting for the AI: the thread is still made, from the basic template. */
+  function cancelShaping() {
+    shapingAbort.current?.abort();
   }
-  async function saveWorkingTask(task: Task) {
-    // Let the sheet handle failures; never close on an unsuccessful save.
-    if (lock.current)
-      throw new Error("Another save is in progress. Try again.");
-    lock.current = true;
-    setBusy(true);
+  /** Leave the capture sheet while Flow keeps thinking; the thread lands in the list. */
+  function continueInBackground() {
+    setCapture(null);
+    selectTab(lastTab);
+  }
+  async function processRecording(entry: Note) {
+    if (processingLock.current) return;
+    processingLock.current = true;
+    const abort = new AbortController();
+    shapingAbort.current = abort;
+    setProcessing(true);
+    setProcessingError("");
+    const before = level.level?.number ?? 0;
     try {
-      await saveTask(task);
-      await refresh();
-      setEditingTask(task);
+      const forTomorrow = captureKindRef.current === "tomorrow";
+      const result = await processCapturedNote(entry, { askCloudConsent, signal: abort.signal });
+      const data = await refresh();
+      if (result.kind === "note" && forTomorrow) {
+        // The smart connector: what was said about tomorrow, matched to the list. Not a recording, not a thread.
+        const s = await suggestForTomorrow(result.note.text, new Date(), { askCloudConsent, signal: abort.signal });
+        setProposal((p) => (p ? { ...p, suggested: [...(p.suggested ?? []), ...s.existing.filter((t) => !(p.suggested ?? []).some((x) => x.id === t.id))] } : p));
+        setSuggestedLines((l) => [...l, ...s.lines.filter((x) => !l.includes(x))]);
+        setCapture(null);
+        setScreen("tomorrow");
+        setNotice(s.existing.length || s.lines.length ? `Got it: ${s.existing.length} from your list, ${s.lines.length} new.` : "Nothing new in that — tomorrow stays as proposed.");
+        return;
+      }
+      if (result.kind === "note") {
+        setCapture(null);
+        setNotice("Saved. Thank you — it stays on this phone.");
+        return;
+      }
+      const stayedHere = captureOpen.current;
+      setCapture(null);
+      if (result.kind === "intake") {
+        setEvents(result.plan.events);
+        const first = result.plan.placements[0];
+        if (result.plan.quick && !first) {
+          setNotice(result.plan.known ? "Already on your week — nothing added." : "Nothing to add from that.");
+          return;
+        }
+        if (result.plan.quick && first) {
+          // One line, one move: say where it landed and stay put.
+          const when = first.slot ? `${new Date(first.slot.start).toLocaleDateString("en-US", { weekday: "short" })} ${new Date(first.slot.start).toTimeString().slice(0, 5)}` : first.chaseDate ? `chase ${new Date(`${first.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : first.date ? new Date(`${first.date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }) : "later";
+          setNotice(`Added: ${first.item.title} · ${when}${first.note ? ` — ${first.note}` : ""}`);
+          await evaluateAll(data);
+          await refreshTomorrow();
+          return;
+        }
+        // The week, planned around the calendar. Shown once; nothing is asked.
+        setPlan(result.plan);
+        if (stayedHere) setScreen("intake");
+        else setNotice(`Flow placed ${result.plan.placements.length} things on your week.`);
+        await evaluateAll(data);
+        return;
+      }
+      // Someone who walked away is not pulled into the thread; it is simply in their list.
+      if (!stayedHere) setNotice(`Flow shaped “${result.draft.title}”. It's in your threads.`);
+      else if (openId !== result.draft.id) reveal(result.draft.id);
+      await evaluateAll(data);
+      await announceLevel(result.draft.id, before);
+    } catch (failure) {
+      setProcessingError(failure instanceof Error ? failure.message : "Processing paused. Your recording is saved.");
+      await refresh().catch(() => {});
     } finally {
-      lock.current = false;
-      setBusy(false);
+      shapingAbort.current = null;
+      processingLock.current = false;
+      setProcessing(false);
     }
   }
-  async function finishWorkingTask(task: Task) {
-    await saveWorkingTask(completeTask(task));
-    setEditingTask(null);
-    navigate("Today");
-  }
-  async function checkIn(keepGoing: boolean) {
-    if (!nextTask) return;
+  async function submitText() {
+    const text = input.trim();
+    if (!text || !capture) return;
     await run(async () => {
-      if (!keepGoing) {
-        await updateProfile({ ...profile, activeTaskId: nextTask.id });
-        await saveTask(reviewTask(nextTask));
-        setNotice(
-          "This stopping point is saved. Resume whenever you’re ready.",
-        );
-        return;
-      }
-      // Opening a choice is not completing it. Keep the check-in until a next step is saved.
-      const pendingUpdate =
-        nextPlan &&
-        notes.find(
-          (note) =>
-            note.planId === nextPlan.id &&
-            !nextPlan.sourceNoteIds?.includes(note.id),
-        );
-      if (pendingUpdate) {
-        setProcessingError("");
-        setNote(pendingUpdate);
-        return;
-      }
-      if (nextPlan?.steps.some((step) => !step.accepted && !step.deferred)) {
-        setSelected(nextPlan.id);
-      } else {
-        capture(
-          "voice",
-          nextPlan?.id ?? null,
-          `You finished “${nextTask.title}”. Is there a reply or another step to plan? Tell me only what changed.`,
-          nextTask.direction,
-        );
-      }
+      const id = captureId.current || randomUUID();
+      const n: Note = {
+        id,
+        planId: capture.kind === "thought" ? capture.threadId ?? undefined : undefined,
+        captureKind: capture.kind === "tomorrow" ? "note" : capture.kind,
+        title: text.slice(0, 80),
+        text,
+        createdAt: new Date().toISOString(),
+      };
+      await saveNote(n);
+      setInput("");
+      // Not awaited: the sheet can be left while Flow thinks, and Today stays usable.
+      void processRecording(n);
     });
   }
-  async function updateProfile(p: Profile) {
-    await saveProfile(p);
-    if (p.preferredMinutes !== profile.preferredMinutes) {
-      setBudget(
-        typeof p.preferredMinutes === "number" ? p.preferredMinutes : 10,
-      );
-      setTimeChosenFor(
-        typeof p.preferredMinutes === "number" ? localDate() : null,
-      );
-    }
-    setProfile(p);
-    await refreshProgress();
-  }
-  function finishProfileSection() {
-    setOnboarding(false);
-    if (completionSection) {
-      setCompletionSection(undefined);
-      navigate("Profile");
-    }
-  }
-  async function openProfileSection(
-    section: "assessment" | "areas",
-    requestedIndex?: number,
-  ) {
-    await run(async () => {
-      const index = AREAS.findIndex(
-        (a) =>
-          profile.areas[a.id] !== "Nothing current" &&
-          !areaSelections(profile.areas[a.id]).some((c) =>
-            a.choices.includes(c),
-          ),
-      );
-      await updateProfile({
-        ...profile,
-        stage: section,
-        areaIndex: requestedIndex ?? (index < 0 ? 0 : index),
-      });
-      setCompletionSection(section);
-      setOnboarding(true);
-    });
-  }
-  function continueJourney() {
-    navigate("Today");
-    if (next.kind === "setup") {
-      navigate("Profile");
-      return;
-    }
-    if (next.kind === "draft") {
-      setSelected(next.id!);
-      return;
-    }
-    if (next.kind === "process") {
-      const n = notes.find((n) => n.id === next.id);
-      if (n) {
-        setNote(n);
-        setProcessingError("");
-      }
-      return;
-    }
-  }
-  async function useStarter(direction: DirectionContext) {
-    await run(async () => {
-      const id = starterDraft(direction).id;
-      const d = drafts.find((d) => d.id === id) ?? starterDraft(direction);
-      await saveDraft(d);
-      await acceptStep(d, d.steps[0]);
-      const selectedDirection = directionOptions(profile).find(
-        (d) => d.directionId === direction.directionId,
-      );
-      await updateProfile({
-        ...profile,
-        completed: true,
-        activeTaskId: `flow:${d.id}:${d.steps[0].id}`,
-        ...(selectedDirection
-          ? {
-              focus: selectedDirection.title,
-              focusExplicit: true,
-              focusNone: false,
-            }
-          : {}),
-      });
-      setOnboarding(false);
-      navigate("Today");
-      setNotice("Your next action is ready. Everything else stays saved.");
-    });
-  }
-  function guidedCapture(direction: DirectionContext) {
-    setOnboarding(false);
-    capture(
-      "voice",
-      null,
-      `Dump everything connected to ${direction.choice.toLowerCase()}. Include what matters, what is active, and what you do not want to forget. Do not organize it.`,
-      direction,
-    );
-  }
-  const current = drafts.find((d) => d.id === selected);
-  const effectiveBudget =
-    profile.preferredMinutes === "varies" && timeChosenFor !== localDate()
-      ? 10
-      : budget;
-  const choose: ChooseCalendar = (options, preferred) =>
-    new Promise((resolve) =>
-      Alert.alert(
-        "Choose your calendar",
-        "We’ll remember this for next time.",
-        [
-          ...options.map((c) => ({
-            text: c.title + (c.id === preferred ? " · default" : ""),
-            onPress: () => resolve(c.id),
-          })),
-          { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
-        ],
-        { cancelable: false },
-      ),
-    );
-  async function add(d: ThoughtDraft, step: DraftStep) {
-    await run(async () => {
-      await acceptStep(d, step);
-      await updateProfile({
-        ...profile,
-        activeTaskId: `flow:${d.id}:${step.id}`,
-      });
-      for (const previous of tasks.filter(
-        (t) =>
-          taskState(t) === "check-in" &&
-          d.steps.some((s) => t.id === `flow:${d.id}:${s.id}`),
-      )) {
-        await saveTask(reviewTask(previous));
-      }
-      setSelected(null);
-      navigate("Today");
-      setNotice("Your chosen action is ready below.");
-    });
-  }
-  async function organizeCurrent(draft: ThoughtDraft) {
-    setOrganizing(true);
-    await run(async () => {
-      const shaped = await organizeThought(
-        draft.id,
-        [draft.source, ...draft.updates].join("\n\n"),
-        draft.direction,
-      );
-      const preserved = draft.steps.filter(
-        (step) => step.accepted || step.deferred,
-      );
-      await saveDraft({
-        ...shaped,
-        source: draft.source,
-        sourceNoteIds: draft.sourceNoteIds,
-        updates: draft.updates,
-        state: draft.state,
-        createdAt: draft.createdAt,
-        example: draft.example,
-        steps: [
-          ...preserved,
-          ...shaped.steps
-            .filter(
-              (step) =>
-                !preserved.some(
-                  (old) => old.title.toLowerCase() === step.title.toLowerCase(),
-                ),
-            )
-            .slice(0, 3)
-            .map((step, i) => ({ ...step, id: `ai-${Date.now()}-${i}` })),
-        ],
-      });
-      setNotice(
-        "Sorted into a few possibilities. Nothing added to your day yet.",
-      );
-    });
-    setOrganizing(false);
-  }
-  function chooseDraftStep(
-    draft: ThoughtDraft,
-    step: DraftStep,
-    smaller: boolean,
-  ) {
-    void add(
-      draft,
-      smaller
-        ? {
-            ...step,
-            title: step.smallAction ?? `Spend five minutes on: ${step.title}`,
-            minutes: 5,
-          }
-        : step,
-    );
-  }
-  function deferDraftStep(
-    draft: ThoughtDraft,
-    step: DraftStep,
-    deferred: boolean,
-  ) {
+
+  /** A typed message in a thread: saved as a note on that thread and answered in place. */
+  function sendMessage(threadId: string, text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
     void run(async () => {
-      await saveDraft({
-        ...draft,
-        steps: draft.steps.map((x) =>
-          x.id === step.id ? { ...x, deferred } : x,
-        ),
-      });
-      setNotice(
-        deferred
-          ? "Kept for later. Nothing added to Today."
-          : "This option is back.",
-      );
+      const n: Note = {
+        id: randomUUID(),
+        planId: threadId,
+        captureKind: "thought",
+        title: trimmed.slice(0, 80),
+        text: trimmed,
+        createdAt: new Date().toISOString(),
+      };
+      await saveNote(n);
+      await processRecording(n);
     });
   }
-  function closeCapture() {
-    if (!voiceBusy && !busy && !processing) setComposer(null);
+
+  function chip(messageId: string, chipId: string) {
+    if (!current) return;
+    void run(async () => {
+      const before = level.level?.number ?? 0;
+      const { thread, effects } = answerChip(current, messageId, chipId, { mode, formula, plate: profile.plate, others: threads.map((t) => ({ id: t.id, title: t.title })) });
+      await saveDraft(thread);
+      for (const effect of effects) {
+        if (effect.type === "accept") {
+          const step = thread.steps.find((s) => s.id === effect.stepId);
+          if (step) {
+            await acceptStep(thread, step);
+            // The move is an if-then plan: it lands on the day the person said they have time.
+            const id = `flow:${thread.id}:${step.id}`;
+            const saved = (await loadWorkspace()).tasks.find((t) => t.id === id);
+            // The time the person gave ("Tomorrow morning") wins; otherwise their usual window, no time yet.
+            const when = moveWhen(thread);
+            if (saved)
+              await saveTask(
+                when
+                  ? { ...saved, plannedDate: when.date, plannedTime: when.time }
+                  : { ...saved, plannedDate: plannedDateFor(profile.plate?.timeWindow) },
+              );
+            await updateProfile({ ...profile, activeTaskId: id });
+          }
+        } else if (effect.type === "complete") {
+          const task = tasks.find((t) => t.id === effect.taskId);
+          if (task && !task.done) await saveTask(completeTask(task));
+        } else if (effect.type === "branch") {
+          // Each other subject becomes its own thread, opened with the person's own words for it.
+          for (const branch of effect.branches) {
+            const id = randomUUID();
+            const seeded = { ...suggestDraft(id, branch.evidence), title: branch.title };
+            await saveDraft(respondToRecording(seeded, id, branch.evidence, { mode, formula, plate: profile.plate }));
+          }
+        } else if (effect.type === "tie") {
+          // The side subject's words go to the thread the person picked, quietly; it is there when they open it.
+          const home = (await loadDrafts()).find((t) => t.id === effect.threadId);
+          if (home) {
+            const words = effect.branches.map((b) => b.evidence).join(" ");
+            const id = `${messageId}:tie`;
+            await saveDraft(respondToRecording(appendPlanUpdate(home, suggestDraft(id, words)), id, words, { mode, formula, plate: profile.plate, quiet: true }));
+          }
+        }
+      }
+      const data = await refresh();
+      // Confirming a move is the moment a reminder makes sense, so this is when permission is requested.
+      if (effects.some((e) => e.type === "accept") && !profile.notificationsOff)
+        void syncAll(data, profile, true);
+      await announceLevel(thread.id, before);
+    });
   }
-  if (advanced)
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: C.paper }}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setAdvanced(false);
-            void refresh();
-          }}
-          style={s.back}
-        >
-          <Text style={s.tapText}>‹ Back to Flow</Text>
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <LegacyApp />
-        </View>
-      </SafeAreaView>
-    );
-  if (ready && onboarding)
-    return (
-      <SafeAreaView style={s.safe}>
-        <Onboarding
-          profile={profile}
-          onSave={updateProfile}
-          onClose={finishProfileSection}
-          sectionMode={completionSection}
-          onCapture={(topic) => {
-            const d = directionOptions(profile).find((d) => d.title === topic);
-            if (d) guidedCapture(d);
-          }}
-          onStart={(topic) => {
-            const d = directionOptions(profile).find((d) => d.title === topic);
-            if (d) void useStarter(d);
-          }}
-          onContinue={() => {
-            setOnboarding(false);
-            if (next.kind === "draft" || next.kind === "process")
-              continueJourney();
-            else navigate("Today");
-          }}
-          externalBusy={busy}
-          externalError={error || progressError}
-          existingWork={[
-            "task",
-            "draft",
-            "process",
-            "check-in",
-            "follow-up",
-            "scheduled",
-            "paused",
-          ].includes(next.kind)}
-        />
-      </SafeAreaView>
-    );
-  if (!ready)
-    return (
-      <SafeAreaView style={s.safe}>
-        <View style={s.loading}>
-          <Text style={s.brand}>flow.</Text>
-          {error ? (
-            <>
-              <Text style={s.error}>{error}</Text>
-              <Tap
-                label="Try again"
-                onPress={() =>
-                  void run(async () => {
-                    await refresh();
-                    setReady(true);
-                    fade.setValue(1);
-                  })
-                }
-              />
-            </>
-          ) : (
-            <ActivityIndicator color={C.blue} />
-          )}
-        </View>
-      </SafeAreaView>
-    );
-  return (
-    <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
-      <View style={s.header}>
-        <Text style={s.brand}>
-          flow<Text style={{ color: C.blue }}>.</Text>
-        </Text>
-        <View style={s.row}>
-          <Text style={s.test}>TEST · 11</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Feedback"
-            onPress={() => navigate("Feedback")}
-            style={{ minHeight: 44, justifyContent: "center" }}
-          >
-            <Text style={s.smallLink}>Feedback</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Settings and existing tools"
-            onPress={() => setSettings(true)}
-            style={s.avatar}
-          >
-            <Text style={{ color: C.ink, fontSize: 21 }}>⋯</Text>
-          </Pressable>
-        </View>
-      </View>
-      <Animated.View style={{ flex: 1, opacity: fade }}>
-        <ScrollView
-          ref={contentScroll}
-          contentContainerStyle={s.page}
-          keyboardShouldPersistTaps="handled"
-        >
-          {!!error && (
-            <Pressable
-              onPress={() => setError("")}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss error"
-            >
-              <Text accessibilityRole="alert" style={s.error}>
-                {error}
-              </Text>
-            </Pressable>
-          )}
-          {!!notice && (
-            <Pressable
-              onPress={() => setNotice("")}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss status"
-            >
-              <Text accessibilityLiveRegion="polite" style={s.notice}>
-                {notice}
-              </Text>
-            </Pressable>
-          )}
-          {!!progressError && (
-            <View style={s.quiet}>
-              <Text accessibilityRole="alert" style={s.body}>
-                {progressError}
-              </Text>
-              <Tap
-                label="Retry progress update"
-                onPress={() =>
-                  void run(async () => {
-                    await refreshProgress();
-                  })
-                }
-                disabled={busy}
-              />
-            </View>
-          )}
-          {screen === "Today" && (
-            <>
-              <Text style={[s.headline, { fontSize: 32, lineHeight: 38 }]}>
-                Pick up right here.
-              </Text>
-              <PathRail stage={pathStage} compact />
-              {profile.preferredMinutes === "varies" &&
-                timeChosenFor !== localDate() && (
-                  <View style={s.quiet}>
-                    <Text style={s.body}>How much time fits today?</Text>
-                    <View style={s.captureRow}>
-                      {[10, 30, 60].map((minutes) => (
-                        <Tap
-                          key={minutes}
-                          label={`${minutes} min`}
-                          onPress={() => {
-                            setBudget(minutes);
-                            setTimeChosenFor(localDate());
-                          }}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                )}
-              <View style={{ gap: 5 }}>
-                <Label>YOUR PLAN</Label>
-                <Text style={s.body}>
-                  {next.direction
-                    ? AREAS.find((a) => a.id === next.direction?.areaId)?.title
-                    : "Your saved work"}
-                  {next.direction ? ` → ${next.direction.choice}` : ""}
-                </Text>
-                <Text numberOfLines={1} style={s.taskTitle}>
-                  {nextPlan?.title ??
-                    (next.kind === "starter"
-                      ? "First plan · not shaped yet"
-                      : nextTask
-                        ? "Saved action"
-                        : next.kind === "setup"
-                          ? "Your starting profile"
-                          : "Your next decision")}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => navigate("My mind")}
-                >
-                  <Text style={s.smallLink}>
-                    See my plan and all its steps →
-                  </Text>
-                </Pressable>
-              </View>
-              <View style={s.hero}>
-                <Text style={s.heroKicker}>
-                  {next.kind === "check-in"
-                    ? "STEP FINISHED · CHECK IN"
-                    : next.kind === "follow-up"
-                      ? "FOLLOW-UP DUE"
-                      : next.kind === "scheduled"
-                        ? "SAVED FOR LATER"
-                        : next.kind === "paused"
-                          ? "YOUR PLACE IS SAVED"
-                          : next.kind === "task"
-                            ? "YOUR CHOSEN STEP"
-                            : "NEXT"}
-                </Text>
-                <Text
-                  numberOfLines={3}
-                  style={[s.heroTitle, { fontSize: 28, lineHeight: 34 }]}
-                >
-                  {next.kind === "starter"
-                    ? `Let’s shape ${next.direction?.choice.toLowerCase()}.`
-                    : nextTask
-                      ? nextTask.title
-                      : next.title}
-                </Text>
-                <Text style={s.heroSub}>
-                  {next.kind === "starter"
-                    ? "Add a few real details. We’ll turn them into a small plan you can review, then choose one step."
-                    : next.kind === "process"
-                      ? "Your original words are saved. Continue from them without recording again."
-                      : next.kind === "draft"
-                        ? "Your words have become a draft. Review the suggested steps and choose one to start."
-                        : next.kind === "task"
-                          ? `${nextTask?.minutes} minutes · Open this step to work on it, edit it, or choose when to return.`
-                          : next.kind === "check-in"
-                            ? "You finished this step. Continue the same plan, or save a clear stopping point."
-                            : next.kind === "follow-up"
-                              ? `You asked to check back ${nextTask?.chaseDate || "now"}. Decide if this is ready, still waiting, or finished.`
-                              : next.kind === "scheduled"
-                                ? `Nothing to do on this step now. ${nextTask?.chaseDate ? `Check back on ${nextTask.chaseDate}.` : nextTask?.plannedDate ? `Planned for ${nextTask.plannedDate}.` : "Choose a check-in date to know when to return."} You can adjust it below.`
-                                : next.kind === "paused"
-                                  ? "This step is finished and your plan is saved. You decide when to continue."
-                                  : next.kind === "complete"
-                                    ? "No saved step needs a decision now. Your map keeps the history; add a new thought when something changes."
-                                    : "We’ll use your saved answers. Finish the next missing section, then shape your first plan."}
-                </Text>
-                {next.kind === "starter" && next.direction && (
-                  <Tap
-                    label="Shape my first plan"
-                    onPress={() => guidedCapture(next.direction!)}
-                    primary
-                    disabled={busy}
-                  />
-                )}
-                {["task", "follow-up", "scheduled"].includes(next.kind) &&
-                  nextTask && (
-                    <Tap
-                      label={
-                        next.kind === "task"
-                          ? "Open my step"
-                          : next.kind === "follow-up"
-                            ? "Review this follow-up"
-                            : "View or change this step"
-                      }
-                      onPress={() => openTask(nextTask)}
-                      primary
-                      disabled={busy}
-                    />
-                  )}
-                {next.kind === "check-in" && (
-                  <>
-                    <Tap
-                      label={
-                        nextPlan?.steps.some(
-                          (step) => !step.accepted && !step.deferred,
-                        )
-                          ? "Choose the next step in this plan"
-                          : "Update this plan"
-                      }
-                      onPress={() => void checkIn(true)}
-                      primary
-                      disabled={busy}
-                    />
-                    <Tap
-                      label="Pause here for now"
-                      onPress={() => void checkIn(false)}
-                      disabled={busy}
-                    />
-                  </>
-                )}
-                {["setup", "draft", "process"].includes(next.kind) && (
-                  <Tap
-                    label={
-                      next.kind === "draft"
-                        ? "Review my plan"
-                        : next.kind === "process"
-                          ? "Resume my saved thought"
-                          : "Continue my setup"
-                    }
-                    onPress={continueJourney}
-                    primary
-                    disabled={busy}
-                  />
-                )}
-                {next.kind === "paused" && (
-                  <Tap
-                    label="Continue my path"
-                    onPress={() =>
-                      void run(async () => {
-                        await updateProfile({
-                          ...profile,
-                          activeTaskId: undefined,
-                        });
-                      })
-                    }
-                    primary
-                    disabled={busy}
-                  />
-                )}
-                {next.kind === "complete" && (
-                  <Tap
-                    label="Add what’s next"
-                    onPress={() => capture("voice")}
-                    primary
-                  />
-                )}
-              </View>
-              {next.kind === "starter" && next.direction && (
-                <Tap
-                  label="Help me with a suggested first step"
-                  onPress={() => void useStarter(next.direction!)}
-                  disabled={busy}
-                />
-              )}
-              {next.kind === "task" &&
-                nextTask &&
-                nextTask.minutes > effectiveBudget && (
-                  <Text style={s.body}>
-                    This chosen step is longer than your {effectiveBudget}
-                    -minute window. Open it to make it smaller or move it to a
-                    better time.
-                  </Text>
-                )}
-              {nextPlan && (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setSelected(nextPlan.id)}
-                >
-                  <Text style={s.smallLink}>
-                    Review the plan behind this step →
-                  </Text>
-                </Pressable>
-              )}
-              {completion.percent < 100 && next.kind !== "setup" && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Finish my profile, ${completion.percent}% complete`}
-                  onPress={() => navigate("Profile")}
-                  style={s.quiet}
-                >
-                  <Text style={s.meta}>
-                    Profile {completion.percent}% · {completion.next?.title}{" "}
-                    still to fill
-                  </Text>
-                </Pressable>
-              )}
-              <Text style={s.body}>
-                Your plans and steps live in My mind. Notes and recordings stay
-                in Library.
-              </Text>
-            </>
-          )}
-          {screen === "Profile" && (
-            <ProfileView
-              profile={profile}
-              progress={progress}
-              notes={notes}
-              drafts={drafts}
-              tasks={tasks}
-              busy={busy}
-              onContinue={continueJourney}
-              onCapture={() => capture("voice")}
-              onConfigure={async (patch) => {
-                if (lock.current)
-                  throw new Error("Another save is in progress.");
-                lock.current = true;
-                setBusy(true);
-                try {
-                  await updateProfile({ ...profile, ...patch });
-                } finally {
-                  lock.current = false;
-                  setBusy(false);
-                }
-              }}
-              onCompleteAssessment={() => void openProfileSection("assessment")}
-              onCompleteAreas={(index) =>
-                void openProfileSection("areas", index)
-              }
-              onEditAreas={() =>
-                void run(async () => {
-                  await updateProfile({
-                    ...profile,
-                    stage: "areas",
-                    areaIndex: 0,
-                  });
-                  setOnboarding(true);
-                })
-              }
-              onAssessment={() =>
-                void run(async () => {
-                  await updateProfile({
-                    ...profile,
-                    stage:
-                      profile.answers.length === 20 ? "results" : "assessment",
-                  });
-                  setOnboarding(true);
-                })
-              }
-              onPreference={() =>
-                void run(async () => {
-                  await updateProfile({
-                    ...profile,
-                    presentation:
-                      productivityGuide(profile.answers, profile.presentation)
-                        .presentation === "sequence"
-                        ? "small"
-                        : "sequence",
-                  });
-                  setNotice("Guidance style updated.");
-                })
-              }
-              onFocus={(title) =>
-                void run(async () => {
-                  await updateProfile({
-                    ...profile,
-                    focus: title,
-                    activeTaskId: undefined,
-                    focusExplicit: true,
-                    focusNone: false,
-                  });
-                  navigate("Today");
-                })
-              }
-            />
-          )}
-          {screen === "My mind" && (
-            <>
-              <Label>YOUR MAP · THOUGHT TO ACTION</Label>
-              <Text style={s.headline}>See how it fits.</Text>
-              <PathRail stage={pathStage} compact />
-              <Text style={s.body}>
-                Thoughts become plans here. Each plan keeps its original words
-                and chosen steps together.
-              </Text>
-              <Tap
-                label="Return to my next step"
-                onPress={() => navigate("Today")}
-                primary
-              />
-              <Tap
-                label="Add a thought to My mind"
-                onPress={() => capture("voice")}
-              />
-              <PlanMap
-                profile={profile}
-                notes={notes.filter(
-                  (n) => !n.captureKind || n.captureKind === "thought",
-                )}
-                drafts={drafts}
-                tasks={tasks}
-                currentTaskId={nextTask?.id}
-                onOpenTask={openTask}
-                onOpenDraft={(d) => setSelected(d.id)}
-                onOpenNote={(n) => {
-                  setProcessingError("");
-                  setNote(n);
-                }}
-                onCapture={(direction) =>
-                  direction ? guidedCapture(direction) : capture("voice")
-                }
-              />
-            </>
-          )}
-          {screen === "Library" && (
-            <>
-              <Label>LIBRARY · ORIGINALS</Label>
-              <Text style={s.headline}>Your words.{"\n"}Kept safe.</Text>
-              <Text style={s.intro}>
-                Original thoughts and recordings live here, even as your plans
-                change.
-              </Text>
-              <Tap
-                label="Save a note to Library"
-                onPress={() =>
-                  capture(
-                    "voice",
-                    null,
-                    "Keep this as a note. We’ll save your words without creating a plan.",
-                    undefined,
-                    "note",
-                  )
-                }
-                primary
-              />
-              {notes
-                .filter((n) => n.captureKind !== "feedback")
-                .map((n) => (
-                  <Pressable
-                    key={n.id}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setProcessingError("");
-                      setNote(n);
-                    }}
-                    style={s.libraryRow}
-                  >
-                    <View style={s.noteIcon}>
-                      <Text style={{ fontSize: 22, color: C.blue }}>
-                        {n.audioUri ? "≋" : "≡"}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1, gap: 5 }}>
-                      <Text numberOfLines={2} style={s.taskTitle}>
-                        {n.title}
-                      </Text>
-                      <Text style={s.meta}>
-                        {n.captureKind === "note"
-                          ? "Kept note · "
-                          : "Original thought · "}
-                        {n.audioUri ? "Voice · " : ""}
-                        {new Date(n.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </Text>
-                      {n.audioUri && !n.text && (
-                        <Text style={s.meta}>Audio saved · tap to process</Text>
-                      )}
-                    </View>
-                    <Text style={s.arrow}>↗</Text>
-                  </Pressable>
-                ))}
-              {!notes.filter((n) => n.captureKind !== "feedback").length && (
-                <View style={s.emptyCard}>
-                  <Text style={s.cardTitle}>A fresh page.</Text>
-                  <Text style={s.body}>
-                    Speak or write. We’ll keep the original here.
-                  </Text>
-                  <Tap
-                    label="Write a note"
-                    onPress={() => capture("text", null, "", undefined, "note")}
-                    primary
-                  />
-                </View>
-              )}
-            </>
-          )}
-          {screen === "Feedback" && (
-            <>
-              <Label>FEEDBACK · ABOUT FLOW</Label>
-              <Text style={s.headline}>Tell us as you go.</Text>
-              <Text style={s.body}>
-                What felt confusing, missing, or helpful? Speak or write it
-                here. Feedback stays separate from your plans and is saved on
-                this device; it is not sent automatically.
-              </Text>
-              <Tap
-                label="Record feedback"
-                onPress={() =>
-                  capture(
-                    "voice",
-                    null,
-                    "What were you trying to do, and what happened?",
-                    undefined,
-                    "feedback",
-                  )
-                }
-                primary
-              />
-              <Tap
-                label="Write feedback"
-                onPress={() => capture("text", null, "", undefined, "feedback")}
-              />
-              {notes
-                .filter((n) => n.captureKind === "feedback")
-                .map((n) => (
-                  <Pressable
-                    key={n.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open feedback: ${n.title}`}
-                    onPress={() => {
-                      setProcessingError("");
-                      setNote(n);
-                    }}
-                    style={s.libraryRow}
-                  >
-                    <View style={{ flex: 1, gap: 5 }}>
-                      <Text style={s.taskTitle}>{n.title}</Text>
-                      <Text style={s.meta}>
-                        {n.audioUri ? "Recording" : "Written feedback"} ·{" "}
-                        {new Date(n.createdAt).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              <Tap
-                label="Return to my path"
-                onPress={() => navigate("Today")}
-              />
-            </>
-          )}
-          <Text style={s.footer}>Less to manage. More room to live.</Text>
-        </ScrollView>
-      </Animated.View>
-      <View style={s.nav}>
-        {(["Today", "My mind", "Library", "Profile"] as Screen[]).map(
-          (t, i) => (
-            <Pressable
-              key={t}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: screen === t }}
-              onPress={() => navigate(t)}
-              style={s.navItem}
-            >
-              <Text style={[s.navIcon, screen === t && { color: C.blue }]}>
-                {["◉", "⌘", "▤", "◎"][i]}
-              </Text>
-              <Text
-                style={[
-                  s.navText,
-                  screen === t && { color: C.ink, fontWeight: "700" },
-                ]}
-              >
-                {t}
-              </Text>
-            </Pressable>
-          ),
-        )}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            screen === "Library"
-              ? "Save a note"
-              : screen === "Feedback"
-                ? "Add feedback"
-                : "Capture a thought"
-          }
-          onPress={() =>
-            capture(
-              "text",
-              null,
-              "",
-              undefined,
-              screen === "Library"
-                ? "note"
-                : screen === "Feedback"
-                  ? "feedback"
-                  : "thought",
-            )
-          }
-          style={s.navCapture}
-        >
-          <Text style={{ fontSize: 28, color: C.white }}>＋</Text>
-        </Pressable>
-      </View>
+
+  const captureTitle =
+    capture?.kind === "tomorrow"
+      ? "Tomorrow"
+      : capture?.kind === "feedback"
+      ? "Tell Flow something"
+      : capture?.threadId
+        ? current?.title ?? "Add to this thread"
+        : capture?.mode === "text"
+          ? "Write it down"
+          : "Record";
+  const captureHint =
+    capture?.kind === "feedback"
+      ? "About Flow itself. It stays here and never becomes a thread."
+      : capture?.prompt ?? (capture?.threadId ? "Just answer or add. Flow keeps the thread." : "Say everything about one thing. Don't organise it.");
+  const captureSheet = (
       <Modal
-        visible={composer !== null}
+        visible={capture !== null}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={closeCapture}
@@ -1357,93 +668,60 @@ function Flow() {
         onDismiss={finishSheetTransition}
       >
         <SafeAreaView style={s.sheet}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            style={{ flex: 1 }}
-          >
+          {/* A page sheet sits below the screen top, so padding-style avoidance misjudges the keyboard; iOS insets the scroll view itself. */}
+          <View style={{ flex: 1 }}>
             <View style={s.sheetHead}>
-              <Label>
-                {captureKind === "feedback"
-                  ? "FEEDBACK · ABOUT FLOW"
-                  : captureKind === "note"
-                    ? "LIBRARY · KEEP A NOTE"
-                    : refining
-                      ? "CONTINUE THIS PLAN"
-                      : "MY MIND · CAPTURE A THOUGHT"}
-              </Label>
-              <Tap
-                label="Close"
-                onPress={closeCapture}
-                disabled={voiceBusy || busy || processing}
-              />
+              <Text style={s.kicker} numberOfLines={1}>
+                {capture?.kind === "feedback" ? "FEEDBACK" : capture?.kind === "tomorrow" ? "PLAN TOMORROW" : capture?.threadId ? "THIS THREAD" : ""}
+              </Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeCapture} disabled={voiceBusy || busy || processing} hitSlop={12}>
+                <Text style={s.link}>Close</Text>
+              </Pressable>
             </View>
             <ScrollView
               contentContainerStyle={s.sheetBody}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              contentInsetAdjustmentBehavior="automatic"
             >
-              <Text style={s.sheetTitle}>
-                {composer === "voice"
-                  ? "Say it your way."
-                  : "No need to\norganize it first."}
-              </Text>
-              {composer === "voice" ? (
+              <Text style={s.sheetTitle}>{captureTitle}</Text>
+              <Text style={s.body}>{captureHint}</Text>
+              {consentAsk && (
+                <View style={s.card}>
+                  <View style={{ gap: 10 }}>
+                    <Text style={s.body}>
+                      Your iPhone can't run Apple's on-device AI. Flowthread can send the text of your note (never the audio) to a secure server to shape it. Nothing is stored.
+                    </Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Allow" onPress={() => consentAsk(true)} style={s.primary}>
+                      <Text style={s.primaryText}>Allow</Text>
+                    </Pressable>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Keep it basic" onPress={() => consentAsk(false)} hitSlop={8} style={{ alignSelf: "center" }}>
+                      <Text style={s.link}>Keep it basic</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+              {capture?.mode === "voice" ? (
                 <>
                   {voiceResult ? (
-                    <View style={s.emptyCard}>
-                      <Text style={s.cardTitle}>
-                        {processing
-                          ? captureKind === "thought"
-                            ? "Turning your words into a draft…"
-                            : "Transcribing your recording…"
-                          : "Recording saved."}
-                      </Text>
-                      {processing ? (
-                        <ActivityIndicator color={C.blue} />
-                      ) : (
-                        <AudioPlayback uri={voiceResult.audioUri!} />
-                      )}
-                      <Text style={s.body}>
-                        {processing
-                          ? "Transcribing on your Mac mini. Your original audio is already safe on this phone."
-                          : processingError}
-                      </Text>
+                    <View style={s.card}>
+                      <Text style={s.cardTitle}>{processing ? "Saved." : "Recording saved."}</Text>
+                      {processing ? (!consentAsk && <Thinking onBackground={continueInBackground} onCancel={cancelShaping} />) : <AudioPlayback uri={voiceResult.audioUri!} />}
+                      {!processing && <Text style={s.body}>{processingError}</Text>}
                       {!processing && (
-                        <Tap
-                          label="Retry processing"
-                          primary
-                          onPress={() =>
-                            void processRecording(voiceResult, "capture")
-                          }
-                        />
+                        <Pressable accessibilityRole="button" accessibilityLabel="Retry processing" onPress={() => void processRecording(voiceResult)} style={s.primary}>
+                          <Text style={s.primaryText}>Retry</Text>
+                        </Pressable>
                       )}
                     </View>
                   ) : (
-                    <>
-                      <View>
-                        {!!captureTopic && (
-                          <Text style={s.body}>{captureTopic}</Text>
-                        )}
-                      </View>
-                      <VoiceCapture
-                        compact
-                        autoStart={captureVisible}
-                        onActivityChange={setVoiceBusy}
-                        onSaved={voiceSaved}
-                        onComplete={recordingCompleted}
-                      />
-                    </>
+                    <VoiceCapture compact autoStart={captureVisible} onActivityChange={setVoiceBusy} onSaved={voiceSaved} onComplete={recordingCompleted} />
                   )}
-                  <Text style={s.body}>
-                    {captureKind === "thought"
-                      ? "Stop once. We save the audio, transcribe it, and open a draft here."
-                      : `Stop once. Your recording and transcript stay in ${captureKind === "feedback" ? "Feedback" : "Library"}; no plan or task is created.`}{" "}
-                    Keep this device and your Mac mini on the same Wi-Fi.
-                  </Text>
                   {!voiceBusy && !voiceResult && (
-                    <Tap
-                      label="Write or use keyboard dictation instead"
-                      onPress={() => setComposer("text")}
-                    />
+                    <Pressable accessibilityRole="button" accessibilityLabel="Write instead" onPress={() => setCapture({ ...capture, mode: "text" })} hitSlop={8} style={{ alignSelf: "center" }}>
+                      <Text style={s.link}>or write it down</Text>
+                    </Pressable>
                   )}
                 </>
               ) : (
@@ -1454,611 +732,297 @@ function Flow() {
                     maxLength={20000}
                     value={input}
                     onChangeText={setInput}
-                    editable={!busy}
-                    placeholder={
-                      captureKind === "feedback"
-                        ? "What were you trying to do? What felt confusing or useful?"
-                        : captureKind === "note"
-                          ? "Something to remember, a reference, a thought to keep…"
-                          : refining
-                            ? "What changed? What else is on your mind?"
-                            : "An idea, a loose end, something you want to do…"
-                    }
-                    placeholderTextColor="#8D95A4"
-                    accessibilityLabel={
-                      captureKind === "thought"
-                        ? "Your thought"
-                        : captureKind === "note"
-                          ? "Your note"
-                          : "Your feedback"
-                    }
-                    style={s.thoughtInput}
+                    editable={!busy && !processing}
+                    placeholder={capture?.kind === "feedback" ? "What were you trying to do? What felt confusing or useful?" : "Your words are enough."}
+                    placeholderTextColor={C.faint}
+                    accessibilityLabel={capture?.kind === "feedback" ? "Your feedback" : "Your thought"}
+                    style={s.input}
                   />
-                  <View style={s.hintRow}>
-                    <Text style={s.meta}>Your words are enough.</Text>
-                    <Text style={s.meta}>{input.length}/20,000</Text>
-                  </View>
-                  <Tap
-                    label={
-                      busy
-                        ? captureKind === "thought"
-                          ? "Making sense of it…"
-                          : "Saving…"
-                        : captureKind === "feedback"
-                          ? "Save feedback"
-                          : captureKind === "note"
-                            ? "Save note"
-                            : refining
-                              ? "Add to this plan  ↗"
-                              : "Shape this thought  ↗"
-                    }
-                    primary
-                    disabled={busy || !input.trim()}
-                    onPress={() => void submit()}
-                  />
-                  <Text style={s.previewHint}>
-                    {captureKind === "thought"
-                      ? "Flow can organize this privately on your Mac mini. Your original words are always kept."
-                      : `Saved in ${captureKind === "feedback" ? "Feedback" : "Library"}. This won’t create a task or change your plan.`}
-                  </Text>
-                  <Tap
-                    label="Speak instead"
-                    onPress={() => setComposer("voice")}
-                    disabled={busy}
-                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={capture?.kind === "feedback" ? "Save feedback" : "Send to Flow"}
+                    onPress={() => void submitText()}
+                    disabled={busy || processing || !input.trim()}
+                    style={({ pressed }) => [s.primary, (pressed || busy || processing || !input.trim()) && { opacity: 0.55 }]}
+                  >
+                    <Text style={s.primaryText}>{processing ? "Flow is reading…" : capture?.kind === "feedback" ? "Save feedback" : "Send to Flow"}</Text>
+                  </Pressable>
+                  {/* While Flow waits for the cloud answer, nothing is thinking yet. */}
+                  {processing && !consentAsk && <Thinking onBackground={continueInBackground} onCancel={cancelShaping} />}
+                  {!!processingError && <Text style={s.error}>{processingError}</Text>}
+                  {!processing && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Speak instead" onPress={() => capture && setCapture({ ...capture, mode: "voice" })} hitSlop={8} style={{ alignSelf: "center" }}>
+                      <Text style={s.link}>or record instead</Text>
+                    </Pressable>
+                  )}
                 </>
               )}
               {!!error && <Text style={s.error}>{error}</Text>}
-              {!!notice && <Text style={s.notice}>{notice}</Text>}
             </ScrollView>
-          </KeyboardAvoidingView>
+          </View>
         </SafeAreaView>
       </Modal>
-      <Modal
-        visible={!!current}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => {
-          if (!busy) closeThread();
-        }}
-        onDismiss={finishSheetTransition}
-      >
-        <SafeAreaView style={s.sheet}>
-          <View style={s.sheetHead}>
-            <Label>
-              {current?.example ? "EXAMPLE · TRY THE FLOW" : "A WORKING DRAFT"}
-            </Label>
-            <Tap
-              label="Done"
-              onPress={closeThread}
-              disabled={busy}
-            />
-          </View>
-          {current && (
-            threadDeveloping ? <DraftReview
-              presentation={profile.presentation}
-              key={current.id}
-              draft={current}
-              tasks={tasks}
-              onOpenTask={openTask}
-              busy={busy}
-              organizing={organizing}
-              onChoose={(step, smaller) =>
-                chooseDraftStep(current, step, smaller)
-              }
-              onDefer={(step, deferred) =>
-                deferDraftStep(current, step, deferred)
-              }
-              onOrganize={() => void organizeCurrent(current)}
-              onClose={closeThread}
-              onPark={() =>
-                void run(async () => {
-                  await saveDraft({
-                    ...current,
-                    state: current.state === "parked" ? "draft" : "parked",
-                  });
-                  setSelected(null);
-                  setNotice("Thought kept. You can return whenever you want.");
-                })
-              }
-              error={error}
-              notice={notice}
-            />
-            : <ThreadReview
-              draft={current}
-              busy={busy}
-              onClose={closeThread}
-              prompt={threadPrompt(current)}
-              onCapture={() => capture("voice", current.id, threadPrompt(current), current.direction)}
-              onDevelop={() => setThreadDeveloping(true)}
-            />
-          )}
-        </SafeAreaView>
-      </Modal>
-      <Modal
-        visible={!!note}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => {
-          if (!processing) setNote(null);
-        }}
-        onDismiss={finishSheetTransition}
-      >
-        <SafeAreaView style={s.sheet}>
-          <View style={s.sheetHead}>
-            <Label>
-              {note?.captureKind === "feedback"
-                ? "SAVED FEEDBACK"
-                : note?.captureKind === "note"
-                  ? "SAVED NOTE"
-                  : "ORIGINAL THOUGHT"}
-            </Label>
-            <Tap
-              label="Done"
-              onPress={() => setNote(null)}
-              disabled={processing}
-            />
-          </View>
-          {note && (
-            <ScrollView contentContainerStyle={s.sheetBody}>
-              <Text style={s.sheetTitle}>{note.title}</Text>
-              {note.audioUri && <AudioPlayback uri={note.audioUri} />}
-              <Text style={s.sourceText}>
-                {note.text || "Your original audio is saved on this device."}
-              </Text>
-              {!!note.audioUri && !note.text && (
-                <View>
-                  {processing && <ActivityIndicator color={C.blue} />}
-                  <Tap
-                    label={
-                      processing
-                        ? "Transcribing…"
-                        : note.captureKind && note.captureKind !== "thought"
-                          ? "Transcribe recording"
-                          : "Transcribe & shape"
-                    }
-                    primary
-                    disabled={processing}
-                    onPress={() => void processRecording(note, "library")}
-                  />
-                  {!!processingError && (
-                    <Text style={s.error}>{processingError}</Text>
-                  )}
-                </View>
-              )}
-              {!!note.text &&
-                note.captureKind !== "feedback" &&
-                note.captureKind !== "note" && (
-                  <Tap
-                    label={
-                      processing ? "Organizing…" : "Open as a visual draft"
-                    }
-                    primary
-                    onPress={() => void processRecording(note, "library")}
-                    disabled={busy || processing}
-                  />
-                )}
-              {!!note.text && !!processingError && (
-                <Text style={s.error}>{processingError}</Text>
-              )}
+  );
 
-              <Text style={s.meta}>Saved on this device</Text>
-            </ScrollView>
-          )}
-        </SafeAreaView>
-      </Modal>
-      <Modal
-        visible={settings}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSettings(false)}
-      >
-        <SafeAreaView style={s.sheet}>
-          <View style={s.sheetHead}>
-            <Label>BEHIND THE SIMPLICITY</Label>
-            <Tap label="Done" onPress={() => setSettings(false)} />
+  if (!ready)
+    return (
+      <SafeAreaView style={s.safe}>
+        <View style={s.loading}>
+          <Text style={s.brand}>flow.</Text>
+          {error ? <Text style={s.error}>{error}</Text> : <ActivityIndicator color={C.blue} />}
+        </View>
+      </SafeAreaView>
+    );
+
+  if (funnel) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <StatusBar style="auto" />
+        <Funnel
+          profile={profile}
+          step={funnelStep}
+          onStep={setFunnelStep}
+          busy={busy}
+          error={error}
+          onSave={(p) => run(() => updateProfile(p))}
+          onFinish={(p) =>
+            run(async () => {
+              await updateProfile(p);
+              setProgress(await syncProgress().catch(() => progress));
+              setFunnel(false);
+              selectTab("today");
+            })
+          }
+          onRecordFirst={(prompt) => startCapture("voice", null, "thought", prompt)}
+          onWriteFirst={(prompt) => startCapture("text", null, "thought", prompt)}
+          onConnectCalendar={connectCalendarNow}
+          calendarConnected={calendarOn}
+          events={events}
+          onExit={needsFunnel(profile) ? undefined : () => void run(async () => { await updateProfile({ ...profile, assessmentLaterAt: new Date().toISOString() }); setFunnel(false); selectTab("today"); })}
+        />
+        {captureSheet}
+      </SafeAreaView>
+    );
+  }
+
+  const suggestion = suggestPrompt(profile.plate, threads);
+  const devSeed = typeof __DEV__ !== "undefined" && __DEV__ ? () => void seedDemoCalendar().then(() => refreshCalendar()) : undefined;
+  const record = () => startCapture("voice", null, "thought", suggestion.prompt);
+  const write = () => startCapture("text", null, "thought", suggestion.prompt);
+  const realThreads = threads.filter((t) => !t.example);
+  const projectsCount = realThreads.filter((t) => t.state !== "parked").length;
+  const recordingsCount = notes.filter((n) => !n.planId && (!n.captureKind || n.captureKind === "thought") && n.text?.trim()).length;
+
+  return (
+    <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+      <StatusBar style="dark" />
+      <View style={{ flex: 1 }}>
+        {screen === "today" && (
+          <Today
+            events={events}
+            tasks={tasks}
+            tomorrow={watchOuts(events, new Date(), 2).filter((w) => w.date !== new Date().toISOString().slice(0, 10))}
+            projects={realThreads.map((t) => ({ id: t.id, title: t.title }))}
+            notice={notice}
+            error={error || processingError}
+            busy={busy}
+            onTick={onTick}
+            onOpenMove={setEditing}
+            onTomorrow={onTomorrow}
+            onEvening={onEvening}
+            onDelete={onDeleteMove}
+            onRecord={record}
+            onWrite={write}
+            onDismissNotice={() => {
+              setNotice("");
+              setError("");
+              setProcessingError("");
+            }}
+            calendar={{ connected: calendarOn, onConnect: () => void connectCalendarNow() }}
+            tomorrowPlan={{
+              locked: !!tomorrowSet,
+              sub: tomorrowSet ? tomorrowSet.closure.replace(/^Tomorrow is set · /, "").replace(/\. Nothing to hold tonight\.$/, "") : "the calendar, your routines, what to carry — set it tonight",
+              onOpen: () => void openTomorrow().catch(() => {}),
+            }}
+          />
+        )}
+        {screen === "tomorrow" && proposal && (
+          <PlanTomorrow
+            proposal={proposal}
+            routines={routines}
+            suggestedLines={suggestedLines}
+            busy={busy}
+            onLock={lockDay}
+            onOpenMove={setEditing}
+            onBack={() => setScreen("today")}
+            onTalk={() => startCapture("voice", null, "tomorrow", "What does tomorrow hold? Say it all — Flow connects it to your list.")}
+            onType={() => startCapture("text", null, "tomorrow", "What does tomorrow hold? Say it all — Flow connects it to your list.")}
+          />
+        )}
+        {screen === "calendar" && (
+          <CalendarTab events={events} tasks={tasks} connected={calendarOn} busy={busy} onConnect={() => void connectCalendarNow()} onOpenMove={setEditing} onRecord={record} onWrite={write} onSeed={devSeed} />
+        )}
+        {screen === "threads" && (
+          <Threads notes={notes} threads={threads} tasks={tasks} busy={busy} onOpenRecording={(n) => openRecording(n.id)} onOpenThread={openThread} onRecord={record} onWrite={write} />
+        )}
+        {screen === "recording" && openNote && (
+          <RecordingPage note={openNote} threads={threads} tasks={tasks} paragraph={paragraph} alsoTaskIds={alsoTaskIds} onBack={closeRecording} onTick={onTick} onOpenMove={setEditing} onAsk={openThread} />
+        )}
+        {screen === "recording" && !openNote && (
+          <View style={s.loading}>
+            <Text style={s.body}>That recording is no longer here.</Text>
+            <Pressable accessibilityRole="button" onPress={closeRecording}>
+              <Text style={s.link}>Back</Text>
+            </Pressable>
           </View>
-          <ScrollView contentContainerStyle={s.sheetBody}>
-            <Tap
-              label="My profile & life map"
-              onPress={() => {
-                setSettings(false);
-                navigate("Profile");
-              }}
-            />
-            <Text style={s.sheetTitle}>A quieter kind{"\n"}of assistant.</Text>
-            <Text style={s.body}>
-              This is an early testing build. Your existing notes, recordings,
-              tasks and calendar tools are preserved.
-            </Text>
-            <Tap
-              label="Feedback about Flow"
-              onPress={() => {
-                setSettings(false);
-                navigate("Feedback");
-              }}
-              primary
-            />
-            <Tap
-              label="Open all task & calendar controls"
-              onPress={() => {
-                setSettings(false);
-                setAdvanced(true);
-              }}
-            />
-            <View style={s.source}>
-              <Label>WORKING NOW</Label>
-              <Text style={s.body}>
-                Text capture · visual drafts · one-tap actions · local storage ·
-                voice recording · local transcription · local AI drafts · Apple
-                Calendar handoff
-              </Text>
-            </View>
-            <View style={s.source}>
-              <Label>NEXT TO CONNECT</Label>
-              <Text style={s.body}>
-                Connected AI accounts · smart follow-ups · connections across
-                goals · reusable routines
-              </Text>
-            </View>
-            <Text style={s.previewHint}>
-              No paid AI service or cloud sync is connected. Website data and
-              this app remain separate. Test build only.
-            </Text>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-      <TaskDetail
-        task={editingTask}
-        onClose={() => setEditingTask(null)}
-        onSave={saveWorkingTask}
-        onComplete={finishWorkingTask}
-        onCalendar={async (task) => {
-          // Calendar receives exactly the task currently being edited.
-          if (!task.plannedTime)
-            throw new Error(
-              "Choose a date and time in Calendar details first.",
-            );
-          const result = await addTaskToCalendar(task, choose);
-          return result;
-        }}
-      />
+        )}
+        {screen === "me" && (
+          <Me
+            recordings={recordingsCount}
+            projects={projectsCount}
+            calendars={calendars}
+            calendarConnected={calendarOn}
+            remindersConnected={remindersOn}
+            notificationsOn={!profile.notificationsOff}
+            morningTime={profile.morningTime ?? "08:30"}
+            eveningTime={profile.eveningTime ?? "19:00"}
+            version={Constants.expoConfig?.version ?? ""}
+            build={buildStamp()}
+            busy={busy}
+            onConnectCalendar={() => void connectCalendarNow()}
+            onCalendar={(id, on) =>
+              void run(async () => {
+                await setCalendarOn(id, on);
+                await refreshCalendar();
+              })
+            }
+            onConnectReminders={() => void connectRemindersNow()}
+            onNotifications={(on) =>
+              void run(async () => {
+                const next = { ...profile, notificationsOff: on ? undefined : true };
+                await updateProfile(next);
+                if (on) await syncAll({ tasks, threads }, next, true);
+                else await syncReminders([], [], new Date(), { enabled: false });
+              })
+            }
+            onMorning={(time) =>
+              void run(async () => {
+                const next = { ...profile, morningTime: time };
+                await updateProfile(next);
+                await syncAll({ tasks, threads }, next, !next.morningOff);
+              })
+            }
+            onEvening={(time) => void run(() => updateProfile({ ...profile, eveningTime: time }))}
+            onFeedback={(m) => startCapture(m, null, "feedback")}
+            onExport={() => void run(async () => void (await Share.share({ message: await exportAllData() })))}
+            onDevReminder={typeof __DEV__ !== "undefined" && __DEV__ ? () => void sendTestReminder() : undefined}
+            onDevScheduled={typeof __DEV__ !== "undefined" && __DEV__ ? () => void scheduledSummary().then((lines) => Alert.alert("Scheduled", lines.join("\n") || "Nothing scheduled.")) : undefined}
+            onDevImport={
+              typeof __DEV__ !== "undefined" && __DEV__ && devLanConfig() && process.env.EXPO_PUBLIC_TEST_INSTALL
+                ? () =>
+                    void run(async () => {
+                      // A test phone's data, as mirrored on the dev server (install id from the dev .env, never in code).
+                      const lan = devLanConfig()!;
+                      const res = await fetch(`${lan.url}/mirror/${process.env.EXPO_PUBLIC_TEST_INSTALL}`, { headers: { Authorization: "Bearer " + lan.token } });
+                      if (!res.ok) throw new Error("No mirror on the dev server.");
+                      const got = await importAllData(await res.json());
+                      // A simulator has no life on its calendar: the demo week stands in for the owner's.
+                      const week = await readWeek().catch(() => []);
+                      if (!week.some((e) => !e.mine && !e.allDay)) await seedDemoCalendar().catch(() => 0);
+                      await refresh();
+                      await refreshCalendar();
+                      setNotice(`Loaded ${got.records} records and ${got.threads} threads from the test phone.`);
+                    })
+                : undefined
+            }
+            cloud={onDeviceAi ? undefined : { on: cloudConsent === "allowed", onChange: (on) => void run(async () => { await setCloudConsent(on ? "allowed" : "declined"); setCloudConsentState(on ? "allowed" : "declined"); }) }}
+            onDeleteAll={() =>
+              Alert.alert("Delete all your data?", "Every thread, move, recording and setting on this phone will be erased. This cannot be undone.", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete everything",
+                  style: "destructive",
+                  onPress: () =>
+                    void run(async () => {
+                      // Flow's blocks and chases leave the phone with the data.
+                      await removeAllFlowItems().catch(() => ({ events: 0, reminders: 0 }));
+                      await deleteAllData();
+                      setPlan(null);
+                      setTomorrowSet(null);
+                      setEvents([]);
+                      setProfile(newProfile());
+                      setOpenId(null);
+                      setFunnelStep("intro");
+                      setFunnel(true);
+                      await refresh();
+                    }),
+                },
+              ])
+            }
+          />
+        )}
+        {screen === "intake" && plan && (
+          <WeekPlan
+            plan={plan}
+            busy={busy}
+            onOpenProject={openThread}
+            onRecord={() => startCapture("voice", null, "thought", "Anything else on your mind?")}
+            onWrite={() => startCapture("text", null, "thought", "Anything else on your mind?")}
+            onDone={() => {
+              setPlan(null);
+              selectTab("today");
+            }}
+          />
+        )}
+        {screen === "thread" && current && (
+          <ThreadChat
+            thread={current}
+            tasks={tasks}
+            notes={notes}
+            mode={mode}
+            formula={formula}
+            events={events}
+            busy={busy}
+            processing={processing && !capture}
+            error={error || processingError}
+            onRecord={() => startCapture("voice", current.id, "thought", pendingQuestion(current))}
+            onSend={(text) => sendMessage(current.id, text)}
+            onChip={chip}
+            onClose={closeThread}
+            others={realThreads.filter((t) => t.id !== current.id && t.state !== "parked" && !t.resolvedAt).map((t) => ({ id: t.id, title: t.title }))}
+          />
+        )}
+        {screen === "thread" && !current && (
+          <View style={s.loading}>
+            <Text style={s.body}>That thread is no longer here.</Text>
+            <Pressable accessibilityRole="button" onPress={closeThread}>
+              <Text style={s.link}>Back</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+      {screen !== "thread" && screen !== "tomorrow" && <TabBar active={screen === "recording" ? "threads" : screen === "intake" ? "today" : screen} onSelect={selectTab} />}
+      <MoveSheet task={editing} projects={realThreads.filter((t) => t.state !== "parked")} onSave={(patch) => editing && onSaveMove(editing, patch)} onDelete={() => editing && onDeleteMove(editing)} onClose={() => setEditing(null)} onOpenSource={editing?.noteId ? () => { const id = editing.noteId!; setEditing(null); openRecording(id); } : undefined} />
+      {captureSheet}
     </SafeAreaView>
   );
 }
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.paper },
-  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 24 },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  brand: { fontSize: 34, fontWeight: "800", letterSpacing: -2, color: C.ink },
-  row: { flexDirection: "row", alignItems: "center", gap: 10 },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  test: { fontSize: 10, fontWeight: "700", letterSpacing: 1.5, color: C.muted },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: C.white,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.line,
-  },
-  page: { padding: 24, paddingTop: 18, gap: 16, paddingBottom: 20 },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.6,
-    color: C.muted,
-  },
-  headline: {
-    fontSize: 42,
-    lineHeight: 46,
-    letterSpacing: -1.8,
-    fontWeight: "700",
-    color: C.ink,
-    marginTop: 12,
-  },
-  headingRow: { marginBottom: 10 },
-  hero: {
-    backgroundColor: C.ink,
-    borderRadius: 28,
-    padding: 24,
-    gap: 16,
-    overflow: "hidden",
-  },
-  heroTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  heroKicker: {
-    fontSize: 10,
-    letterSpacing: 1.7,
-    fontWeight: "700",
-    color: "#C5CEDF",
-  },
-  heroArrow: { fontSize: 27, color: C.lime },
-  heroTitle: {
-    fontSize: 35,
-    lineHeight: 40,
-    letterSpacing: -1,
-    fontWeight: "500",
-    color: C.white,
-  },
-  heroBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  heroSub: { fontSize: 14, lineHeight: 21, color: "#B8C3D8", flex: 1 },
-  wave: { height: 50, flexDirection: "row", alignItems: "center", gap: 4 },
-  captureRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  tap: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-  },
-  primary: { backgroundColor: C.blue },
-  secondary: { backgroundColor: C.soft },
-  tapText: { fontSize: 14, fontWeight: "600", color: C.blue },
-  sectionHead: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  sectionTitle: {
-    fontSize: 21,
-    fontWeight: "600",
-    letterSpacing: -0.5,
-    color: C.ink,
-  },
-  meta: { fontSize: 12, lineHeight: 18, color: C.muted },
-  draftCard: {
-    backgroundColor: C.white,
-    borderRadius: 23,
-    padding: 21,
-    gap: 16,
-    borderWidth: 1,
-    borderColor: C.line,
-  },
-  cardTitle: {
-    fontSize: 21,
-    lineHeight: 28,
-    fontWeight: "600",
-    letterSpacing: -0.4,
-    color: C.ink,
-  },
-  arrow: { fontSize: 24, color: C.blue },
-  miniBranch: {
-    borderLeftWidth: 1,
-    borderLeftColor: C.line,
-    marginLeft: 5,
-    paddingLeft: 17,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  branchDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: C.blue,
-    marginTop: 7,
-  },
-  body: { fontSize: 15, lineHeight: 23, color: C.muted, flexShrink: 1 },
-  smallLink: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: C.blue,
-    paddingVertical: 6,
-  },
-  emptyCard: {
-    padding: 22,
-    borderRadius: 23,
-    backgroundColor: C.white,
-    gap: 16,
-    borderWidth: 1,
-    borderColor: C.line,
-  },
-  emptySymbol: { fontSize: 50, color: C.blue },
-  budgets: { flexDirection: "row", gap: 8, marginBottom: 2 },
-  budget: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 22,
-    backgroundColor: "#E9ECF2",
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  budgetActive: { backgroundColor: C.ink },
-  budgetText: { fontSize: 13, fontWeight: "600", color: C.muted },
-  task: {
-    flexDirection: "row",
-    gap: 14,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: C.line,
-  },
-  check: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#C6CFE0",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: C.white,
-  },
-  taskTitle: { fontSize: 16, lineHeight: 23, color: C.ink, fontWeight: "500" },
-  quiet: { padding: 18, borderRadius: 18, backgroundColor: "#EBEEF4" },
-  intro: { fontSize: 16, lineHeight: 25, color: C.muted, marginBottom: 8 },
-  future: { paddingTop: 30, gap: 12 },
-  libraryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: C.line,
-  },
-  noteIcon: {
-    width: 46,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: C.soft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  footer: {
-    textAlign: "center",
-    fontSize: 12,
-    color: "#8790A0",
-    marginTop: 22,
-    marginBottom: 10,
-  },
-  nav: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 6,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
-    backgroundColor: C.paper,
-  },
-  navItem: { alignItems: "center", gap: 4, padding: 8, minWidth: 72 },
-  navIcon: { fontSize: 22, color: "#9BA5B4" },
-  navText: { fontSize: 11, color: C.muted },
-  navCapture: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: C.blue,
-  },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14, padding: 24 },
+  brand: { fontSize: 34, fontWeight: "800", color: C.ink, letterSpacing: -0.5 },
   sheet: { flex: 1, backgroundColor: C.paper },
-  sheetHead: {
-    padding: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  sheetBody: { padding: 24, paddingTop: 10, paddingBottom: 45, gap: 20 },
-  sheetTitle: {
-    fontSize: 34,
-    lineHeight: 40,
-    letterSpacing: -1.2,
-    fontWeight: "600",
-    color: C.ink,
-  },
-  thoughtInput: {
-    minHeight: 210,
-    fontSize: 22,
-    lineHeight: 33,
-    color: C.ink,
-    textAlignVertical: "top",
-    paddingVertical: 12,
-  },
-  hintRow: { flexDirection: "row", justifyContent: "space-between" },
-  previewHint: { fontSize: 12, lineHeight: 19, color: C.muted },
-  treeRoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 13,
-    paddingVertical: 12,
-  },
-  rootDot: {
-    height: 15,
-    width: 15,
-    borderRadius: 8,
-    borderWidth: 4,
-    borderColor: C.blue,
-    backgroundColor: C.white,
-  },
-  treeRootText: { fontSize: 14, fontWeight: "600", color: C.ink },
-  treeStem: {
-    marginLeft: 7,
-    borderLeftWidth: 1,
-    borderColor: "#C8D0E0",
-    paddingLeft: 22,
-    gap: 20,
-  },
-  treeNode: {
-    backgroundColor: C.white,
-    padding: 20,
-    borderRadius: 20,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: C.line,
-  },
-  treeConnector: {
-    position: "absolute",
-    top: 28,
-    left: -23,
-    width: 22,
-    height: 1,
-    backgroundColor: "#C8D0E0",
-  },
-  treeNodeHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  stepNumber: { fontSize: 15, color: C.blue, fontWeight: "600" },
-  stepActions: { gap: 8 },
-  accepted: { fontSize: 14, color: "#456822", fontWeight: "600" },
-  source: {
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
-    gap: 12,
-  },
-  sourceText: { fontSize: 17, lineHeight: 28, color: C.ink },
-  error: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: C.red,
-    padding: 14,
-    backgroundColor: "#FCEDED",
-    borderRadius: 14,
-  },
-  notice: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: "#35542B",
-    padding: 14,
-    backgroundColor: "#EAF3DE",
-    borderRadius: 14,
-  },
-  back: { padding: 14 },
-  scrim: {
-    flex: 1,
-    backgroundColor: "#14213899",
-    justifyContent: "center",
-    padding: 24,
-  },
-  dialog: { padding: 24, borderRadius: 26, backgroundColor: C.paper, gap: 16 },
+  sheetHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 12 },
+  sheetBody: { paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
+  sheetTitle: { fontSize: 30, lineHeight: 34, fontWeight: "800", color: C.ink, letterSpacing: -0.6 },
+  kicker: { fontSize: 11, letterSpacing: 1.2, fontWeight: "700", color: C.ink3 },
+  body: { fontSize: 15, lineHeight: 22, color: C.muted },
+  link: { color: C.blue, fontSize: 15, fontWeight: "700", paddingVertical: 6 },
+  card: { padding: 16, borderRadius: 16, backgroundColor: C.tint, gap: 10 },
+  cardTitle: { fontSize: 17, fontWeight: "700", color: C.ink },
+  input: { minHeight: 160, maxHeight: 300, padding: 16, borderRadius: 14, backgroundColor: C.tint, fontSize: 17, lineHeight: 24, color: C.ink, textAlignVertical: "top" },
+  primary: { backgroundColor: C.accent, borderRadius: 26, paddingVertical: 15, alignItems: "center" },
+  primaryText: { color: C.white, fontSize: 16, fontWeight: "700" },
+  error: { color: C.red, fontSize: 14, lineHeight: 20 },
 });

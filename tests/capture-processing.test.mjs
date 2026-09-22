@@ -9,6 +9,8 @@ const { harness } = await import("./processing-mocks.mjs");
 
 process.env.EXPO_PUBLIC_PROCESSOR_URL = "http://testing.invalid";
 process.env.EXPO_PUBLIC_PROCESSOR_TOKEN = "test";
+// These suites exercise the development-only LAN processor.
+globalThis.__DEV__ = true;
 
 const recording = (extra = {}) => ({
   id: "capture",
@@ -72,7 +74,7 @@ for (const captureKind of ["note", "feedback"]) {
     const saved = recording({ captureKind });
     harness.notes = [structuredClone(saved)];
     harness.offline = true;
-    await assert.rejects(processCapturedNote(saved), /same Wi-Fi/);
+    await assert.rejects(processCapturedNote(saved), /development processor/);
     assert.deepEqual(harness.notes, [saved]);
     assert.deepEqual(harness.writes, []);
     assert.deepEqual(harness.drafts, []);
@@ -98,21 +100,35 @@ test("persisted capture kind prevents a stale thought caller from converting a n
   assert.deepEqual(harness.drafts, [existing]);
 });
 
-test("explicit and legacy thoughts retain the existing draft path", async () => {
+test("a thought from Today is read into the week plan: a project thread, a placed move on the calendar, nothing asked", async () => {
   for (const captureKind of [undefined, "thought"]) {
     harness.reset();
     const saved = recording({ captureKind, direction });
     const result = await processCapturedNote(saved);
-    assert.equal(result.kind, "draft");
-    assert.equal(result.draft.source, transcript);
-    assert.deepEqual(result.draft.direction, direction);
-    assert.deepEqual(harness.writes, ["transcript", "draft"]);
-    assert.deepEqual(await processCapturedNote(saved), result);
-    assert.equal(harness.fetches, 1);
+    assert.equal(result.kind, "intake");
+    const plan = result.plan;
+    assert.ok(plan.placements.length >= 1);
+    assert.equal(plan.source, "local", "no model answered: the local pass planned it");
+    assert.match(plan.closure, /That's everything/);
+    assert.ok(plan.projects.length >= 1);
+    const thread = harness.drafts.find((d) => d.id === plan.projects[0].id);
+    assert.ok(thread, "a thread per project");
+    assert.deepEqual(thread.sourceNoteIds, [saved.id]);
+    assert.equal(thread.messages.filter((m) => m.kind === "question").length, 0, "quiet: the intake never asks");
+    const move = harness.tasks.find((t) => t.kind === "action");
+    assert.ok(move, "a move");
+    assert.ok(move.plannedDate && move.plannedTime, "placed in a gap");
+    assert.ok(move.eventId, "written to the phone");
+    assert.equal(harness.calendarWrites.filter((w) => w.kind === "event").length, harness.tasks.filter((t) => t.eventId).length);
+    // The same note again is not planned twice.
+    const again = await processCapturedNote(saved);
+    assert.equal(again.kind, "draft");
+    assert.equal(again.draft.id, thread.id);
+    assert.equal(harness.requests.filter((r) => r.body?.uri).length, 1, "audio uploaded once");
   }
 });
 
-test("thought draft-write retry uses stored transcription with its capture kind and original audio", async () => {
+test("a draft-write failure during the intake surfaces, and the retry uses the stored transcript without re-uploading", async () => {
   harness.reset();
   const saved = recording({ captureKind: "thought", direction });
   harness.failDraft = true;
@@ -120,14 +136,8 @@ test("thought draft-write retry uses stored transcription with its capture kind 
   assert.deepEqual(harness.notes, [{ ...saved, text: transcript }]);
   harness.failDraft = false;
   const result = await processCapturedNote(saved);
-  assert.equal(result.kind, "draft");
-  assert.equal(
-    harness.requests.filter(
-      (request) =>
-        request.headers["Content-Type"] === "application/octet-stream",
-    ).length,
-    1,
-  );
+  assert.equal(result.kind, "intake");
+  assert.equal(harness.requests.filter((request) => request.headers["Content-Type"] === "application/octet-stream").length, 1);
   assert.deepEqual(harness.notes, [{ ...saved, text: transcript }]);
 });
 
@@ -166,7 +176,7 @@ test("a thought update stays attached to its original plan and is idempotent", a
   assert.deepEqual(result.draft.updates, [transcript]);
   assert.deepEqual(harness.notes, [{ ...saved, text: transcript }]);
   assert.deepEqual(await processCapturedNote(saved), result);
-  assert.equal(harness.fetches, 1);
+  assert.equal(harness.requests.filter((r) => r.body?.uri).length, 1, "audio uploaded once");
   assert.deepEqual(harness.writes, ["transcript", "draft"]);
 });
 
@@ -180,4 +190,162 @@ test("an empty non-audio capture fails without writing a note or plan", async ()
   );
   assert.deepEqual(harness.writes, []);
   assert.deepEqual(harness.drafts, []);
+});
+
+const SAMPLE = new URL("./fixtures/sample-dump-1.txt", import.meta.url);
+
+test("a spoken dump through the model plan: kinds, people, dates and projects land on the map and around the calendar", async () => {
+  harness.reset();
+  const fs = await import("node:fs");
+  const dump = fs.readFileSync(SAMPLE, "utf8").trim();
+  const now = new Date("2026-09-21T08:00:00"); // Monday
+  const day = (n, h = 0, m = 0) => new Date(2026, 8, 21 + n, h, m).toISOString();
+  harness.events = [
+    { id: "court", calendarId: "c", title: "Court hearing", start: day(1, 10), end: day(1, 11, 30), allDay: false },
+    { id: "nyc", calendarId: "c", title: "Flight to NYC", start: day(3), end: day(4), allDay: true },
+    { id: "bday", calendarId: "c", title: "Mum's birthday", start: day(5), end: day(6), allDay: true },
+  ];
+  harness.plan = {
+    items: [
+      { title: "Call the surveyor", kind: "action", project: "Tenancy case", area: "Home", person: "the surveyor", when: "this Monday", evidence: "talk to a surveyor" },
+      { title: "Follow up both advisers", kind: "action", project: "Tenancy case", area: "Home", when: "tomorrow", evidence: "do follow-ups tomorrow" },
+      { title: "Surveyor's follow-up", kind: "waiting", project: "Tenancy case", area: "Home", person: "the surveyor", evidence: "going to follow up with me" },
+      { title: "Flat measurements", kind: "later", project: "Deposit claim", area: "Home", evidence: "Do the flat measurements" },
+      { title: "Message a friend about a free shoot", kind: "action", project: "Photo portfolio", area: "Work", person: "a friend", evidence: "do a free shoot for him" },
+      { title: "Labels from the guy", kind: "waiting", project: "Etsy shop", area: "Money", person: "the guy", evidence: "supposed to give me labels" },
+    ],
+  };
+  const saved = recording({ captureKind: "thought", text: dump, audioUri: undefined, id: "owner" });
+  harness.notes = [structuredClone(saved)];
+  const result = await processCapturedNote(saved, { now });
+  assert.equal(result.kind, "intake");
+  const plan = result.plan;
+  assert.equal(plan.source, "model");
+  assert.deepEqual(plan.projects.map((p) => p.title), ["Tenancy case", "Deposit claim", "Photo portfolio", "Etsy shop"]);
+  assert.equal(plan.watch.some((w) => /court/i.test(w.title)), true, "the court date is a watch-out before the person says a word");
+  assert.equal(plan.watch.some((w) => w.kind === "occasion"), true, "mum's birthday with nothing planned");
+  const byTitle = (t) => plan.placements.find((p) => p.item.title === t);
+  assert.equal(byTitle("Call the surveyor").date, "2026-09-21");
+  assert.equal(byTitle("Follow up both advisers").date, "2026-09-22", "tomorrow, after the court slot");
+  assert.ok(byTitle("Follow up both advisers").slot.start >= harness.events[0].end, "placed after court, not in the hour before it");
+  assert.ok(byTitle("Surveyor's follow-up").chaseDate >= "2026-09-24");
+  assert.notEqual(byTitle("Surveyor's follow-up").chaseDate, "2026-09-24", "the chase dodges the NYC day");
+  assert.equal(byTitle("Flat measurements").date, undefined, "later stays off the calendar");
+  const chases = harness.calendarWrites.filter((w) => w.kind === "reminder");
+  assert.equal(chases.length, 2, "two chases in Reminders");
+  assert.equal(harness.tasks.filter((t) => t.kind === "waiting").every((t) => t.reminderId), true);
+  const dui = harness.drafts.find((d) => d.title === "Tenancy case");
+  const transcript = dui.messages.find((m) => m.kind === "transcript");
+  assert.equal(transcript.breakdown.summary, "2 moves · waiting on 1", "the recording shows as what Flow made of it");
+  assert.deepEqual(transcript.breakdown.items.map((i) => [i.kind, !!i.when]), [["action", true], ["action", true], ["waiting", true]]);
+  assert.deepEqual(dui.people, ["the surveyor"]);
+  assert.equal(dui.area, "Home");
+  assert.ok(harness.tasks.some((t) => t.projectId === dui.id));
+});
+
+test("a later dump attaches to the projects it names instead of starting new ones", async () => {
+  harness.reset();
+  const { respondToRecording } = await import("../src/thread.ts");
+  const { suggestDraft } = await import("../src/drafts.ts");
+  const dui = respondToRecording({ ...suggestDraft("dui", "The first one is regarding my DUI case, so I have to reach out to the lawyer."), title: "DUI case", area: "Legal & admin", people: ["the lawyer"] }, "d0", "The first one is regarding my DUI case, so I have to reach out to the lawyer.", { quiet: true });
+  harness.drafts = [dui];
+  harness.plan = { items: [{ title: "Send the lawyer the court letter", kind: "action", project: "DUI case", area: "Legal & admin", person: "the lawyer", evidence: "send the lawyer the court letter" }] };
+  const saved = recording({ captureKind: "thought", text: "The lawyer called back, I need to send the lawyer the court letter.", audioUri: undefined, id: "later" });
+  harness.notes = [structuredClone(saved)];
+  const result = await processCapturedNote(saved);
+  assert.equal(result.kind, "intake");
+  assert.deepEqual(result.plan.projects.map((p) => [p.id, p.fresh]), [["dui", false]]);
+  assert.equal(harness.drafts.length, 1, "no new thread");
+  assert.equal(harness.drafts[0].messages.filter((m) => m.kind === "transcript").length, 2, "the words went to the DUI thread");
+  assert.ok(harness.tasks[0].id.startsWith("flow:dui:"));
+});
+
+test("saying the same things again adds nothing twice: no repeated passage, no duplicate move", async () => {
+  harness.reset();
+  const dump = "I need to call the DUI lawyer tomorrow. Also start the app portfolio, a free app for Ali first.";
+  harness.plan = { items: [
+    { title: "Call the DUI lawyer", kind: "action", project: "DUI case", area: "Legal & admin", person: "the lawyer", when: "tomorrow", evidence: "call the DUI lawyer tomorrow" },
+    { title: "Start the app portfolio", kind: "action", project: "App portfolio", area: "Work", person: "Ali", evidence: "start the app portfolio" },
+  ] };
+  harness.notes = [{ id: "r1", captureKind: "thought", text: dump, createdAt: "2026-09-20T18:00:00Z" }];
+  await processCapturedNote(harness.notes[0]);
+  const tasksAfterFirst = harness.tasks.length;
+  harness.notes = [...harness.notes, { id: "r2", captureKind: "thought", text: dump + " That's all.", createdAt: "2026-09-20T19:00:00Z" }];
+  harness.plan = { items: [
+    { title: "Call the lawyer about the DUI", kind: "action", project: "DUI case", area: "Legal & admin", person: "the lawyer", when: "tomorrow", evidence: "call the DUI lawyer tomorrow" },
+    { title: "Start the app portfolio", kind: "action", project: "App portfolio", area: "Work", person: "Ali", evidence: "start the app portfolio" },
+  ] };
+  const again = await processCapturedNote(harness.notes[1]);
+  assert.equal(again.kind, "intake");
+  assert.equal(harness.drafts.length, 2, "same two projects");
+  assert.equal(harness.tasks.length, tasksAfterFirst, "no duplicate moves");
+  const dui = harness.drafts.find((d) => d.title === "DUI case");
+  assert.equal(dui.messages.filter((m) => m.kind === "transcript").length, 1, "the repeated sentence did not land twice");
+});
+
+test("earlier recordings that never went through the intake are replayed once, newest first", async () => {
+  harness.reset();
+  const { replayOldRecordings } = await import("../src/services/processing.ts");
+  harness.notes = [
+    { id: "old1", captureKind: "thought", text: "I need to call the DUI lawyer tomorrow. Also the gym renews next week.", createdAt: "2026-09-20T10:00:00Z" },
+    { id: "old2", captureKind: "thought", text: "Book the dentist for the kids, my wife keeps asking. And sort the car insurance renewal before the end of the month.", createdAt: "2026-09-20T12:00:00Z" },
+    { id: "reply", captureKind: "thought", planId: "t1", text: "that's it", createdAt: "2026-09-20T13:00:00Z" },
+    { id: "fb", captureKind: "feedback", text: "confusing", createdAt: "2026-09-20T14:00:00Z" },
+  ];
+  assert.equal(await replayOldRecordings(), 2, "thread replies and feedback are not dumps");
+  assert.ok(harness.records.some((r) => r.id === "intake:old1") && harness.records.some((r) => r.id === "intake:old2"));
+  assert.ok(harness.tasks.length >= 2);
+  assert.equal(await replayOldRecordings(), 0, "once");
+});
+
+test("inside a thread Flow is an assistant: it answers from the project, asks one thing or puts one move on the table; 'do it' accepts", async () => {
+  harness.reset();
+  const { respondToRecording, pendingMessage } = await import("../src/thread.ts");
+  const { suggestDraft } = await import("../src/drafts.ts");
+  const dui = respondToRecording({ ...suggestDraft("dui", "The first one is regarding my DUI case, so I have to reach out to the lawyer."), title: "DUI case", area: "Legal & admin", people: ["the lawyer"] }, "d0", "The first one is regarding my DUI case, so I have to reach out to the lawyer.", { quiet: true });
+  harness.drafts = [dui];
+  harness.tasks = [{ id: "flow:dui:call", projectId: "dui", title: "Call the DUI lawyer", done: false, plannedDate: "2026-09-22", plannedTime: "10:00", minutes: 20, createdAt: "", topic: "Life", deadline: "", waitingOn: "", chaseDate: "", notes: "" }];
+  harness.chat = { reply: "The call with the lawyer is on Tuesday at 10. Nothing else is pending on this.", question: "", move: { title: "Send the lawyer the court letter", when: "this evening" } };
+  const msg = recording({ captureKind: "thought", text: "what's the next thing on the DUI case?", audioUri: undefined, id: "m1", planId: "dui" });
+  harness.notes = [structuredClone(msg)];
+  const result = await processCapturedNote(msg);
+  assert.equal(result.kind, "draft");
+  const chatCall = harness.requests.find((r) => r.url.endsWith("/chat"));
+  assert.ok(chatCall, "the assistant was asked");
+  const sent = JSON.parse(chatCall.body);
+  assert.match(sent.context, /PROJECT: DUI case/);
+  assert.match(sent.context, /Call the DUI lawyer · Tue Sep 22 10:00/);
+  assert.match(sent.context, /CONVERSATION:/);
+  const msgs = result.draft.messages;
+  assert.equal(msgs.at(-2).text, "The call with the lawyer is on Tuesday at 10. Nothing else is pending on this.");
+  assert.equal(msgs.at(-1).kind, "offer");
+  assert.match(msgs.at(-1).text, /This evening: Send the lawyer the court letter/);
+  assert.doesNotMatch(msgs.map((m) => m.text).join(" "), /And what else\?/, "no script question in the assistant's turn");
+  // "do it" accepts the move without asking the assistant again.
+  harness.drafts = [result.draft];
+  harness.requests = [];
+  const yes = recording({ captureKind: "thought", text: "do it", audioUri: undefined, id: "m2", planId: "dui" });
+  harness.notes = [structuredClone(yes)];
+  const after = await processCapturedNote(yes);
+  assert.ok(!harness.requests.some((r) => r.url.endsWith("/chat")));
+  assert.ok(after.draft.steps.find((s) => s.id === "chat:m1").accepted);
+  assert.match(after.draft.messages.at(-1).text, /on your Today/);
+  assert.ok(!pendingMessage(after.draft), "nothing left open");
+});
+
+test("inside a thread, a message with a second subject gets New thread · → Existing… · Keep here before any move", async () => {
+  harness.reset();
+  const { respondToRecording, pendingMessage } = await import("../src/thread.ts");
+  const { suggestDraft } = await import("../src/drafts.ts");
+  const dui = respondToRecording({ ...suggestDraft("dui", "I have to reach out to the lawyer about my DUI case."), title: "DUI case", area: "Legal & admin", people: ["the lawyer"] }, "d0", "I have to reach out to the lawyer about my DUI case.", { quiet: true });
+  const home = { ...suggestDraft("home", "The bathroom fan is broken."), title: "Home admin", area: "Home" };
+  harness.drafts = [dui, home];
+  harness.chat = { reply: "Before the hearing: the letter to your lawyer.", question: "", move: { title: "Send the lawyer the court letter", when: "today" } };
+  const msg = recording({ captureKind: "thought", text: "What do I still need before the court hearing? Also I need to book the dentist for the kids next week.", audioUri: undefined, id: "m3", planId: "dui" });
+  harness.notes = [structuredClone(msg)];
+  const result = await processCapturedNote(msg);
+  const open = pendingMessage(result.draft);
+  assert.equal(open.kind, "branch", "the split offer comes first");
+  assert.deepEqual(open.chips.map((c) => c.label), ["New thread", "→ Existing…", "Keep here"]);
+  assert.ok(!result.draft.messages.some((m) => m.kind === "offer" && !m.answered && m.id.includes("m3")), "no move until the split is answered");
 });

@@ -46,7 +46,7 @@ test("permission-sheet inactivity does not cancel capture; stop persists audio a
   assert.match(saved[0].audioUri, /file:\/\/documents\/anchor-voice-/);
   assert.equal(harness.savedFiles().length, 1);
   assert.ok(text(root.toJSON()).includes("Recording saved on this device."));
-  assert.ok(text(root.toJSON()).includes("Play"));
+  assert.ok(text(root.toJSON()).includes("▶"), "a play control");
   await act(async () => root.unmount());
 });
 test("permission denial remains recoverable with explicit manual retry", async () => {

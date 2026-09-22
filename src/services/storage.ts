@@ -79,3 +79,30 @@ export async function removeTask(id: string) {
     await database()
   ).runAsync("DELETE FROM records WHERE id=? AND kind=?", id, "task");
 }
+
+/** Anything else worth keeping as one JSON row (intake records for replay, etc.). */
+export async function saveRecord(kind: string, id: string, payload: unknown) {
+  await (
+    await database()
+  ).runAsync(
+    "INSERT INTO records (id,kind,payload) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+    id,
+    kind,
+    JSON.stringify(payload),
+  );
+}
+
+export async function loadRecord<T = unknown>(kind: string, id: string): Promise<T | null> {
+  const row = await (await database()).getFirstAsync<{ payload: string }>("SELECT payload FROM records WHERE id=? AND kind=?", id, kind);
+  if (!row) return null;
+  try {
+    return JSON.parse(row.payload) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function listRecordIds(kind: string): Promise<string[]> {
+  const rows = await (await database()).getAllAsync<{ id: string }>("SELECT id FROM records WHERE kind=?", kind);
+  return rows.map((r) => r.id);
+}

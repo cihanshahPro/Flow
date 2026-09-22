@@ -1,35 +1,87 @@
 # Flow mobile — developer handoff
 
+## Build 9 handoff — 21 Sep 2026 (read this first)
+
+**Branch:** `kodavena/v1.0.0` (PR #14 → `testing` stays open). Head: see `git log -1`. **You do not need the Mac mini for anything below** — it is Cihan's dev runtime only.
+
+### What changed since build 8 (the whole app, on purpose)
+Tabs **Today · Threads · Calendar · Me**, one Record button, rows not cards. Calendar read first → one model call turns the words into moves / waiting-fors / later / projects → placed around the week (the clock the person said is kept when free, "by Friday" is a due date, evening stays evening, trips and full days are skipped) → written to Apple Calendar with alerts and to a "Flow" list in Apple Reminders, two-way (ticks and deletes on the phone come back) → **Your week**. Every recording is an Otter-style page (Summary | Transcript, ↗ to the sentence behind each move). Threads are projects; inside a thread Flow is an **assistant** with the project in front of it (moves, calendar, other projects) and answers, asks one thing, or puts one move on the table; "do it" accepts; a side subject can go to a **New thread · → Existing… · Keep here**. **Plan tomorrow** (evening ritual: calendar, routines, leftovers, "Tell Flow about tomorrow"). Two pushes: "Your day" and "Day closed". Screen contract: [SKELETON.html](SKELETON.html) (ten screens). The step tree per project: `ensureSteps()` in `src/services/processing.ts`.
+
+### Verify on your machine
+```bash
+git fetch && git checkout kodavena/v1.0.0 && npm ci
+npx tsc --noEmit -p .
+node --experimental-strip-types --test tests/*.test.mjs      # 304 pass
+cd server/shape-worker && npm ci && npx vitest run            # 9 pass
+```
+
+### Build 9 — your command (EAS project 6cd13cbe-…, autoIncrement on)
+```bash
+eas build --platform ios --profile production --auto-submit
+```
+Cihan is not on the EAS project; add him as a member or run this yourself. Permission strings (mic, speech, calendar, reminders, notifications) are in `app.config.ts`.
+
+### The brain — Cihan's decision: no API credits for now
+- An iPhone app **cannot** use its users' Claude subscriptions: Anthropic's OAuth is granted to Claude Code / the Agent SDK only, not to third-party apps. So for end users the options are (a) **on-device Apple Intelligence** on iOS 26 (already wired: `modules/flow-intelligence`, functions `shapeThought`, `planThought`, `chatThread`), (b) **the Cloudflare worker** with an Anthropic API key (already wired, quotas built in), (c) later our own subscription that pays for (b).
+- **Release build 9 therefore runs on-device only** unless you deploy the worker. To deploy: `cd server/shape-worker && npx wrangler secret put ANTHROPIC_API_KEY && npx wrangler deploy` (routes `/v1/shape`, `/v1/plan`, `/v1/chat`; `MODEL` in `wrangler.toml`). If the worker is not deployed, leave `EXPO_PUBLIC_SHAPE_URL` as is — the app falls back cleanly and the "Shape notes on a secure server" switch in Me stays off.
+- For your own dev runs on your Mac, `scripts/voice-server.mjs` can use your Claude subscription through Claude Code headless: `FLOW_CLAUDE_CODE=1` and a one-time `claude` → `/login` on that Mac (needs `claude` installed, `whisper-cli` + `ffmpeg` from Homebrew and a Whisper model for transcription; see `.env.processor.example`). Not required for the native build.
+- One prompt contract lives in four places and a test keeps them equal: `src/ai-policy.ts`, `server/shape-worker/src/{prompt,schema}.ts`, `modules/flow-intelligence/ios/FlowIntelligenceModule.swift`, `scripts/shape-thought.swift` (`tests/plan-contract.test.mjs`; regenerate `scripts/plan-contract.mjs` from `src/ai-policy.ts`).
+
+### The three native pieces (rows read SOON in Me until done)
+| Piece | Already there | Left to do (native) |
+|---|---|---|
+| Siri "Tell Flow…" | scheme `flowthread://`; intake accepts text; a short line becomes a move, a long one goes through Your week | App Intent "Tell Flow" with a text parameter → open `flowthread://record?text=…`; handle the URL in `App.tsx` (prefill `startCapture("text", null, "thought")` and submit); expose as a Shortcut (Action button) |
+| Share sheet | same intake path | share extension handing text/URLs to `flowthread://record?text=…` |
+| Lock-screen widget | `morningLine()` in `src/tomorrow.ts` builds "2 events · 3 moves · first: …"; tasks in SQLite | WidgetKit extension reading a JSON the app writes to the App Group container on refresh (add `writeWidgetSnapshot()` next to `mirrorToDev()` in `App.tsx`) |
+
+When they land, flip the rows in `src/components/Me.tsx` from SOON to ON and update screen 7 in SKELETON.html.
+
+### What's left — the task list (owner in brackets)
+| # | Task | Owner | How you know it's done |
+|---|---|---|---|
+| 1 | **Set up the brain.** Decide worker-with-key vs on-device-only for build 9; if worker: `npx wrangler secret put ANTHROPIC_API_KEY`, KV id in `wrangler.toml`, `npx wrangler deploy`, then check `EXPO_PUBLIC_SHAPE_URL` answers `/v1/plan` and `/v1/chat`. | Samil | A recording on a TestFlight phone yields moves titled with verbs ("Call the DUI lawyer"), not project names. |
+| 2 | Build 9: `eas build --platform ios --profile production --auto-submit`; add Cihan to the EAS project. | Samil | Build 1.0.0 (9) in TestFlight, Kodavena Internal. |
+| 3 | Siri "Tell Flow…" App Intent + Shortcut (Action button) → `flowthread://record?text=…`; handle the URL in `App.tsx`. | Samil | Me › Siri row flips to ON; a Shortcut run lands as a move. |
+| 4 | Share extension → same URL. | Samil | Me › Share sheet ON; sharing a mail lands as a move. |
+| 5 | Lock-screen widget (WidgetKit + App Group JSON written on refresh). | Samil | Me › Widget ON; the widget shows "first: …". |
+| 6 | Test on realistic data, never demo data — and never real personal data in git: `tests/fixtures/sample/phone-1.json` (an invented person, six recordings, same shape as a phone snapshot) runs through the app in `tests/sample-phone.test.mjs`. Real snapshots stay outside the repo. | both | The test stays green; new snapshots added when he records. |
+| 7 | Decide the thread meter ("Getting to know this · %") and the "What Flow got" cards: keep or drop now that the thread is an assistant chat. | Cihan | One line in this doc. |
+| 8 | Whisper on the dev server: `large-v3-turbo` (done on the mini); document for any other dev Mac in `.env.processor.example` (done). | — | — |
+
+### Known gaps
+- The three native pieces above.
+- Every screen is only as good as the brain: with the Apple fallback the titles and answers are weak; with Claude they are right. Judge screens with the real brain.
+- Threads still show the "Getting to know this · %" meter and the "What Flow got" cards from the earlier vision; Cihan may drop them now that the thread is an assistant chat.
+
+---
+
 ## Start here (current testing build)
 
 Repository: https://github.com/cihanshahPro/Flow
 
-The handoff branch is `codex/final-thread-flow`. It contains the recording-first thread flow and is the branch to review before any release work. The protected baseline is `testing`; production/main is outside this handoff.
-
-Clone and create a personal working branch from the handoff branch:
+The baseline is `testing`. Test build 12 (the Flow loop: record → chat → move → level) was developed on `handoff/claude` and is proposed as a pull request into `testing`. Read in this order: [REQUIREMENTS.md](REQUIREMENTS.md) (what must be true), [SKELETON.html](SKELETON.html) (every screen, open it in a browser), [FLOW-LOOP.md](FLOW-LOOP.md) (how it works), then [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md).
 
 ```bash
 git clone https://github.com/cihanshahPro/Flow.git
 cd Flow
-git fetch origin codex/final-thread-flow
-git switch -c handoff/<your-name> --track origin/codex/final-thread-flow
+git switch -c handoff/<your-name> --track origin/testing
 npm ci
 npm run verify
 ```
 
-Work only on `handoff/<your-name>`. Push it and open a pull request into `codex/final-thread-flow`; do not push directly to `testing` or `main`. The owner can review and merge that PR after the testing build is checked. After merge, the owner promotes the reviewed commit to `testing` and runs the device checks below. Keep release/App Store work in a separate PR from product changes.
+Work only on your own branch and open a pull request into `testing`; never push to `testing` or `main` directly. Keep release/App Store work in a separate PR from product changes.
 
-The current user path is intentionally narrow: profile fingerprint → record a full dump → Flow transcribes and forms a thread → Flow asks one focused missing question → record the answer → only a ready thread can become goals. Do not reintroduce task lists, “mark done” steps, or open-ended classification during the dump/understanding stages. Read [FINAL-PRODUCT-CONTRACT.md](FINAL-PRODUCT-CONTRACT.md) before changing routing or capture behavior.
+The rule of two: every screen has one primary button and at most one secondary link, and Flow decides with two chips. Do not reintroduce tabs, task lists, "mark done" during understanding, or open-ended classification. The old surfaces are kept in `ClassicFlow.tsx`, `PlanMap`, `TaskDetail` and `DraftReview` for reference only.
 
 Useful commands:
 
 ```bash
 npm run verify
-npx expo start --go --lan --port 8082
+npx expo start --go --lan --port 8083
 npx expo export --platform all --output-dir /tmp/flow-export
 ```
 
-The test Expo server is on the Mac mini at `10.0.0.152:8082`; use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only. Do not submit a build or merge into `main` as part of routine feature work.
+The test Expo server runs on the Mac mini at `10.0.0.152:8083` from `~/Library/Caches/Anchor/flow-build-12`; the voice processor runs from the same checkout with `node --env-file=.env.processor scripts/voice-server.mjs` and the shaper binary at `~/Library/Caches/Anchor/shape-thought` (compile with `swiftc -parse-as-library scripts/shape-thought.swift -o ~/Library/Caches/Anchor/shape-thought`). Use the QR code from that server with the matching SDK 57 Expo Go build. This is a testing runtime only.
 
 ## Scope and boundary
 
@@ -58,8 +110,14 @@ TestFlight needs the owner's/friend's Expo account, paid Apple Developer members
 Run these on a real iPhone; automated checks or a JavaScript bundle alone do not verify microphone and calendar behavior. Record the device, iOS version, Expo Go/build version, and results.
 
 - [ ] Install dependencies, run typechecking and tests, then open the app through the documented Expo Go route.
-- [ ] Create a task, change its estimate and available-time filter, complete/reopen it, and verify the visible results.
-- [ ] Save a text thought. Fully close and reopen the app; confirm saved tasks and notes survive.
+- [ ] Go through the funnel: the twenty-statement test (no skip), the reveal without a four-letter code, the five profile questions, then the prompted first thread. Confirm `TEST 12` is visible.
+- [ ] Confirm Home shows a "Flow suggests" prompt from your profile, not a blank record button.
+- [ ] Record a dump. Confirm the thread opens with your transcript, Flow's reply and one question; the meter shows n/7; the recording plays back.
+- [ ] Record the answer. Confirm the meter rises, the celebration and emoji shower appear once, and one move is offered with exactly two chips.
+- [ ] Do this → Next card on Home. Done → Flow's note in the thread and the level pill changes. Confirm "Resolved / There's more" appears after the last move.
+- [ ] Record something unrelated; confirm a new thread. Record from inside a thread; confirm it appends.
+- [ ] Mention a date, then move the device clock past it and reopen; confirm one check-in with two chips and that a local reminder fired the morning after (permission prompt appears only then).
+- [ ] Save a written thought. Fully close and reopen the app; confirm threads, moves and levels survive.
 - [ ] Deny microphone permission and confirm a useful recovery message and usable text capture. Then enable permission and record, stop, save, and play a short clip.
 - [ ] Close and reopen after saving audio; replay the same clip. Test an interruption/phone lock during recording and verify the app's result matches its message. Do not assume background recording support.
 - [ ] After loading the development bundle, disconnect networking and repeat text/task/audio saves. Reconnect before reloading from the development server.

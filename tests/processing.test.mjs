@@ -7,6 +7,8 @@ const { processVoiceNote, createThoughtDraft } =
 const { harness } = await import("./processing-mocks.mjs");
 process.env.EXPO_PUBLIC_PROCESSOR_URL = "http://testing.invalid";
 process.env.EXPO_PUBLIC_PROCESSOR_TOKEN = "test";
+// These suites exercise the development-only LAN processor.
+globalThis.__DEV__ = true;
 const note = {
   id: "recording",
   audioUri: "file://saved.m4a",
@@ -39,8 +41,9 @@ test("saved audio becomes a persisted transcript then one draft; repeat processi
   assert.deepEqual(harness.writes, ["transcript", "draft"]);
   assert.equal(draft.steps.length, 2);
   assert.equal(harness.notes[0].audioUri, note.audioUri);
+  const fetches = harness.fetches;
   assert.deepEqual(await processVoiceNote(note), draft);
-  assert.equal(harness.fetches, 1);
+  assert.equal(harness.fetches, fetches);
 });
 test("draft-write retry reuses the persisted transcript instead of retranscribing", async () => {
   harness.reset();
@@ -59,14 +62,14 @@ test("draft-write retry reuses the persisted transcript instead of retranscribin
     harness.requests.filter(
       (r) => r.headers["Content-Type"] === "application/json",
     ).length,
-    1,
+    2, // each attempt reshapes the saved text; audio is uploaded once
   );
 });
 test("unreachable processor does not change or erase the original recording", async () => {
   harness.reset();
   harness.notes = [structuredClone(note)];
   harness.offline = true;
-  await assert.rejects(processVoiceNote(note), /same Wi-Fi/);
+  await assert.rejects(processVoiceNote(note), /development processor/);
   assert.deepEqual(harness.notes, [note]);
   assert.deepEqual(harness.writes, []);
 });
@@ -99,7 +102,11 @@ test("draft-write retry retains direction without adding it to source or the tex
   const textRequest = harness.requests.find(
     (r) => r.headers["Content-Type"] === "application/json",
   );
-  assert.deepEqual(JSON.parse(textRequest.body), { text: transcript });
+  const sent = JSON.parse(textRequest.body);
+  assert.equal(sent.text, transcript);
+  assert.match(sent.context, /Understood so far: 0%/, "a first dump is a turn in the script");
+  assert.match(sent.context, /The app will ask next, after your reply: "And what else\?"/);
+  assert.doesNotMatch(sent.context, /direction|Dubai/, "direction never reaches the request");
   assert.equal(
     harness.requests.filter(
       (r) => r.headers["Content-Type"] === "application/octet-stream",
@@ -117,7 +124,8 @@ test("invalid organizer output preserves direction in the basic audio draft", as
   const draft = await processVoiceNote({ ...note, direction });
   assert.deepEqual(draft.direction, direction);
   assert.equal(draft.source, transcript);
-  assert.equal(draft.organizer, undefined);
+  // The invented option is dropped; any moves left come from the template, never from the model.
+  assert.ok(draft.steps.every((s) => !s.id.startsWith("ai-")));
 });
 
 test("typed thoughts keep context locally for AI and offline drafts without changing their words", async () => {
@@ -133,4 +141,44 @@ test("typed thoughts keep context locally for AI and offline drafts without chan
   assert.equal(fallback.source, transcript);
   const unrelated = await createThoughtDraft("unrelated", transcript);
   assert.equal(unrelated.direction, undefined);
+});
+
+test("a processed recording opens a conversation: transcript, Flow's reply, and one question", async () => {
+  harness.reset();
+  const draft = await processVoiceNote(note);
+  const kinds = draft.messages.map((m) => `${m.from}:${m.kind}`);
+  assert.deepEqual(kinds, ["you:transcript", "flow:ack", "flow:question"]);
+  assert.equal(draft.messages[0].text, transcript);
+  assert.equal(draft.messages[0].noteId, note.id);
+  assert.equal(draft.threadPoints.length, 7);
+});
+
+test("the shaper's reply and grounded evidence shape Flow's turn; its question and ungrounded evidence are ignored", async () => {
+  harness.reset();
+  harness.shape = {
+    ...shape,
+    reply: "Alex and the designer — got it.",
+    question: "When does the designer need the brief?",
+    points: [
+      { id: "people", evidence: "Call Alex" },
+      { id: "timing", evidence: "by next Tuesday" },
+    ],
+  };
+  const draft = await processVoiceNote(note);
+  assert.equal(draft.messages[1].text, "Alex and the designer — got it.");
+  assert.equal(draft.messages[2].text, "And what else?", "the script asks; the model reflects");
+  assert.equal(draft.threadPoints.find((p) => p.id === "people").state, "known");
+  assert.equal(draft.threadPoints.find((p) => p.id === "timing").state, "missing");
+});
+
+test("a new recording without a plan joins the open thread that shares its words", async () => {
+  harness.reset();
+  const first = await processVoiceNote(note);
+  harness.drafts = [first];
+  harness.notes = [];
+  const second = await processVoiceNote({ ...note, id: "recording-2", audioUri: "file://second.m4a" });
+  assert.equal(second.id, first.id, "same thread");
+  assert.deepEqual(second.sourceNoteIds, ["recording-2"]);
+  assert.equal(second.messages.filter((m) => m.kind === "transcript").length, 2);
+  assert.equal(second.source, first.source, "original words untouched");
 });

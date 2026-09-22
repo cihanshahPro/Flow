@@ -41,7 +41,7 @@ export async function acceptStep(draft: ThoughtDraft, step: DraftStep) {
     const latest: ThoughtDraft = JSON.parse(row.payload);
     const original = latest.steps.find((s) => s.id === step.id);
     if (!original) throw new Error("This draft changed. Open it again.");
-    if (original.accepted) return;
+    // answerChip flags the step accepted before this runs, so the flag alone must not skip creating the task (INSERT is idempotent).
     await tx.runAsync(
       "INSERT INTO records(id,kind,payload) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING",
       task.id,

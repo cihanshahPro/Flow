@@ -62,13 +62,14 @@ test("AI draft keeps the full source and rejects invented evidence", async () =>
   assert.equal(draft.source, source);
   assert.equal(draft.organizer, "apple-local");
   assert.equal(draft.summary, source);
-  assert.throws(() =>
-    shapedDraft("a", source, {
-      title: "a",
-      summary: "b",
-      choices: [{ ...choice, evidence: "not in source" }],
-    }),
-  );
+  // Ungrounded options are dropped and the template's own move fills in.
+  const topped = shapedDraft("a", source, {
+    title: "a",
+    summary: "b",
+    choices: [{ ...choice, evidence: "not in source" }],
+  });
+  assert.deepEqual(topped.steps.map((s) => s.title), ["call Alex"]);
+  assert.match(topped.steps[0].id, /^tpl-/);
   assert.equal(
     shapedDraft("a", source, { title: "a", summary: "b", choices: [] }).steps
       .length,

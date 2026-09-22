@@ -52,7 +52,7 @@ export function syncProgress(): Promise<ProgressRecord> {
             typeof previousValue.unlockedAt !== "string"))
       )
         throw new Error(
-          "Your saved accomplishments could not be read. Please try again after updating Flow.",
+          "Your saved accomplishments could not be read. Please try again after updating Flowthread.",
         );
       const tasks: Task[] = rows
         .filter((row) => row.kind === "task")

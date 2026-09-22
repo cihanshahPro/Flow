@@ -1,0 +1,32 @@
+name = "flowthread-shape"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Content is never logged. Keep observability off.
+[observability]
+enabled = false
+
+[vars]
+MODEL = "claude-haiku-4-5"
+FREE_MONTHLY_QUOTA = "20"
+# Free Workers KV allows 1,000 writes/day and each request costs ~2 writes,
+# so 400 keeps us inside it. Raise together with a paid plan.
+GLOBAL_DAILY_CAP = "400"
+MAX_TEXT_CHARS = "22000"
+
+# Per-IP rate limit (10 requests / 60 s). No KV writes.
+[[ratelimits]]
+name = "IP_LIMITER"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# Run: npx wrangler kv namespace create QUOTA   -> paste the id below
+[[kv_namespaces]]
+binding = "QUOTA"
+id = "633c1f2a39914d26a2d49c6528fd37c5"
+
+# Secret (never in this file): npx wrangler secret put ANTHROPIC_API_KEY
+# TODO(App Attest / DeviceCheck): verify an Apple attestation on X-Flow-Install
+# requests. Plan is not in the 04 report yet; until then the install ID is an
+# anonymous, spoofable counter key. The per-IP limit and the global daily cap
+# are what protect the bill.

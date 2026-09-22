@@ -1,3 +1,4 @@
+import { C } from "./theme.ts";
 import React, {
   useCallback,
   useEffect,
@@ -25,6 +26,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import { File, Paths } from "expo-file-system";
+import { copyRecording } from "../copy-recording.ts";
 import { waitForRecordingForeground } from "../recording-lifecycle";
 
 export type SavedVoiceNote = {
@@ -309,9 +311,8 @@ export default function VoiceCapture({
           item.filename = `anchor-voice-retry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.m4a`;
           destination = new File(Paths.document, item.filename);
         }
-        if (!destination.exists) source.copy(destination);
-        if (!destination.exists || destination.size === 0)
-          throw new Error("The recording could not be saved to this device.");
+        const name = item.filename;
+        destination = await copyRecording<File>(source, () => new File(Paths.document, name));
         item.note.audioUri = destination.uri;
         item.copied = true;
       }
@@ -478,7 +479,7 @@ export default function VoiceCapture({
       await cancelPreparation();
       updatePhase("idle");
       if (mounted.current)
-        setError(`Could not start recording. ${message(failure)}`);
+        setError(/prepare|AudioRecording|recorder|permission/i.test(message(failure)) ? "Couldn't reach the microphone. Allow it in Settings, or write it down instead." : `Could not start recording. ${message(failure)}`);
     }
   };
 
@@ -537,18 +538,21 @@ export default function VoiceCapture({
     <View
       style={[
         styles.card,
-        compact && {
-          backgroundColor: "#FFFFFF",
-          borderColor: "#E2E6ED",
-          borderRadius: 24,
-        },
+        compact && styles.compact,
       ]}
     >
-      <Text style={styles.eyebrow}>VOICE INBOX</Text>
-      <Text style={styles.heading}>Get it off your mind.</Text>
-      <Text style={styles.body}>
-        No title needed. Your recording saves when you stop.
-      </Text>
+      {!compact && (
+        <>
+          <Text style={styles.eyebrow}>VOICE INBOX</Text>
+          <Text style={styles.heading}>Get it off your mind.</Text>
+          <Text style={styles.body}>No title needed. Your recording saves when you stop.</Text>
+        </>
+      )}
+      {compact && (
+        <Text style={styles.bigTime} accessibilityLabel={`Recorded ${clock(phase === "recording" ? recorderState.durationMillis : durationRef.current)}`}>
+          {clock(phase === "recording" ? recorderState.durationMillis : durationRef.current)}
+        </Text>
+      )}
       {!compact && (
         <TextInput
           value={title}
@@ -578,14 +582,11 @@ export default function VoiceCapture({
                       ? "Save needs attention"
                       : "Ready when you are"}
         </Text>
-        <Text style={styles.time}>
-          {clock(
-            phase === "recording"
-              ? recorderState.durationMillis
-              : durationRef.current,
-          )}{" "}
-          / 10:00
-        </Text>
+        {!compact && (
+          <Text style={styles.time}>
+            {clock(phase === "recording" ? recorderState.durationMillis : durationRef.current)} / 10:00
+          </Text>
+        )}
       </View>
       <Pressable
         accessibilityRole="button"
@@ -602,7 +603,7 @@ export default function VoiceCapture({
         }
         style={({ pressed }) => [
           styles.button,
-          compact && { backgroundColor: "#345BEE" },
+          compact && { backgroundColor: C.accent, borderRadius: 26, minHeight: 52 },
           phase === "recording" && styles.stopButton,
           (working || pressed) && styles.dim,
         ]}
@@ -619,9 +620,7 @@ export default function VoiceCapture({
                   : "Start recording"}
         </Text>
       </Pressable>
-      <Text style={styles.hint}>
-        Up to 10 minutes. Keep this app open while recording.
-      </Text>
+      {!compact && <Text style={styles.hint}>Up to 10 minutes. Keep this app open while recording.</Text>}
       {!!error && (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
@@ -684,22 +683,24 @@ export function AudioPlayback({ uri }: { uri: string }) {
       setError(`Could not play this recording. ${message(failure)}`);
     }
   };
+  const pct = status.duration > 0 ? Math.min(1, status.currentTime / status.duration) : 0;
   return (
     <View style={styles.playback}>
-      <View style={styles.statusRow}>
+      <View style={styles.playerRow}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
             status.playing ? "Pause recording" : "Play recording"
           }
           onPress={() => void toggle()}
-          style={({ pressed }) => [styles.playButton, pressed && styles.dim]}
+          style={({ pressed }) => [styles.playCircle, pressed && styles.dim]}
         >
-          <Text style={styles.playText}>
-            {status.playing ? "Pause" : "Play audio"}
-          </Text>
+          <Text style={styles.playGlyph}>{status.playing ? "❚❚" : "▶"}</Text>
         </Pressable>
-        <Text style={styles.hint}>
+        <View style={styles.track}>
+          <View style={[styles.trackFill, { width: `${Math.round(pct * 100)}%` }]} />
+        </View>
+        <Text style={styles.playerTime}>
           {clock(status.currentTime * 1000)} / {clock(status.duration * 1000)}
         </Text>
       </View>
@@ -714,67 +715,76 @@ export function AudioPlayback({ uri }: { uri: string }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#ECF7F1",
-    borderColor: "#CCE6DB",
+    backgroundColor: C.tint,
+    borderColor: C.hair,
     borderWidth: 1,
     borderRadius: 22,
     padding: 20,
     gap: 12,
   },
   eyebrow: {
-    color: "#387466",
+    color: C.ink3,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.6,
   },
-  heading: { color: "#143C33", fontSize: 23, fontWeight: "700" },
-  body: { color: "#46665D", fontSize: 14, lineHeight: 21 },
+  heading: { color: C.ink, fontSize: 23, fontWeight: "700" },
+  body: { color: C.ink2, fontSize: 14, lineHeight: 21 },
   input: {
     backgroundColor: "#FFFFFF",
-    borderColor: "#D3E5DD",
+    borderColor: C.hair,
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 13,
     paddingVertical: 12,
-    color: "#173F35",
+    color: C.ink,
     fontSize: 14,
   },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     flexWrap: "wrap",
   },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#82AB9D" },
-  liveDot: { backgroundColor: "#C24E40" },
-  status: { color: "#365D51", fontSize: 13, flex: 1 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.ink3 },
+  liveDot: { backgroundColor: C.record },
+  status: { color: C.ink2, fontSize: 13 },
   time: {
-    color: "#173F35",
+    color: C.ink,
     fontSize: 14,
     fontVariant: ["tabular-nums"],
     fontWeight: "600",
   },
   button: {
-    backgroundColor: "#1F6B57",
+    backgroundColor: C.accent,
     borderRadius: 14,
     paddingVertical: 15,
     alignItems: "center",
     minHeight: 48,
   },
-  stopButton: { backgroundColor: "#974E3C" },
+  stopButton: { backgroundColor: C.red },
   buttonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
   dim: { opacity: 0.6 },
-  hint: { color: "#5B776D", fontSize: 12, lineHeight: 18 },
-  error: { color: "#963E31", fontSize: 13, lineHeight: 19 },
-  notice: { color: "#276C52", fontSize: 13, lineHeight: 19 },
-  link: { color: "#155F4B", fontWeight: "700", paddingVertical: 8 },
+  compact: { backgroundColor: C.paper, borderWidth: 0, borderRadius: 0, paddingHorizontal: 0, alignItems: "stretch", gap: 14 },
+  bigTime: { fontSize: 44, fontWeight: "800", color: C.ink, textAlign: "center", fontVariant: ["tabular-nums"], letterSpacing: -1, paddingVertical: 8 },
+  hint: { color: C.ink3, fontSize: 12, lineHeight: 18 },
+  error: { color: C.red, fontSize: 13, lineHeight: 19 },
+  notice: { color: C.green, fontSize: 13, lineHeight: 19 },
+  link: { color: C.accent, fontWeight: "700", paddingVertical: 8 },
   playback: { gap: 6 },
+  playerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  playCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
+  playGlyph: { color: C.white, fontSize: 13, fontWeight: "800" },
+  track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: C.hair, overflow: "hidden" },
+  trackFill: { height: 4, backgroundColor: C.accent, borderRadius: 2 },
+  playerTime: { fontSize: 12, fontWeight: "600", color: C.ink2, fontVariant: ["tabular-nums"] },
   playButton: {
-    backgroundColor: "#E5F2EB",
+    backgroundColor: C.tint,
     borderRadius: 10,
     minHeight: 44,
     paddingHorizontal: 16,
     justifyContent: "center",
   },
-  playText: { color: "#205B47", fontSize: 13, fontWeight: "700" },
+  playText: { color: C.accent, fontSize: 13, fontWeight: "700" },
 });

@@ -84,3 +84,11 @@ export function holdTask(
 ): Task {
   return { ...task, followUp: kind, chaseDate: date(chaseDate) };
 }
+
+/** The open move Today shows: the one the person chose, else the newest Flow move. */
+export function pickNextTask(tasks: Task[], activeTaskId?: string): Task | undefined {
+  return (
+    tasks.find((t) => t.id === activeTaskId && !t.done) ??
+    [...tasks].filter((t) => !t.done && t.id.startsWith("flow:")).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+  );
+}

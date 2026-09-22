@@ -1,0 +1,401 @@
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { ThoughtDraft, ThreadMessage } from "../drafts.ts";
+import type { Note, Task } from "../model.ts";
+import { celebrationEmoji, type Mode } from "../flow-voice.ts";
+import { pendingMessage, stageFor, threadTasks, understoodPercent } from "../thread.ts";
+import type { Formula } from "../formula.ts";
+import { eventsOn, timeLabel, weekDays, type CalEvent } from "../calendar.ts";
+import { matchEvents } from "../map.ts";
+import { AudioPlayback } from "./VoiceCapture.tsx";
+import EmojiRain from "./EmojiRain.tsx";
+import { C } from "./theme.ts";
+
+const rained = new Set<string>();
+
+/** The keyboard's height on screen, from the OS itself — the composer is padded by exactly this, so it always sits on top of the keys. */
+function useKeyboardHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", (e) => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+}
+const THINKING = ["Flow is reading that…", "Connecting it to what you said before…", "Working out the next question…", "Almost there…"];
+
+/**
+ * One thread is one conversation with Flow. A message bar at the bottom, the
+ * person's words in full, Flow's replies on the left, two-chip decisions
+ * inside Flow's bubbles. Nothing is truncated; long things expand.
+ */
+export default function ThreadChat({
+  thread,
+  tasks,
+  notes,
+  mode,
+  formula,
+  events = [],
+  busy = false,
+  processing = false,
+  onSend,
+  onRecord,
+  onChip,
+  onClose,
+  others = [],
+  error = "",
+}: {
+  thread: ThoughtDraft;
+  tasks: Task[];
+  notes: Note[];
+  mode: Mode;
+  /** The person's roof and rhythm; sets how fast the meter fills. */
+  formula?: Formula | null;
+  /** The phone's calendar, so the summary can show the events that belong to this thread. */
+  events?: CalEvent[];
+  busy?: boolean;
+  processing?: boolean;
+  /** Typed message: saved and answered without leaving the chat. */
+  onSend: (text: string) => void;
+  /** Opens the recorder for this thread. */
+  onRecord: () => void;
+  onChip: (messageId: string, chipId: string) => void;
+  /** The person's other open threads, for tying a side subject into one of them. */
+  others?: { id: string; title: string }[];
+  onClose: () => void;
+  error?: string;
+}) {
+  const messages = thread.messages ?? [];
+  const pending = pendingMessage(thread);
+  const stage = stageFor(thread, tasks);
+  const [titleOpen, setTitleOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [rain, setRain] = useState<string | null>(null);
+  const [thinkingIndex, setThinkingIndex] = useState(0);
+  const scroll = useRef<ScrollView>(null);
+  const keyboard = useKeyboardHeight();
+  const insets = useSafeAreaInsets();
+  const lastHype = [...messages].reverse().find((m) => m.kind === "hype");
+  useEffect(() => {
+    if (!lastHype || rained.has(lastHype.id)) return;
+    const fresh = Date.now() - new Date(lastHype.createdAt).getTime() < 90_000;
+    rained.add(lastHype.id);
+    if (fresh) setRain(lastHype.id);
+  }, [lastHype?.id]);
+  useEffect(() => {
+    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
+    return () => clearTimeout(t);
+  }, [messages.length, processing, keyboard]);
+  useEffect(() => {
+    if (!processing) {
+      setThinkingIndex(0);
+      return;
+    }
+    const t = setInterval(() => setThinkingIndex((i) => (i + 1) % THINKING.length), 2200);
+    return () => clearInterval(t);
+  }, [processing]);
+  const moves = threadTasks(thread, tasks);
+  const percent = understoodPercent(thread, formula ?? undefined);
+  const linked = matchEvents(events.filter((e) => !e.mine), [{ id: thread.id, title: thread.title, area: thread.area, people: thread.people, words: [thread.source, ...thread.updates].join(" ") }]).get(thread.id) ?? [];
+  const today = weekDays()[0];
+  const dayLabel = (t: Task) => (t.plannedDate ? `${t.plannedDate === today ? "Today" : new Date(`${t.plannedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}${t.plannedTime ? " " + t.plannedTime : ""}` : "");
+  const canSend = draft.trim().length > 0 && !busy && !processing;
+  const send = () => {
+    const text = draft.trim();
+    if (!text || busy || processing) return;
+    setDraft("");
+    onSend(text);
+  };
+  const placeholder = stage === "done" ? "Anything new on this?" : "Message Flow";
+  return (
+    <View style={s.root}>
+      <View style={s.header}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close thread" onPress={onClose} disabled={busy} hitSlop={12} style={s.back}>
+          <Text style={s.link}>‹ Back</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Thread title" onPress={() => setTitleOpen((v) => !v)} style={{ flex: 1, gap: 2 }}>
+          <Text style={s.title} numberOfLines={titleOpen ? undefined : 1}>
+            {thread.title}
+          </Text>
+          <View style={s.subRow} accessibilityLabel={percent >= 100 ? "Flow gets it" : `Flow is ${percent}% of the way to getting this`}>
+            <Text style={s.stage}>{percent >= 100 ? "Flow gets it" : "Getting to know this"}</Text>
+            <View style={s.miniTrack}>
+              <View style={[s.miniFill, { width: `${Math.min(100, percent)}%` }]} />
+            </View>
+            <Text style={s.meterCount}>{percent}%</Text>
+          </View>
+        </Pressable>
+      </View>
+      <ScrollView ref={scroll} contentContainerStyle={s.list} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+        {(moves.length > 0 || linked.length > 0 || thread.steps.some((st) => !st.accepted)) && (
+          <View style={s.summary}>
+            <Text style={s.meterLabel}>SUMMARY</Text>
+            {linked.slice(0, 3).map((e) => (
+              <View key={e.id} style={s.sumRow}>
+                <Text style={s.sumWhen}>{e.allDay ? "all day" : timeLabel(e.start)}</Text>
+                <Text style={s.sumText} numberOfLines={1}>{e.title} · {new Date(e.start).toLocaleDateString("en-US", { weekday: "short" })}</Text>
+              </View>
+            ))}
+            {moves.filter((t) => t.kind !== "waiting" && !t.later).map((t) => (
+              <View key={t.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, t.done && s.sumDone]}>{t.done ? "done" : dayLabel(t) || "move"}</Text>
+                <Text style={[s.sumText, t.done && s.sumDone]} numberOfLines={2}>{t.title}</Text>
+              </View>
+            ))}
+            {moves.filter((t) => t.kind === "waiting" && !t.done).map((t) => (
+              <View key={t.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, s.sumWait]}>{t.chaseDate ? `chase ${new Date(`${t.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : "waiting"}</Text>
+                <Text style={[s.sumText, s.sumWait]} numberOfLines={2}>{t.waitingOn}: {t.title}</Text>
+              </View>
+            ))}
+            {thread.steps.filter((st) => !st.accepted && !(thread.declinedStepIds ?? []).includes(st.id) && !moves.some((t) => t.title.toLowerCase() === st.title.toLowerCase())).slice(0, 6).map((st, i) => (
+              <View key={st.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, { color: C.ink3 }]}>step {i + 1}</Text>
+                <Text style={[s.sumText, { color: C.ink2, fontWeight: "500" }]} numberOfLines={2}>{st.title}</Text>
+              </View>
+            ))}
+            {moves.filter((t) => t.later && !t.done).map((t) => (
+              <View key={t.id} style={s.sumRow}>
+                <Text style={[s.sumWhen, s.sumDone]}>later</Text>
+                <Text style={[s.sumText, s.sumDone]} numberOfLines={2}>{t.title}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {messages.map((m) => (
+          <Bubble
+            key={m.id}
+            message={m}
+            note={m.noteId ? notes.find((n) => n.id === m.noteId) : undefined}
+            task={m.taskId ? tasks.find((t) => t.id === m.taskId) : undefined}
+            active={pending?.id === m.id}
+            busy={busy}
+            onChip={(chip) => onChip(m.id, chip)}
+            others={others}
+            onGrow={() => setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60)}
+          />
+        ))}
+        {processing && (
+          <View style={s.row}>
+            <Text style={s.avatar}>f.</Text>
+            <View style={[s.bubble, s.flow, s.pendingBubble]} accessibilityLiveRegion="polite">
+              <ActivityIndicator color={C.blue} />
+              <Text style={s.flowText}>{THINKING[thinkingIndex]}</Text>
+            </View>
+          </View>
+        )}
+        {!!error && (
+          <Text accessibilityRole="alert" style={s.error}>
+            {error}
+          </Text>
+        )}
+      </ScrollView>
+      <View style={[s.composer, keyboard > 0 && { paddingBottom: Math.max(10, keyboard - insets.bottom + 10) }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Record"
+          onPress={onRecord}
+          disabled={busy || processing}
+          style={({ pressed }) => [s.mic, (pressed || busy || processing) && { opacity: 0.5 }]}
+        >
+          <Text style={s.micIcon}>●</Text>
+        </Pressable>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={placeholder}
+          placeholderTextColor={C.faint}
+          multiline
+          maxLength={20000}
+          editable={!busy && !processing}
+          accessibilityLabel="Message Flow"
+          style={s.input}
+          returnKeyType="default"
+          blurOnSubmit={false}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send"
+          onPress={send}
+          disabled={!canSend}
+          style={({ pressed }) => [s.send, !canSend && s.sendOff, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={s.sendIcon}>↑</Text>
+        </Pressable>
+      </View>
+      <EmojiRain emoji={celebrationEmoji(mode)} trigger={rain} onDone={() => setRain(null)} />
+    </View>
+  );
+}
+
+function Bubble({
+  message,
+  note,
+  task,
+  active,
+  busy,
+  onChip,
+  others = [],
+  onGrow,
+}: {
+  message: ThreadMessage;
+  note?: Note;
+  task?: Task;
+  active: boolean;
+  busy: boolean;
+  onChip: (chip: string) => void;
+  /** The person's other open threads, for "→ Existing…". */
+  others?: { id: string; title: string }[];
+  /** The bubble got taller (a picker opened): the list scrolls to keep it in view. */
+  onGrow?: () => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const you = message.from === "you";
+  const [expanded, setExpanded] = useState(false);
+  const long = message.text.length > (message.kind === "transcript" ? 260 : 700);
+  // A recording with a breakdown is shown as what Flow made of it, not as the words.
+  if (message.kind === "transcript" && message.breakdown) {
+    const b = message.breakdown;
+    return (
+      <View style={[s.row, s.rowYou]}>
+        <View style={[s.bubble, s.you, s.card]}>
+          {!!b.paragraph && <Text style={s.cardPara}>{b.paragraph}</Text>}
+          <Text style={s.cardKicker}>WHAT FLOW GOT · {b.summary.toUpperCase()}</Text>
+          {b.items.map((i, k) => (
+            <View key={k} style={s.cardRow}>
+              <Text style={s.cardBullet}>{i.kind === "waiting" ? "⏳" : i.kind === "later" ? "·" : "→"}</Text>
+              <Text style={s.cardText}>
+                {i.kind === "waiting" && i.person ? `${i.person}: ` : ""}
+                {i.title}
+                {i.when ? <Text style={s.cardWhen}> · {i.when}</Text> : null}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+  const isHype = message.kind === "hype";
+  const isOffer = message.kind === "offer";
+  const isBranch = message.kind === "branch";
+  return (
+    <View style={[s.row, you && s.rowYou]}>
+      {!you && <Text style={s.avatar}>f.</Text>}
+      <View style={[s.bubble, you ? s.you : s.flow, isHype && s.hype, (isOffer || isBranch) && s.offer]}>
+        {isOffer && <Text style={s.offerKicker}>A MOVE FOR THIS</Text>}
+        {isBranch && <Text style={s.offerKicker}>MORE THAN ONE THING</Text>}
+        <Text
+          style={[you ? s.youText : s.flowText, isHype && s.hypeText, isOffer && s.offerText]}
+          numberOfLines={long && !expanded ? (message.kind === "transcript" ? 3 : 12) : undefined}
+        >
+          {message.text}
+        </Text>
+        {long && (
+          <Pressable accessibilityRole="button" accessibilityLabel={expanded ? "Show less" : "Show more"} onPress={() => setExpanded((v) => !v)} hitSlop={8}>
+            <Text style={[s.more, you && { color: C.white }]}>{expanded ? "Show less" : "Show more"}</Text>
+          </Pressable>
+        )}
+        {message.kind === "checkin" && task && !message.answered && <Text style={s.small}>Your move: {task.title}</Text>}
+        {!!message.chips && !message.answered && message.kind !== "question" && (
+          <View style={s.chips}>
+            {message.chips.map((chip, i) => (
+              <Pressable
+                key={chip.id}
+                accessibilityRole="button"
+                accessibilityLabel={chip.label}
+                onPress={() => {
+                  if (chip.id === "pick") {
+                    setPicking((v) => !v);
+                    onGrow?.();
+                  } else onChip(chip.id);
+                }}
+                disabled={busy || !active}
+                style={({ pressed }) => [s.chip, i === 0 && s.chipPrimary, (pressed || busy) && { opacity: 0.6 }]}
+              >
+                <Text style={[s.chipText, i === 0 && s.chipPrimaryText]}>{chip.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {picking && !message.answered && (
+          <View style={s.chips}>
+            {others.slice(0, 8).map((o) => (
+              <Pressable key={o.id} accessibilityRole="button" accessibilityLabel={`Add to ${o.title}`} onPress={() => onChip(`to:${o.id}`)} disabled={busy || !active} style={({ pressed }) => [s.chip, (pressed || busy) && { opacity: 0.6 }]}>
+                <Text style={s.chipText}>→ {o.title.length > 26 ? o.title.slice(0, 25).trimEnd() + "…" : o.title}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.paper },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, paddingRight: 64 },
+  back: { paddingTop: 2 },
+  title: { fontSize: 20, lineHeight: 25, fontWeight: "700", color: C.ink },
+  subRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  stage: { fontSize: 12, fontWeight: "600", color: C.accent },
+  meterChip: { flexDirection: "row", alignItems: "center", gap: 8 },
+  miniTrack: { width: 56, height: 6, borderRadius: 3, backgroundColor: C.line, overflow: "hidden" },
+  miniFill: { height: 6, backgroundColor: C.blue, borderRadius: 3 },
+  meterCount: { fontSize: 12, fontWeight: "700", color: C.muted },
+  link: { color: C.blue, fontSize: 16, fontWeight: "700", paddingVertical: 4 },
+  points: { marginHorizontal: 20, marginBottom: 6, padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 8 },
+  meterLabel: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: C.muted },
+  point: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  dot: { color: C.blue, fontWeight: "700", fontSize: 15, width: 14 },
+  pointLabel: { fontSize: 13, fontWeight: "700", color: C.ink },
+  pointValue: { fontSize: 13, lineHeight: 18, color: C.muted },
+  pointMissing: { fontSize: 12, color: C.faint },
+  list: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, paddingBottom: 28 },
+  row: { flexDirection: "row", alignItems: "flex-end", gap: 8, maxWidth: "100%" },
+  rowYou: { justifyContent: "flex-end" },
+  avatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.accentBg, color: C.accent, textAlign: "center", lineHeight: 24, fontWeight: "800", fontSize: 11, overflow: "hidden" },
+  bubble: { maxWidth: "86%", paddingHorizontal: 14, paddingVertical: 11, borderRadius: 18, gap: 8 },
+  flow: { backgroundColor: C.flowBubble, borderBottomLeftRadius: 6 },
+  you: { backgroundColor: C.youBubble, borderBottomRightRadius: 6 },
+  flowText: { fontSize: 16, lineHeight: 23, color: C.ink },
+  youText: { fontSize: 16, lineHeight: 23, color: C.white },
+  more: { fontSize: 13, fontWeight: "700", color: C.blue },
+  hype: { backgroundColor: C.greenBg },
+  hypeText: { fontSize: 17, lineHeight: 24, fontWeight: "700", color: C.green },
+  offer: { backgroundColor: C.blueSoft, borderWidth: 1, borderColor: C.blueLine },
+  offerKicker: { fontSize: 10, letterSpacing: 1.4, fontWeight: "700", color: C.blue },
+  offerText: { fontSize: 17, lineHeight: 23, fontWeight: "700" },
+  pendingBubble: { flexDirection: "row", alignItems: "center", gap: 10 },
+  chips: { flexDirection: "row", gap: 8, marginTop: 2, flexWrap: "wrap" },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
+  chipPrimary: { backgroundColor: C.blue, borderColor: C.blue },
+  chipText: { fontSize: 14, fontWeight: "700", color: C.ink },
+  chipPrimaryText: { color: C.white },
+  small: { fontSize: 12, color: C.muted },
+  summary: { padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 6, marginBottom: 4 },
+  sumRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  sumWhen: { width: 74, fontSize: 12, fontWeight: "700", color: C.blue, paddingTop: 2 },
+  sumText: { flex: 1, fontSize: 15, lineHeight: 20, fontWeight: "600", color: C.ink },
+  sumWait: { color: "#8A5A12" },
+  sumDone: { color: C.faint, textDecorationLine: "line-through" },
+  card: { gap: 6 },
+  cardKicker: { fontSize: 10, letterSpacing: 1.3, fontWeight: "800", color: "#DCE3FF" },
+  cardPara: { fontSize: 15, lineHeight: 21, color: C.white, marginBottom: 4 },
+  cardRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  cardBullet: { color: C.white, fontSize: 14, width: 16, paddingTop: 2 },
+  cardText: { flex: 1, fontSize: 15, lineHeight: 21, color: C.white, fontWeight: "600" },
+  cardWhen: { color: "#DCE3FF", fontWeight: "700" },
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.paper },
+  mic: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.card, borderWidth: 1, borderColor: C.line, alignItems: "center", justifyContent: "center" },
+  micIcon: { color: C.record, fontSize: 16 },
+  input: { flex: 1, minHeight: 42, maxHeight: 140, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 21, backgroundColor: C.card, borderWidth: 1, borderColor: C.line, fontSize: 16, lineHeight: 21, color: C.ink },
+  send: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.blue, alignItems: "center", justifyContent: "center" },
+  sendOff: { opacity: 0.35 },
+  sendIcon: { color: C.white, fontSize: 20, fontWeight: "800" },
+  error: { color: C.red, fontSize: 14, lineHeight: 20, padding: 8 },
+});

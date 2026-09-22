@@ -1,23 +1,45 @@
 import type { ExpoConfig } from "expo/config";
 
+/** The commit this bundle was built from, shown small in the app so nobody guesses which build a phone runs. */
+function buildStamp(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const cp = require("child_process") as { execSync(cmd: string, opts: unknown): { toString(): string } };
+    return cp.execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return "dev";
+  }
+}
+
+const PHOTO_LIBRARY_PURPOSE =
+  "Flowthread doesn't access your photo library. This permission is only requested if you choose to save or share an export.";
+
 const config: ExpoConfig = {
-  name: "Flow",
-  slug: "anchor-mobile",
-  version: "0.1.0",
+  name: "Flowthread",
+  slug: "flowthread",
+  version: "1.0.0",
   orientation: "portrait",
-  scheme: "anchor",
+  scheme: "flowthread",
   userInterfaceStyle: "light",
   icon: "./assets/icon.png",
   ios: {
-    supportsTablet: true,
-    bundleIdentifier: process.env.APP_BUNDLE_ID || "com.example.anchor",
-    infoPlist: { ITSAppUsesNonExemptEncryption: false },
+    supportsTablet: false,
+    bundleIdentifier: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      NSSpeechRecognitionUsageDescription:
+        "Flowthread turns your voice note into text on your iPhone. Audio never leaves your device.",
+      // Required by App Store processing (ITMS-90683): expo-file-system links Photos for its legacy
+      // asset-library API. Flowthread itself never reads or writes the photo library.
+      NSPhotoLibraryUsageDescription: PHOTO_LIBRARY_PURPOSE,
+      NSPhotoLibraryAddUsageDescription: PHOTO_LIBRARY_PURPOSE,
+    },
   },
   android: {
-    package: process.env.APP_BUNDLE_ID || "com.example.anchor",
+    package: process.env.APP_BUNDLE_ID || "com.kodavena.flowthread",
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#102E2C",
+      backgroundColor: "#142138",
     },
     blockedPermissions: [
       "android.permission.READ_CALENDAR",
@@ -26,12 +48,15 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-asset",
+    "./plugins/with-ios-scene",
     [
       "expo-audio",
       {
         microphonePermission:
-          "Flow records a voice note only when you tap Record.",
+          "Flowthread records a voice note only when you tap Record.",
         enableBackgroundRecording: false,
+        // Recording and playback happen only in the foreground; no background audio mode (App Review 2.5.4).
+        enableBackgroundPlayback: false,
       },
     ],
     "expo-sqlite",
@@ -39,12 +64,14 @@ const config: ExpoConfig = {
       "expo-calendar",
       {
         calendarPermission:
-          "Flow saves your chosen actions and alerts to Calendar and checks linked events to avoid duplicates.",
+          "Flowthread reads your calendar to plan your week around what's already there and writes its moves into the gaps.",
+        remindersPermission: "Flowthread adds the things you're waiting on to a Flow list in Reminders so you're nudged to chase them.",
       },
     ],
   ],
-  extra: process.env.EAS_PROJECT_ID
-    ? { eas: { projectId: process.env.EAS_PROJECT_ID } }
-    : {},
+  extra: {
+    build: buildStamp(),
+    ...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),
+  },
 };
 export default config;

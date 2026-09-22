@@ -1,0 +1,59 @@
+import { register } from "node:module";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+register("./accept-loader.mjs", import.meta.url);
+const { acceptStep } = await import("../src/services/drafts.ts");
+const { db } = await import("./accept-mocks.mjs");
+const { exampleDraft } = await import("../src/drafts.ts");
+
+// Regression: answerChip already marks the step accepted and App saves that
+// thread BEFORE acceptStep runs. The move task must still be created.
+test("acceptStep creates the move task even when the step is already flagged accepted", async () => {
+  const draft = exampleDraft("t1");
+  const step = { ...draft.steps[0], accepted: true };
+  const thread = { ...draft, steps: [step, ...draft.steps.slice(1)] };
+  db.reset();
+  db.drafts.set(thread.id, JSON.stringify(thread));
+  await acceptStep(thread, step);
+  assert.ok(db.records.has(`flow:${thread.id}:${step.id}`));
+});
+
+test("acceptStep is idempotent", async () => {
+  const draft = exampleDraft("t2");
+  const step = draft.steps[0];
+  db.reset();
+  db.drafts.set(draft.id, JSON.stringify(draft));
+  await acceptStep(draft, step);
+  await acceptStep(draft, step);
+  assert.equal(db.records.size, 1);
+});
+
+const { shortTitle } = await import("../src/drafts.ts");
+const { concreteMove, whenLabel } = await import("../src/thread.ts");
+const { areaPhrase } = await import("../src/personality.ts");
+test("thread titles are short, move labels are never bare times", () => {
+  const t = shortTitle("So I need to sort out the quarterly numbers for my boss, and then talk to the team about it");
+  assert.ok(t.length <= 41 && !/^so /i.test(t), t);
+  assert.equal(concreteMove("Tomorrow morning"), false);
+  assert.equal(concreteMove("Ask Ali for the numbers"), true);
+  assert.equal(areaPhrase("Work project"), "your work project");
+});
+
+const { suggestPrompt } = await import("../src/thread.ts");
+test("Flow does not re-suggest the area of an open thread", () => {
+  const plate = { areas: ["Work project", "Health"], people: [], obstacles: [] };
+  const open = { ...exampleDraft("w"), example: false, title: "Quarterly numbers", source: "My boss wants numbers", updates: [] };
+  assert.equal(suggestPrompt(plate, []).area, "Work project");
+  assert.notEqual(suggestPrompt(plate, [open]).area, "Work project");
+});
+
+const { ensureMoves } = await import("../src/thread.ts");
+test("a ready thread's move is a verb + object, not a bare time", () => {
+  const base = { ...exampleDraft("m"), steps: [], title: "Quarterly report" };
+  const pt = (id, value) => ({ id, state: "known", value, sourceNoteIds: [] });
+  const a = ensureMoves({ ...base, threadPoints: [pt("next", "Tomorrow morning"), pt("outcome", "So I need to finish the quarterly report for my boss by Friday, but it is a mess")] });
+  assert.match(a.steps[0].title, /^Finish the quarterly report/);
+  const said = [{ id: "m0", from: "you", kind: "transcript", text: "the quarterly report is a mess", createdAt: "" }];
+  const b = ensureMoves({ ...base, messages: said, threadPoints: [pt("next", "Tomorrow morning")] });
+  assert.match(b.steps[0].title, /^Make a start on the quarterly report/);
+});

@@ -1,0 +1,163 @@
+import React, { useRef, useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import type { ThoughtDraft } from "../drafts.ts";
+import type { Note, Task } from "../model.ts";
+import { localDate } from "../model.ts";
+import { AudioPlayback } from "./VoiceCapture.tsx";
+import { Check, Dot, Empty, Row, Screen, Section, Segmented } from "./ui.tsx";
+import { duration, isGenericTitle, recordingProjects, recordingTasks, recordingTitle, stamp } from "./Recordings.tsx";
+import { C } from "./theme.ts";
+
+/**
+ * Otter's conversation page for one recording: Summary (what Flow got, as
+ * tickable rows, each ↗ to its sentence) and Transcript (the words, the
+ * sentence behind each move highlighted, playback on top).
+ */
+export default function RecordingPage({
+  note,
+  threads,
+  tasks,
+  paragraph,
+  alsoTaskIds = [],
+  now = new Date(),
+  onBack,
+  onTick,
+  onOpenMove,
+  onAsk,
+}: {
+  note: Note;
+  threads: ThoughtDraft[];
+  tasks: Task[];
+  /** The model's sentences saying back the recording (from the intake record). */
+  paragraph?: string;
+  /** Moves this recording mentioned that already existed (from the intake record). */
+  alsoTaskIds?: string[];
+  now?: Date;
+  onBack: () => void;
+  onTick: (task: Task) => void;
+  onOpenMove: (task: Task) => void;
+  /** Opens the project thread for a question about this recording. */
+  onAsk?: (projectId: string) => void;
+}) {
+  const [tab, setTab] = useState("Summary");
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const scroll = useRef<ScrollView>(null);
+  const own = recordingTasks(note, threads, tasks);
+  const mine = [...own, ...tasks.filter((t) => alsoTaskIds.includes(t.id) && !own.some((o) => o.id === t.id))];
+  const moves = mine.filter((t) => t.kind !== "waiting" && !t.later);
+  const waiting = mine.filter((t) => t.kind === "waiting");
+  const later = mine.filter((t) => t.later);
+  const projects = recordingProjects(note, threads, tasks).filter((t) => !isGenericTitle(t.title));
+  const title = recordingTitle(note, threads, tasks);
+  const today = localDate(now);
+  const when = (t: Task) => (t.done ? "done" : t.kind === "waiting" ? (t.chaseDate ? `chase ${new Date(`${t.chaseDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}` : "waiting") : t.plannedDate ? `${t.plannedDate === today ? "Today" : new Date(`${t.plannedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}${t.plannedTime ? " " + t.plannedTime : ""}` : "");
+  const jump = (t: Task) => {
+    setHighlight(t.notes || null);
+    setTab("Transcript");
+  };
+  // The transcript as paragraphs, with the sentence behind each move marked.
+  const marks = mine.map((t) => (t.notes || "").trim()).filter((x) => x.length > 8);
+  const paragraphs = note.text.split(/\n+|(?<=[.!?])\s+(?=[A-Z])/).reduce<string[]>((acc, s) => {
+    const last = acc[acc.length - 1];
+    if (last && last.length < 260) acc[acc.length - 1] = `${last} ${s}`;
+    else acc.push(s);
+    return acc;
+  }, []);
+  const renderPara = (p: string, i: number) => {
+    const parts: { text: string; hit: boolean; strong: boolean }[] = [];
+    let rest = p;
+    while (rest.length) {
+      let best: { at: number; len: number } | null = null;
+      for (const m of marks) {
+        const at = rest.toLowerCase().indexOf(m.toLowerCase());
+        if (at >= 0 && (!best || at < best.at)) best = { at, len: m.length };
+      }
+      if (!best) {
+        parts.push({ text: rest, hit: false, strong: false });
+        break;
+      }
+      if (best.at > 0) parts.push({ text: rest.slice(0, best.at), hit: false, strong: false });
+      const hitText = rest.slice(best.at, best.at + best.len);
+      parts.push({ text: hitText, hit: true, strong: !!highlight && hitText.toLowerCase() === highlight.toLowerCase() });
+      rest = rest.slice(best.at + best.len);
+    }
+    return (
+      <Text key={i} style={s.para}>
+        {parts.map((x, k) => (
+          <Text key={k} style={x.hit ? [s.mark, x.strong && s.markStrong] : undefined}>
+            {x.text}
+          </Text>
+        ))}
+      </Text>
+    );
+  };
+  return (
+    <Screen title={title} subtitle={`${stamp(note.createdAt, now)}${note.durationMs ? " · " + duration(note.durationMs) : ""}`} back="Threads" onBack={onBack} scroll={false}>
+      <Segmented items={["Summary", "Transcript"]} value={tab} onChange={setTab} />
+      <ScrollView ref={scroll} contentContainerStyle={{ paddingBottom: 60 }}>
+        {tab === "Summary" ? (
+          <>
+            {(!!paragraph?.trim() || mine.length > 0) && <Text style={s.lead}>{paragraph?.trim() || saidBack(moves, waiting, later, today)}</Text>}
+            {moves.length > 0 && (
+              <Section label="Moves">
+                {moves.map((t, i) => (
+                  <Row key={t.id} first={i === 0} title={t.title} sub={when(t)} done={t.done} lead={<Check on={t.done} onPress={() => onTick(t)} />} trailing={<Text style={s.jump} onPress={() => jump(t)} accessibilityRole="button" accessibilityLabel={`Show where "${t.title}" came from`}>↗</Text>} onPress={() => onOpenMove(t)} accessibilityLabel={`Open move ${t.title}`} />
+                ))}
+              </Section>
+            )}
+            {waiting.length > 0 && (
+              <Section label="Waiting on">
+                {waiting.map((t, i) => (
+                  <Row key={t.id} first={i === 0} title={`${t.waitingOn}: ${t.title}`} sub={when(t)} done={t.done} lead={<Dot color={C.amber} />} trailing={<Text style={s.jump} onPress={() => jump(t)} accessibilityRole="button" accessibilityLabel={`Show where "${t.title}" came from`}>↗</Text>} onPress={() => onOpenMove(t)} accessibilityLabel={`Open waiting ${t.title}`} />
+                ))}
+              </Section>
+            )}
+            {later.length > 0 && (
+              <Section label="Later">
+                {later.map((t, i) => (
+                  <Row key={t.id} first={i === 0} title={t.title} lead={<Dot />} onPress={() => onOpenMove(t)} accessibilityLabel={`Open later ${t.title}`} />
+                ))}
+              </Section>
+            )}
+            {mine.length === 0 && <Empty text="Flow is still reading this, or nothing in it needed a move." />}
+            {projects.length > 0 && onAsk && (
+              <View style={{ marginTop: 18 }}>
+                {projects.map((p, i) => (
+                  <Row key={p.id} first={i === 0} title="ASK FLOW" sub={projects.length > 1 ? `about ${p.title}` : undefined} when="›" onPress={() => onAsk(p.id)} accessibilityLabel={`Ask Flow about ${p.title}`} />
+                ))}
+              </View>
+            )}
+          </>
+        ) : (
+          <>
+            {!!note.audioUri && (
+              <View style={s.player}>
+                <AudioPlayback uri={note.audioUri} />
+              </View>
+            )}
+            <View style={{ paddingHorizontal: 20, paddingTop: 8, gap: 10 }}>{paragraphs.map(renderPara)}</View>
+          </>
+        )}
+      </ScrollView>
+    </Screen>
+  );
+}
+
+/** Without the model's paragraph: the recording said back from what came of it, plainly. */
+function saidBack(moves: Task[], waiting: Task[], later: Task[], today: string): string {
+  const day = (d?: string) => (d ? (d === today ? "today" : new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })) : "");
+  const parts: string[] = [];
+  if (moves.length) parts.push(`${moves.length === 1 ? "One thing to do" : `${moves.length} things to do`}: ${moves.map((t) => `${t.title.toLowerCase()}${t.plannedDate ? ` (${day(t.plannedDate)})` : ""}`).join(", ")}.`);
+  if (waiting.length) parts.push(`Waiting on ${waiting.map((t) => t.waitingOn).filter((x, i, a) => x && a.indexOf(x) === i).join(" and ")}${waiting.some((t) => t.chaseDate) ? `, chase ${day(waiting.find((t) => t.chaseDate)?.chaseDate)}` : ""}.`);
+  if (later.length) parts.push(`Later: ${later.map((t) => t.title.toLowerCase()).join(", ")}.`);
+  return parts.join(" ");
+}
+
+const s = StyleSheet.create({
+  lead: { fontSize: 15, lineHeight: 22, color: C.ink, paddingHorizontal: 20, paddingTop: 12 },
+  jump: { color: C.accent, fontSize: 16, fontWeight: "700", paddingHorizontal: 4 },
+  player: { marginHorizontal: 20, marginTop: 10, backgroundColor: C.tint, borderRadius: 12, padding: 8 },
+  para: { fontSize: 15, lineHeight: 22, color: C.ink },
+  mark: { backgroundColor: "#FFF3B0" },
+  markStrong: { backgroundColor: "#FFE066" },
+});
